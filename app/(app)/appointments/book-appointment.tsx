@@ -277,6 +277,8 @@ export function BookAppointment({
   rateCards,
   defaultDate,
   defaultDoctor,
+  initialPatient,
+  onBooked,
 }: {
   open: boolean;
   onClose: () => void;
@@ -284,20 +286,28 @@ export function BookAppointment({
   rateCards: RateCardOption[];
   defaultDate: string;
   defaultDoctor: string;
+  // When set, the patient is preselected and locked (used from the pipeline
+  // "Book" flow). onBooked runs after a successful booking (e.g. to advance
+  // a pipeline case to "scheduled").
+  initialPatient?: PatientOption;
+  onBooked?: () => void | Promise<void>;
 }) {
   const [state, formAction] = useFormState(bookAppointment, initialState);
-  const [patientId, setPatientId] = useState("");
+  const [patientId, setPatientId] = useState(initialPatient?.id ?? "");
   const router = useRouter();
 
   useEffect(() => {
-    if (open) setPatientId("");
-  }, [open]);
+    if (open) setPatientId(initialPatient?.id ?? "");
+  }, [open, initialPatient?.id]);
 
   useEffect(() => {
     if (state.ok) {
-      toast("Appointment booked ✓");
-      onClose();
-      router.refresh();
+      (async () => {
+        if (onBooked) await onBooked();
+        toast("Appointment booked ✓");
+        onClose();
+        router.refresh();
+      })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
@@ -317,7 +327,13 @@ export function BookAppointment({
           <label className={labelClass}>
             Patient <span className="text-danger">*</span>
           </label>
-          <PatientCombobox patients={patients} onSelect={setPatientId} />
+          {initialPatient ? (
+            <div className="flex h-11 items-center rounded-button border border-border bg-subtle px-3 text-[15px] text-text-primary">
+              {initialPatient.full_name}
+            </div>
+          ) : (
+            <PatientCombobox patients={patients} onSelect={setPatientId} />
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

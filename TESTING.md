@@ -193,6 +193,31 @@ Remind (WhatsApp, anti-duplicate)
 Patient detail
 - [ ] The patient page shows an "Outstanding Balances" section listing their open balances (treatment, visit date, age badge, nett_due) or an empty state
 
+## Pipeline (/pipeline)
+
+Stat cards & list
+- [ ] "Pipeline Value" = sum plan_value where stage not in (rejected, completed), green
+- [ ] "Needs Follow-up" = count where stage=thinking AND follow_up_date <= today, amber
+- [ ] "Ready to Book" = count where stage=accepted, blue
+- [ ] List sorted by follow_up_date asc with nulls last; each row: patient (link), treatment, plan_value ₹, stage badge (correct colors), follow_up_date shown red when past
+- [ ] Empty state when no cases
+
+Add Case
+- [ ] "+ Add Case" opens popup; patient combobox + treatment dropdown + plan value (auto-fills base_price, editable) + notes
+- [ ] Save creates a case at stage=identified AND a recovery_event (deferred_treatment, original_case linked, trigger_date today); toast + row appears
+
+Stage transitions
+- [ ] Present (identified only) → presented, presented_date set
+- [ ] Accepted (presented/thinking) → accepted, accepted_date set → notification "{treatment} accepted ₹{plan}. Book appointment." (important) → linked recovery_event outcome=accepted, revenue_recovered=plan_value
+- [ ] Thinking (presented only) → date popup "When to follow up?" → thinking, follow_up_date set
+- [ ] Rejected (presented/thinking) → reason dropdown + notes popup → rejected, rejection_reason saved → recovery_event outcome=lost
+- [ ] Book (accepted only) → appointment popup with patient pre-filled & locked; on successful booking the case moves to scheduled
+- [ ] Follow Up (thinking AND follow_up_date <= today) → opens wa.me with the message → last_follow_up=today, follow_up_date=today+7, recovery_event action_taken_date+wa_message_sent=true, interaction (case_follow_up)
+- [ ] Buttons only show for the stages listed above; all writes are clinic-scoped (RLS)
+
+Patient detail
+- [ ] Pipeline Cases section shows the patient's cases with treatment name, stage badge, plan value, and follow-up date
+
 ## Deploy checklist (before onboarding real clinics)
 
 - [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.

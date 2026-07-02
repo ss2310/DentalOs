@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { WhatsAppIcon } from "@/components/icons";
 import { formatDate, formatINR, calcAge } from "@/lib/format";
 import { AGE_BUCKET, type AgeBucket } from "@/lib/age-bucket";
-import type { Patient, VisitLog, CasePipeline, Recall } from "@/lib/types";
+import { PIPELINE_STAGE, type PipelineStage } from "@/lib/pipeline-stage";
+import type { Patient, VisitLog, Recall } from "@/lib/types";
 import { EditPatientButton } from "./edit-patient-button";
 
 type OpenBalance = {
@@ -13,6 +14,14 @@ type OpenBalance = {
   total_amount: string;
   age_bucket: AgeBucket;
   visit: { visit_date: string; treatment_name_text: string } | null;
+};
+
+type DetailCase = {
+  id: string;
+  plan_value: string;
+  stage: PipelineStage;
+  follow_up_date: string | null;
+  treatment: { treatment_name: string } | null;
 };
 
 const PAYMENT_BADGE: Record<VisitLog["payment_status"], string> = {
@@ -67,7 +76,9 @@ export default async function PatientDetailPage({
       .order("visit_date", { ascending: false }),
     supabase
       .from("case_pipeline")
-      .select("id, plan_value, stage, follow_up_date, treatment_id")
+      .select(
+        "id, plan_value, stage, follow_up_date, treatment:treatment_id(treatment_name)",
+      )
       .eq("patient_id", patient.id)
       .order("created_at", { ascending: false }),
     supabase
@@ -86,7 +97,7 @@ export default async function PatientDetailPage({
   ]);
 
   const visits = (visitRows as VisitLog[]) ?? [];
-  const cases = (caseRows as CasePipeline[]) ?? [];
+  const cases = (caseRows as unknown as DetailCase[]) ?? [];
   const recalls = (recallRows as Recall[]) ?? [];
   const balances = (balanceRows as unknown as OpenBalance[]) ?? [];
 
@@ -241,26 +252,36 @@ export default async function PatientDetailPage({
           <EmptyCard text="No treatment cases in the pipeline." />
         ) : (
           <div className="space-y-3">
-            {cases.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between rounded-card border border-border bg-white p-4"
-              >
-                <div>
-                  <p className="font-medium capitalize text-text-primary">
-                    {c.stage}
-                  </p>
-                  {c.follow_up_date ? (
-                    <p className="mt-0.5 text-sm text-text-secondary">
-                      Follow-up: {formatDate(c.follow_up_date)}
-                    </p>
-                  ) : null}
+            {cases.map((c) => {
+              const badge = PIPELINE_STAGE[c.stage];
+              return (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between gap-3 rounded-card border border-border bg-white p-4"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-text-primary">
+                        {c.treatment?.treatment_name ?? "Treatment"}
+                      </p>
+                      <span
+                        className={`rounded-pill px-2 py-0.5 text-xs font-medium ${badge.badge}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                    {c.follow_up_date ? (
+                      <p className="mt-0.5 text-sm text-text-secondary">
+                        Follow-up: {formatDate(c.follow_up_date)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className="text-[15px] font-medium text-text-primary">
+                    {formatINR(c.plan_value)}
+                  </span>
                 </div>
-                <span className="text-[15px] font-medium text-text-primary">
-                  {formatINR(c.plan_value)}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
