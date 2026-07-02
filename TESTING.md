@@ -3,6 +3,32 @@
 Manual test checklists. Append a short checklist here after building each
 feature (see rule 6 in [CLAUDE.md](./CLAUDE.md)).
 
+## SESSION HANDOFF
+
+This session built the practice-management core: auth + app shell, and the
+Patients, Appointments (with 5 WhatsApp actions + cancelled/rescheduled
+hiding + inline new-patient), Visit Log, Billing, Pipeline, Recalls, and Leads
+modules — each with its own checklist below and all queries clinic-scoped via
+RLS. **What works (code + type-check + routes run):** every page compiles
+(`npx tsc --noEmit` is clean) and all routes render; the RLS migration
+(`001_init.sql`) is explicit/idempotent and applied. **What is NOT yet
+verified end-to-end:** none of the authenticated write flows were clicked
+through live by me (no test-clinic session), so treat every module's checklist
+as pending. **Known blockers/caveats:** (1) migrations **`002_log_visit.sql`
+and `003_record_payment.sql` must be run in the Supabase SQL Editor** — 003 was
+confirmed missing earlier, so Billing's Record Payment and the Visit Log save
+will fail until both are applied; (2) signup uses `email_confirm: true` (admin
+API) so email confirmation must be removed in code *and* toggled in the
+dashboard before launch (see Deploy checklist); (3) lead "Contact" does not
+write an interaction row because `interactions.patient_id` is NOT NULL and a
+lead has no patient yet; (4) the Day-3 review notification in `log_visit` is
+created immediately with a TODO to become a 2-day delayed cron job.
+**Next step to continue:** run `002`/`003` in Supabase, then log in as a test
+clinic and walk the checklists below top-to-bottom (start with Visit Log →
+Billing since those exercise the atomic Postgres functions), fixing any runtime
+issues found; after that, Day-3 work is the dashboard, the delayed-notification
+cron, and the AI content-generation layer (`/generate`).
+
 ## Project setup
 
 - [ ] `npm run dev` starts and `/` renders without console errors
