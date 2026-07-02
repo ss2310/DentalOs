@@ -25,6 +25,48 @@ export function formatDate(value: string | null | undefined): string {
   return `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/** Formats a 'HH:MM:SS' (or 'HH:MM') time as e.g. "9:30 AM". */
+export function formatTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const [hStr, mStr] = value.split(":");
+  let h = Number(hStr);
+  const m = mStr ?? "00";
+  if (Number.isNaN(h)) return "—";
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m.padStart(2, "0")} ${ampm}`;
+}
+
+/** Current date + time in IST (Asia/Kolkata) as 'YYYY-MM-DD' / 'HH:MM:SS'. */
+export function nowIST(): { date: string; time: string } {
+  const now = new Date();
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(now);
+  return { date, time };
+}
+
+/** Adds n days to a 'YYYY-MM-DD' string, returning 'YYYY-MM-DD'. */
+export function addDays(dateStr: string, n: number): string {
+  const d = new Date(`${dateStr.slice(0, 10)}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${da}`;
+}
+
 /** Whole-year age from a 'YYYY-MM-DD' DOB, or null if missing/invalid. */
 export function calcAge(dob: string | null | undefined): number | null {
   if (!dob) return null;

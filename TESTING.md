@@ -77,6 +77,37 @@ Detail (`/patients/[id]`)
 - [ ] "Edit Patient" opens the popup pre-filled; saving shows "Patient updated ✓" and the page reflects the change
 - [ ] A patient from another clinic is not reachable (RLS returns 404)
 
+## Appointments module
+
+Layout & navigation (`/appointments`)
+- [ ] Defaults to today's appointments (Today tab active); Today/Tomorrow computed in IST (Asia/Kolkata), not UTC
+- [ ] Today / Tomorrow tabs and the date picker change the day via `?date=`; picker highlights when on a custom date
+- [ ] Cards sorted by time ascending; time shows as `h:mm a` (e.g. 9:30 AM)
+- [ ] Each card: time, status badge (correct color), patient name (links to detail), treatment name, doctor
+- [ ] Empty day shows "No appointments for {DD MMM YYYY}."
+
+Booking
+- [ ] "+ Book Appointment" opens the popup; date defaults to the selected day, doctor defaults to the clinic's doctor
+- [ ] Patient combobox filters by name/phone; Book disabled until a patient is chosen
+- [ ] Treatment can be left as "No treatment yet"; date and time required
+- [ ] Save shows toast "Appointment booked ✓", closes, and the new card appears on that day
+
+Status buttons (visibility)
+- [ ] scheduled → shows Confirm, Reschedule, Cancel (and No Show only if the time is past)
+- [ ] confirmed → Arrived, Reschedule, Cancel (+ No Show if past)
+- [ ] arrived → In Chair, Complete, Reschedule
+- [ ] in_chair → Complete, Reschedule
+- [ ] completed → no action buttons
+- [ ] No Show hidden for future appointments, visible once the appointment datetime is in the past (IST)
+
+Status effects
+- [ ] Confirm/Arrived/In Chair advance the status and the badge updates
+- [ ] Complete → status completed → navigates to `/visit-log/[id]` → a notification "Log visit for {name}" (system/routine) row is created
+- [ ] No Show → status no_show → creates interaction (recovery_noshow/whatsapp), recovery_event (no_show, original_appointment set), and notification (recovery_due/urgent, "No-show: {name}. Send recovery.")
+- [ ] Cancel → confirm dialog "Cancel this appointment?" → status cancelled_patient → recovery_event (cancelled) + notification (recovery_due, "Cancelled: {name}")
+- [ ] Reschedule → popup with new date+time → original becomes rescheduled → a new scheduled appointment is created for the same patient/treatment/doctor → toast → view jumps to the new date showing the new card
+- [ ] All new rows (appointments, interactions, recovery_events, notifications) carry the correct clinic_id and are invisible to other clinics (RLS)
+
 ## Deploy checklist (before onboarding real clinics)
 
 - [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.
