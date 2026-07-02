@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isValidEmail, normalizeIndianPhone } from "@/lib/validation";
 
 export type SignupState = { error?: string };
 
@@ -32,11 +33,22 @@ export async function signUpAction(
   const phone = String(formData.get("phone") ?? "").trim();
   const city = String(formData.get("city") ?? "").trim();
 
-  if (!clinicName || !doctorName || !email || !password) {
-    return { error: "Clinic name, doctor name, email and password are required." };
+  if (!clinicName || !doctorName || !email || !password || !phone) {
+    return {
+      error: "Clinic name, doctor name, email, phone and password are required.",
+    };
+  }
+  if (!isValidEmail(email)) {
+    return { error: "Enter a valid email address." };
   }
   if (password.length < 6) {
     return { error: "Password must be at least 6 characters." };
+  }
+
+  // Store the normalized 10-digit number (see CLAUDE.md locale rules).
+  const normalizedPhone = normalizeIndianPhone(phone);
+  if (!normalizedPhone) {
+    return { error: "Enter a valid 10-digit Indian mobile number." };
   }
 
   const admin = createAdminClient();
@@ -48,7 +60,7 @@ export async function signUpAction(
     .insert({
       business_name: clinicName,
       doctor_name: doctorName,
-      phone: phone || null,
+      phone: normalizedPhone,
       city: city || null,
     })
     .select("id")
@@ -58,10 +70,16 @@ export async function signUpAction(
     return { error: "Could not create clinic. Please try again." };
   }
 
-  // 2. Create the auth user. email_confirm skips the verification email so
-  //    the owner can sign in immediately. The handle_new_user trigger reads
-  //    this metadata to create the profiles row (role clinic_owner, linked
-  //    to the clinic).
+  // 2. Create the auth user. The handle_new_user trigger reads this metadata
+  //    to create the profiles row (role clinic_owner, linked to the clinic).
+  //
+  //    LAUNCH NOTE: `email_confirm: true` marks the email pre-confirmed so
+  //    test clinics are instant during the build. Because users are created
+  //    via the admin API, this flag — not the dashboard "Confirm email"
+  //    toggle — controls confirmation here. To require confirmation before
+  //    launch, remove this flag (and switch to a client signUp flow that
+  //    sends the verification email); flipping the dashboard toggle alone is
+  //    not enough for admin-created users.
   const { error: userError } = await admin.auth.admin.createUser({
     email,
     password,

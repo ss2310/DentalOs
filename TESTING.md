@@ -24,6 +24,11 @@ feature (see rule 6 in [CLAUDE.md](./CLAUDE.md)).
 
 Signup
 - [ ] `/signup` shows all 6 fields (Clinic Name, Doctor Name, Email, Password, Phone, City)
+- [ ] Email and Phone are both required; the button stays disabled until both are valid
+- [ ] Invalid email (e.g. `foo@bar`) shows an inline error and blocks submit
+- [ ] Phone accepts `+91 98765 43210`, `09876543210`, `9876543210` (all → 9876543210) and stores the bare 10 digits
+- [ ] Phone rejects <10 digits or a number not starting with 6/7/8/9, with an inline error
+- [ ] Duplicate email surfaces "An account with this email already exists." and creates no orphan clinic
 - [ ] Submitting valid details creates the account and lands on `/dashboard` (no email verification step)
 - [ ] In Supabase: a `clinics` row, a `profiles` row (role `clinic_owner`, `home_clinic_id` set), and 10 `rate_cards` exist for the new clinic
 - [ ] Rate card prices/recalls match spec (e.g. Dental Implant ₹35000 / 90 days, RCT Single ₹4500 / 30 days)
@@ -45,3 +50,11 @@ App shell
 - [ ] Header shows the clinic's name (left) and bell + logout (right)
 - [ ] On mobile (<768px) the sidebar collapses to a hamburger; tapping it opens the drawer, tapping a link or the overlay closes it
 - [ ] All tap targets are ≥44px and text ≥14px; no gradients or heavy shadows
+
+## Deploy checklist (before onboarding real clinics)
+
+- [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.
+      (Signup currently creates users pre-confirmed so test clinics are instant during the build.)
+- [ ] Also remove `email_confirm: true` in `app/signup/actions.ts` — because signup uses the
+      admin API, that flag overrides the dashboard toggle, so the toggle alone won't enforce
+      confirmation for new clinics.

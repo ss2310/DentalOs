@@ -9,16 +9,18 @@ import { useFormStatus } from "react-dom";
 export function SubmitButton({
   children,
   pendingText = "Please wait…",
+  disabled = false,
 }: {
   children: React.ReactNode;
   pendingText?: string;
+  disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
 
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || disabled}
       className="flex h-11 w-full items-center justify-center rounded-button bg-primary px-4 text-[15px] font-medium text-white transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending ? pendingText : children}
