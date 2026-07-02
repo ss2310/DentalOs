@@ -19,6 +19,7 @@ import {
   MenuIcon,
   CloseIcon,
 } from "@/components/icons";
+import { Toaster } from "@/components/toast";
 import { signOutAction } from "@/app/actions";
 
 const NAV = [
@@ -147,6 +148,8 @@ export function AppShell({
 
         <main className="px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       </div>
+
+      <Toaster />
     </div>
   );
 }

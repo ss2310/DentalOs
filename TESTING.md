@@ -51,6 +51,32 @@ App shell
 - [ ] On mobile (<768px) the sidebar collapses to a hamburger; tapping it opens the drawer, tapping a link or the overlay closes it
 - [ ] All tap targets are ≥44px and text ≥14px; no gradients or heavy shadows
 
+## Patients module
+
+List (`/patients`)
+- [ ] Empty clinic shows "No patients yet. Add your first patient."
+- [ ] Patients are listed newest-first (by created_at)
+- [ ] Search filters live by name (partial, case-insensitive) and by phone digits
+- [ ] Search with no matches shows "No patients match your search."
+- [ ] Outstanding column/value shows in red only when > ₹0; revenue and outstanding use ₹ with Indian grouping
+- [ ] On mobile (<768px) the table collapses to stacked cards; tap targets ≥44px
+
+Add Patient
+- [ ] "+ Add Patient" opens the popup
+- [ ] Name and WhatsApp number are required; button disabled / inline error until WhatsApp is a valid 10-digit number
+- [ ] WhatsApp accepts `+91`/spaces/leading-0 and stores the bare 10 digits
+- [ ] Saving shows toast "Patient added ✓", closes the popup, and the new patient appears at the top without a manual refresh
+- [ ] Cancel / Escape / backdrop click closes the popup without saving
+
+Detail (`/patients/[id]`)
+- [ ] Header shows name, age (from DOB), gender, area, and a WhatsApp button linking to `https://wa.me/91<number>` in a new tab
+- [ ] Visiting a non-existent id shows the 404 (not found) page
+- [ ] Stats row shows total visits, lifetime revenue ₹, outstanding ₹ (red if > 0)
+- [ ] Visit History, Pipeline Cases, and Recalls each show their empty state on a fresh patient
+- [ ] Visit rows (when present) show date, treatment, cost, paid, and a status badge (paid=green, partial=amber, pending=red)
+- [ ] "Edit Patient" opens the popup pre-filled; saving shows "Patient updated ✓" and the page reflects the change
+- [ ] A patient from another clinic is not reachable (RLS returns 404)
+
 ## Deploy checklist (before onboarding real clinics)
 
 - [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.
