@@ -3,8 +3,17 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { WhatsAppIcon } from "@/components/icons";
 import { formatDate, formatINR, calcAge } from "@/lib/format";
+import { AGE_BUCKET, type AgeBucket } from "@/lib/age-bucket";
 import type { Patient, VisitLog, CasePipeline, Recall } from "@/lib/types";
 import { EditPatientButton } from "./edit-patient-button";
+
+type OpenBalance = {
+  id: string;
+  nett_due: string;
+  total_amount: string;
+  age_bucket: AgeBucket;
+  visit: { visit_date: string; treatment_name_text: string } | null;
+};
 
 const PAYMENT_BADGE: Record<VisitLog["payment_status"], string> = {
   paid: "bg-success/10 text-success",
@@ -45,28 +54,41 @@ export default async function PatientDetailPage({
   if (!patientRow) notFound();
   const patient = patientRow as Patient;
 
-  const [{ data: visitRows }, { data: caseRows }, { data: recallRows }] =
-    await Promise.all([
-      supabase
-        .from("visit_logs")
-        .select("id, visit_date, treatment_name_text, cost, amount_paid, payment_status, doctor")
-        .eq("patient_id", patient.id)
-        .order("visit_date", { ascending: false }),
-      supabase
-        .from("case_pipeline")
-        .select("id, plan_value, stage, follow_up_date, treatment_id")
-        .eq("patient_id", patient.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("recalls")
-        .select("id, recall_type, due_date, status")
-        .eq("patient_id", patient.id)
-        .order("due_date", { ascending: true }),
-    ]);
+  const [
+    { data: visitRows },
+    { data: caseRows },
+    { data: recallRows },
+    { data: balanceRows },
+  ] = await Promise.all([
+    supabase
+      .from("visit_logs")
+      .select("id, visit_date, treatment_name_text, cost, amount_paid, payment_status, doctor")
+      .eq("patient_id", patient.id)
+      .order("visit_date", { ascending: false }),
+    supabase
+      .from("case_pipeline")
+      .select("id, plan_value, stage, follow_up_date, treatment_id")
+      .eq("patient_id", patient.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("recalls")
+      .select("id, recall_type, due_date, status")
+      .eq("patient_id", patient.id)
+      .order("due_date", { ascending: true }),
+    supabase
+      .from("outstandings")
+      .select(
+        "id, nett_due, total_amount, age_bucket, visit:visit_log_id(visit_date, treatment_name_text)",
+      )
+      .eq("patient_id", patient.id)
+      .gt("nett_due", 0)
+      .order("nett_due", { ascending: false }),
+  ]);
 
   const visits = (visitRows as VisitLog[]) ?? [];
   const cases = (caseRows as CasePipeline[]) ?? [];
   const recalls = (recallRows as Recall[]) ?? [];
+  const balances = (balanceRows as unknown as OpenBalance[]) ?? [];
 
   const age = calcAge(patient.date_of_birth);
   const whatsapp = patient.whatsapp_number ?? patient.phone;
@@ -135,6 +157,43 @@ export default async function PatientDetailPage({
             {formatINR(patient.total_outstanding)}
           </p>
         </div>
+      </div>
+
+      {/* Outstanding balances */}
+      <div className="mt-8">
+        <SectionHeader>Outstanding Balances</SectionHeader>
+        {balances.length === 0 ? (
+          <EmptyCard text="No outstanding balances." />
+        ) : (
+          <div className="space-y-3">
+            {balances.map((b) => {
+              const badge = AGE_BUCKET[b.age_bucket];
+              return (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between gap-3 rounded-card border border-border bg-white p-4"
+                >
+                  <div>
+                    <p className="font-medium text-text-primary">
+                      {b.visit?.treatment_name_text ?? "Balance"}
+                    </p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-secondary">
+                      <span>{formatDate(b.visit?.visit_date)}</span>
+                      <span
+                        className={`rounded-pill px-2 py-0.5 text-xs font-medium ${badge.badge}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="font-bold text-danger">
+                    {formatINR(b.nett_due)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* (c) Visit history */}

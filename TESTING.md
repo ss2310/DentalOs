@@ -164,6 +164,35 @@ Save Visit (atomic — verify in DB after one save)
 - [ ] Re-opening the same /visit-log/[id] shows "A visit has already been logged" (no double-count), and a second submit is rejected
 - [ ] A visit-log URL for another clinic's appointment 404s / is rejected (RLS + clinic checks in the function)
 
+## Billing (/billing)
+
+Prereq
+- [ ] Run supabase/migrations/003_record_payment.sql in the SQL Editor first (defines record_payment())
+
+Stat cards & list
+- [ ] "Total Outstanding" = sum of nett_due (>0), shown large in red (#DC2626)
+- [ ] "Overdue 30+ Days" = sum of nett_due where age_bucket is days_30/60/90_plus, amber
+- [ ] "Patients with Balance" = count of distinct patients with a balance
+- [ ] List sorted by nett_due desc; each row: patient name (bold, links to detail), visit date, treatment, total ₹, paid ₹, nett_due (bold red), age badge (current=gray, 30=amber, 60=orange, 90+=red)
+- [ ] On mobile/tablet the table collapses to stacked cards
+- [ ] Empty state when there are no balances
+
+Record Payment (atomic — verify DB)
+- [ ] Popup shows patient name + current nett_due
+- [ ] Amount must be > 0 and ≤ nett_due (inline error + Save disabled otherwise)
+- [ ] Save: outstanding amount_paid += amount, nett_due -= amount (floored at 0); patient total_outstanding -= amount, lifetime_revenue += amount
+- [ ] When nett_due reaches 0: the linked recovery_event gets outcome=paid, outcome_date=today, revenue_recovered=total collected; the row drops off the list
+- [ ] Toast "₹{amount} payment recorded ✓"; partial payment keeps the row with the reduced balance
+- [ ] Overpay attempt is rejected server-side (no partial writes)
+
+Remind (WhatsApp, anti-duplicate)
+- [ ] "Remind" opens wa.me in a new tab with the pending-balance message and the correct ₹ amount
+- [ ] Sets payment_reminder_sent_at and creates an interaction (payment_reminder)
+- [ ] Within 7 days of the last reminder the button is hidden (shows "✓ Reminded"); after 7 days it returns
+
+Patient detail
+- [ ] The patient page shows an "Outstanding Balances" section listing their open balances (treatment, visit date, age badge, nett_due) or an empty state
+
 ## Deploy checklist (before onboarding real clinics)
 
 - [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.
