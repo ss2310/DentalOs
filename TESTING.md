@@ -141,6 +141,29 @@ Visibility & effects
 - [ ] "Request Review": shows when status completed and review_requested=false; uses the clinic's google_review_url; sets review_requested + review_requested_at
 - [ ] Message content matches spec, with {name}, {time h:mm a}, clinic phone, and review URL interpolated correctly
 
+## Visit log (/visit-log/[appointmentId])
+
+Prereq
+- [ ] Run supabase/migrations/002_log_visit.sql in the SQL Editor first (defines log_visit())
+
+Form & live calc
+- [ ] Top card shows patient name (large), today's date (IST), appointment time, and the appointment's treatment
+- [ ] Treatment dropdown pre-selects the appointment's treatment; Doctor is pre-filled; Cost pre-fills from the treatment's base_price
+- [ ] Changing the treatment re-fills the cost from the new treatment's base_price
+- [ ] "Outstanding Amount" updates live: red (#DC2626) when > 0, green (#059669) when 0
+- [ ] Entering paid > cost shows the cap message and disables Save
+
+Save Visit (atomic — verify in DB after one save)
+- [ ] A visit_log row is created with treatment_name_text/category snapshotted, outstanding_amount = cost − paid, correct payment_status (paid/partial/pending), created_by = current user
+- [ ] If cost − paid > 0: an outstanding row (nett_due correct, age_bucket current, linked to the visit) AND a recovery_event (outstanding_payment) are created; if fully paid, neither exists
+- [ ] Patient rollups updated: total_visits +1, lifetime_revenue + paid, total_outstanding + (cost − paid), last_visit_date = today
+- [ ] If the treatment has recall_interval_days > 0: a recall is created (due_date = today + interval, status pending); otherwise none
+- [ ] A review_due notification "Request review from {patient}" is created
+- [ ] Redirects to /patients/[id] with toast "Visit logged ✓"; the Visit History section now shows the new visit with its status badge, and the stats row reflects the rollups
+- [ ] Atomicity: an intentionally bad input (e.g. paid > cost) creates NO rows at all
+- [ ] Re-opening the same /visit-log/[id] shows "A visit has already been logged" (no double-count), and a second submit is rejected
+- [ ] A visit-log URL for another clinic's appointment 404s / is rejected (RLS + clinic checks in the function)
+
 ## Deploy checklist (before onboarding real clinics)
 
 - [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.
