@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { LoginForm } from "./login-form";
+import { SignupForm } from "./signup-form";
 
-export default async function LoginPage() {
+export default async function SignupPage() {
   const supabase = createClient();
   const {
     data: { user },
@@ -20,15 +20,15 @@ export default async function LoginPage() {
             GrowthOS
           </span>
           <h1 className="mt-4 text-2xl font-semibold text-text-primary">
-            Welcome back
+            Set up your clinic
           </h1>
           <p className="mt-1 text-[15px] text-text-secondary">
-            Sign in to your clinic dashboard
+            Create your account to get started
           </p>
         </div>
 
         <div className="rounded-card border border-border bg-white p-6 sm:p-8">
-          <LoginForm />
+          <SignupForm />
         </div>
       </div>
     </main>

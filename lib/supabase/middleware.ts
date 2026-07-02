@@ -32,7 +32,19 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Touch the session so expired tokens get refreshed and re-set as cookies.
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Public routes usable without auth. Everything else requires a session.
+  const publicPaths = ["/", "/signup"];
+  const isPublic = publicPaths.includes(request.nextUrl.pathname);
+
+  if (!user && !isPublic) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 }
