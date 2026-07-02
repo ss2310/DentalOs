@@ -92,6 +92,15 @@ Booking
 - [ ] Treatment can be left as "No treatment yet"; date and time required
 - [ ] Save shows toast "Appointment booked ✓", closes, and the new card appears on that day
 
+Inline "add new patient" (from booking)
+- [ ] Typing a name with no match shows a "+ Add new patient: "{typed}"" option
+- [ ] Selecting it opens a compact inline form with full_name pre-filled from the typed text
+- [ ] WhatsApp number is required with the same 10-digit validation (inline error, Add disabled until valid); phone and area are optional
+- [ ] "Add & select" creates the patient (clinic-scoped) and auto-selects them in the combobox so booking can be completed without leaving the popup
+- [ ] Pressing Enter inside the inline fields adds the patient (does not submit/close the booking form)
+- [ ] Cancel returns to the search field without creating a patient
+- [ ] The new patient also appears on /patients (and their DOB/notes can be filled later there)
+
 Status buttons (visibility)
 - [ ] scheduled → shows Confirm, Reschedule, Cancel (and No Show only if the time is past)
 - [ ] confirmed → Arrived, Reschedule, Cancel (+ No Show if past)

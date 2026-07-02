@@ -4,9 +4,70 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nowIST } from "@/lib/format";
+import { normalizeIndianPhone } from "@/lib/validation";
+import type { PatientOption } from "@/lib/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ApptActionState = { ok?: boolean; error?: string };
+
+export type QuickAddPatientState = {
+  ok?: boolean;
+  error?: string;
+  patient?: PatientOption;
+};
+
+// Minimal patient creation for the inline "add new patient" flow inside the
+// booking popup. Returns the created row so the caller can auto-select it.
+export async function quickAddPatient(input: {
+  full_name: string;
+  whatsapp_number: string;
+  phone?: string;
+  area?: string;
+}): Promise<QuickAddPatientState> {
+  const full_name = input.full_name.trim();
+  if (!full_name) return { error: "Name is required." };
+
+  const whatsapp = normalizeIndianPhone(input.whatsapp_number);
+  if (!whatsapp) return { error: "Enter a valid 10-digit WhatsApp number." };
+
+  let phone: string | null = null;
+  if (input.phone && input.phone.trim()) {
+    phone = normalizeIndianPhone(input.phone) ?? input.phone.trim();
+  }
+  const area = input.area?.trim() || null;
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("home_clinic_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile?.home_clinic_id) return { error: "No clinic found for user." };
+
+  const { data, error } = await supabase
+    .from("patients")
+    .insert({
+      clinic_id: profile.home_clinic_id,
+      full_name,
+      whatsapp_number: whatsapp,
+      phone,
+      area,
+    })
+    .select("id, full_name, whatsapp_number, phone")
+    .single();
+
+  if (error || !data) {
+    return { error: "Could not add patient. Please try again." };
+  }
+
+  revalidatePath("/patients");
+  return { ok: true, patient: data as PatientOption };
+}
 
 type LoadedAppt = {
   id: string;
