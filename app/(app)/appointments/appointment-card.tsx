@@ -5,15 +5,20 @@ import { formatTime } from "@/lib/format";
 import type { AppointmentRow } from "@/lib/types";
 import { APPT_STATUS } from "./status";
 import { AppointmentActions } from "./appointment-actions";
+import { WhatsAppActions } from "./whatsapp-actions";
+import type { WaAction } from "./wa-actions";
 
 export function AppointmentCard({
   appt,
   isPast,
+  waActions,
   muted = false,
 }: {
   appt: AppointmentRow;
   isPast: boolean;
-  // Cancelled/rescheduled rows: greyed out, view-only (no action buttons).
+  waActions: WaAction[];
+  // Cancelled/rescheduled rows: greyed out, no status-transition buttons.
+  // WhatsApp actions still render so recovery stays reachable.
   muted?: boolean;
 }) {
   const status = APPT_STATUS[appt.status];
@@ -48,6 +53,12 @@ export function AppointmentCard({
           </p>
         </div>
       </div>
+
+      {waActions.length > 0 ? (
+        <div className="mt-3 border-t border-border pt-3">
+          <WhatsAppActions id={appt.id} actions={waActions} />
+        </div>
+      ) : null}
 
       {muted ? null : (
         <div className="mt-3 border-t border-border pt-3">

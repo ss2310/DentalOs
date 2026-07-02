@@ -78,6 +78,10 @@ type LoadedAppt = {
   appointment_time: string;
   treatment_type_id: string | null;
   doctor: string | null;
+  reminder_24h_sent_at: string | null;
+  reminder_1h_sent_at: string | null;
+  recovery_sent_at: string | null;
+  review_requested: boolean;
   patientName: string;
 };
 
@@ -89,7 +93,7 @@ async function loadAppt(
   const { data } = await supabase
     .from("appointments")
     .select(
-      "id, clinic_id, patient_id, status, appointment_date, appointment_time, treatment_type_id, doctor, patient:patient_id(full_name)",
+      "id, clinic_id, patient_id, status, appointment_date, appointment_time, treatment_type_id, doctor, reminder_24h_sent_at, reminder_1h_sent_at, recovery_sent_at, review_requested, patient:patient_id(full_name)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -105,6 +109,10 @@ async function loadAppt(
     appointment_time: data.appointment_time,
     treatment_type_id: data.treatment_type_id,
     doctor: data.doctor,
+    reminder_24h_sent_at: data.reminder_24h_sent_at,
+    reminder_1h_sent_at: data.reminder_1h_sent_at,
+    recovery_sent_at: data.recovery_sent_at,
+    review_requested: data.review_requested,
     patientName: patient?.full_name ?? "patient",
   };
 }
@@ -349,6 +357,156 @@ export async function bookAppointment(
   });
 
   if (error) return { error: "Could not book appointment. Please try again." };
+
+  revalidatePath("/appointments");
+  return { ok: true };
+}
+
+// --- WhatsApp actions -----------------------------------------------------
+// Each records the send (timestamp/flag + interaction row). The wa.me link is
+// opened client-side; these just persist that it happened. Guards enforce the
+// anti-duplicate rule so a second click can't double-send.
+
+async function currentUserId(supabase: SupabaseClient): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
+export async function send24hReminder(id: string): Promise<ApptActionState> {
+  const supabase = createClient();
+  const appt = await loadAppt(supabase, id);
+  if (!appt) return { error: "Appointment not found." };
+  if (
+    (appt.status !== "scheduled" && appt.status !== "confirmed") ||
+    appt.reminder_24h_sent_at
+  ) {
+    return { error: "This action is no longer available." };
+  }
+
+  const { error } = await supabase
+    .from("appointments")
+    .update({ reminder_24h_sent_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: "Could not update. Please try again." };
+
+  await supabase.from("interactions").insert({
+    clinic_id: appt.clinic_id,
+    patient_id: appt.patient_id,
+    appointment_id: id,
+    type: "reminder_24h",
+    channel: "whatsapp",
+    sent_by: await currentUserId(supabase),
+  });
+
+  revalidatePath("/appointments");
+  return { ok: true };
+}
+
+export async function send1hReminder(id: string): Promise<ApptActionState> {
+  const supabase = createClient();
+  const appt = await loadAppt(supabase, id);
+  if (!appt) return { error: "Appointment not found." };
+  if (
+    (appt.status !== "scheduled" && appt.status !== "confirmed") ||
+    appt.reminder_1h_sent_at
+  ) {
+    return { error: "This action is no longer available." };
+  }
+
+  const { error } = await supabase
+    .from("appointments")
+    .update({ reminder_1h_sent_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: "Could not update. Please try again." };
+
+  await supabase.from("interactions").insert({
+    clinic_id: appt.clinic_id,
+    patient_id: appt.patient_id,
+    appointment_id: id,
+    type: "reminder_1h",
+    channel: "whatsapp",
+    sent_by: await currentUserId(supabase),
+  });
+
+  revalidatePath("/appointments");
+  return { ok: true };
+}
+
+// Shared body for the two recovery sends (no-show / cancelled).
+async function sendRecovery(
+  id: string,
+  fromStatus: "no_show" | "cancelled_patient",
+  interactionType: "recovery_noshow" | "recovery_cancelled",
+): Promise<ApptActionState> {
+  const supabase = createClient();
+  const appt = await loadAppt(supabase, id);
+  if (!appt) return { error: "Appointment not found." };
+  if (appt.status !== fromStatus || appt.recovery_sent_at) {
+    return { error: "This action is no longer available." };
+  }
+
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ recovery_sent_at: nowIso, status: "recovery_sent" })
+    .eq("id", id);
+  if (error) return { error: "Could not update. Please try again." };
+
+  // Mark the recovery_event created when the appointment was marked
+  // no-show / cancelled as actioned.
+  await supabase
+    .from("recovery_events")
+    .update({ action_taken_date: nowIST().date, wa_message_sent: true })
+    .eq("original_appointment_id", id);
+
+  await supabase.from("interactions").insert({
+    clinic_id: appt.clinic_id,
+    patient_id: appt.patient_id,
+    appointment_id: id,
+    type: interactionType,
+    channel: "whatsapp",
+    sent_by: await currentUserId(supabase),
+  });
+
+  revalidatePath("/appointments");
+  return { ok: true };
+}
+
+export async function recoverNoShow(id: string): Promise<ApptActionState> {
+  return sendRecovery(id, "no_show", "recovery_noshow");
+}
+
+export async function recoverCancelled(id: string): Promise<ApptActionState> {
+  return sendRecovery(id, "cancelled_patient", "recovery_cancelled");
+}
+
+export async function requestReview(id: string): Promise<ApptActionState> {
+  const supabase = createClient();
+  const appt = await loadAppt(supabase, id);
+  if (!appt) return { error: "Appointment not found." };
+  if (appt.status !== "completed" || appt.review_requested) {
+    return { error: "This action is no longer available." };
+  }
+
+  const { error } = await supabase
+    .from("appointments")
+    .update({
+      review_requested: true,
+      review_requested_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) return { error: "Could not update. Please try again." };
+
+  await supabase.from("interactions").insert({
+    clinic_id: appt.clinic_id,
+    patient_id: appt.patient_id,
+    appointment_id: id,
+    type: "review_request",
+    channel: "whatsapp",
+    sent_by: await currentUserId(supabase),
+  });
 
   revalidatePath("/appointments");
   return { ok: true };

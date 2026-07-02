@@ -125,6 +125,22 @@ Status effects
 - [ ] Reschedule → popup with new date+time → original becomes rescheduled → a new scheduled appointment is created for the same patient/treatment/doctor → toast → view jumps to the new date showing the new card
 - [ ] All new rows (appointments, interactions, recovery_events, notifications) carry the correct clinic_id and are invisible to other clinics (RLS)
 
+## Appointments — WhatsApp actions
+
+General
+- [ ] Each WhatsApp button opens `https://wa.me/91<number>?text=...` in a NEW tab with the message pre-filled
+- [ ] Messages with apostrophes/emoji/newlines are correctly encoded (no broken links); newlines appear as line breaks in WhatsApp
+- [ ] After clicking, the button is replaced by a green "✓ Sent" label (anti-duplicate); a second send is not possible
+- [ ] Each send creates an interaction row (correct type + channel whatsapp) with the right clinic_id (RLS)
+
+Visibility & effects
+- [ ] "Send 24h Reminder": shows only when appointment is tomorrow AND status scheduled/confirmed AND not already sent; sets reminder_24h_sent_at
+- [ ] "Send 1h Reminder": shows only when today AND start is within the next 90 min AND status scheduled/confirmed AND not already sent; sets reminder_1h_sent_at
+- [ ] "Recover No-Show": shows when status no_show and recovery not sent; sends → status becomes recovery_sent, recovery_sent_at set, linked recovery_event gets action_taken_date + wa_message_sent=true
+- [ ] "Recover Cancelled": reachable via "Show cancelled/rescheduled" on a cancelled card; same effect with interaction recovery_cancelled
+- [ ] "Request Review": shows when status completed and review_requested=false; uses the clinic's google_review_url; sets review_requested + review_requested_at
+- [ ] Message content matches spec, with {name}, {time h:mm a}, clinic phone, and review URL interpolated correctly
+
 ## Deploy checklist (before onboarding real clinics)
 
 - [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.

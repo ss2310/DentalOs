@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { AppointmentRow } from "@/lib/types";
 import { AppointmentCard } from "./appointment-card";
+import type { WaAction } from "./wa-actions";
 
 // Statuses hidden from the default day view (kept in the DB for audit).
 const HIDDEN_STATUSES: AppointmentRow["status"][] = [
@@ -10,7 +11,7 @@ const HIDDEN_STATUSES: AppointmentRow["status"][] = [
   "cancelled_patient",
 ];
 
-type Item = { appt: AppointmentRow; isPast: boolean };
+type Item = { appt: AppointmentRow; isPast: boolean; waActions: WaAction[] };
 
 export function AppointmentsList({
   items,
@@ -59,7 +60,12 @@ export function AppointmentsList({
       ) : (
         <div className="space-y-3">
           {active.map((i) => (
-            <AppointmentCard key={i.appt.id} appt={i.appt} isPast={i.isPast} />
+            <AppointmentCard
+              key={i.appt.id}
+              appt={i.appt}
+              isPast={i.isPast}
+              waActions={i.waActions}
+            />
           ))}
         </div>
       )}
@@ -71,6 +77,7 @@ export function AppointmentsList({
               key={i.appt.id}
               appt={i.appt}
               isPast={i.isPast}
+              waActions={i.waActions}
               muted
             />
           ))}

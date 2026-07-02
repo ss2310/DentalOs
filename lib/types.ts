@@ -62,7 +62,11 @@ export type AppointmentRow = {
   doctor: string | null;
   status: AppointmentStatus;
   notes: string | null;
-  patient: { full_name: string } | null;
+  reminder_24h_sent_at: string | null;
+  reminder_1h_sent_at: string | null;
+  recovery_sent_at: string | null;
+  review_requested: boolean;
+  patient: { full_name: string; whatsapp_number: string | null } | null;
   treatment: { treatment_name: string } | null;
 };
 

@@ -7,6 +7,7 @@ import type {
 } from "@/lib/types";
 import { AppointmentsToolbar } from "./appointments-toolbar";
 import { AppointmentsList } from "./appointments-list";
+import { buildWaActions } from "./wa-actions";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -30,7 +31,7 @@ export default async function AppointmentsPage({
     supabase
       .from("appointments")
       .select(
-        "id, patient_id, appointment_date, appointment_time, treatment_type_id, doctor, status, notes, patient:patient_id(full_name), treatment:treatment_type_id(treatment_name)",
+        "id, patient_id, appointment_date, appointment_time, treatment_type_id, doctor, status, notes, reminder_24h_sent_at, reminder_1h_sent_at, recovery_sent_at, review_requested, patient:patient_id(full_name, whatsapp_number), treatment:treatment_type_id(treatment_name)",
       )
       .eq("appointment_date", selected)
       .order("appointment_time", { ascending: true }),
@@ -43,13 +44,20 @@ export default async function AppointmentsPage({
       .from("patients")
       .select("id, full_name, whatsapp_number, phone")
       .order("full_name", { ascending: true }),
-    supabase.from("clinics").select("doctor_name").single(),
+    supabase
+      .from("clinics")
+      .select("doctor_name, phone, google_review_url")
+      .single(),
   ]);
 
   const appts = (apptRes.data as unknown as AppointmentRow[]) ?? [];
   const rateCards = (rateCardRes.data as RateCardOption[]) ?? [];
   const patients = (patientRes.data as PatientOption[]) ?? [];
   const doctorName = clinicRes.data?.doctor_name ?? "";
+  const clinicWa = {
+    phone: clinicRes.data?.phone ?? null,
+    google_review_url: clinicRes.data?.google_review_url ?? null,
+  };
 
   return (
     <div>
@@ -70,6 +78,7 @@ export default async function AppointmentsPage({
               appt.appointment_date < now.date ||
               (appt.appointment_date === now.date &&
                 appt.appointment_time < now.time),
+            waActions: buildWaActions(appt, clinicWa, now, tomorrow),
           }))}
           dateLabel={formatDate(selected)}
         />
