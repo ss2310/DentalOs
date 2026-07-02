@@ -18,6 +18,31 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Troubleshooting
+
+### Page renders unstyled (serif font, plain form controls)
+
+This almost always means a **stale/zombie `next dev` server** is still holding
+port 3000 and serving an old build, while your new `npm run dev` silently
+bounced to port 3001/3002. On Windows, `Ctrl+C` (or a killed terminal) doesn't
+always terminate the underlying Node process.
+
+Fix — free the port, then start fresh:
+
+```powershell
+npm run dev:clean
+```
+
+`dev:clean` runs `scripts/free-port.ps1` (kills whatever listens on port 3000)
+and then starts `next dev`. You can also free a specific port manually:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/free-port.ps1 -Port 3000
+```
+
+If styling still looks wrong after that, clear the Next build cache and retry:
+delete the `.next` folder, then `npm run dev:clean`.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
