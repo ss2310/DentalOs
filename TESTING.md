@@ -109,6 +109,14 @@ Status buttons (visibility)
 - [ ] completed → no action buttons
 - [ ] No Show hidden for future appointments, visible once the appointment datetime is in the past (IST)
 
+Hidden statuses (cancelled/rescheduled)
+- [ ] By default, appointments with status rescheduled or cancelled_patient do NOT appear in the day list
+- [ ] After rescheduling, the current day no longer shows the old (rescheduled) card by default; the new appointment still shows on its new date
+- [ ] A "Show cancelled/rescheduled (N)" toggle appears at the top only when such rows exist for the day
+- [ ] Toggling ON reveals them greyed out (reduced opacity), sorted below the active ones, with no action buttons (patient link still clickable)
+- [ ] Toggling OFF hides them again; the rows remain in the DB (audit trail intact)
+- [ ] A day with only cancelled/rescheduled rows shows "No active appointments" plus the toggle
+
 Status effects
 - [ ] Confirm/Arrived/In Chair advance the status and the badge updates
 - [ ] Complete → status completed → navigates to `/visit-log/[id]` → a notification "Log visit for {name}" (system/routine) row is created

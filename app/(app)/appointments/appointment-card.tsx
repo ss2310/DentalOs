@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { formatTime } from "@/lib/format";
 import type { AppointmentRow } from "@/lib/types";
@@ -7,14 +9,21 @@ import { AppointmentActions } from "./appointment-actions";
 export function AppointmentCard({
   appt,
   isPast,
+  muted = false,
 }: {
   appt: AppointmentRow;
   isPast: boolean;
+  // Cancelled/rescheduled rows: greyed out, view-only (no action buttons).
+  muted?: boolean;
 }) {
   const status = APPT_STATUS[appt.status];
 
   return (
-    <div className="rounded-card border border-border bg-white p-4">
+    <div
+      className={`rounded-card border border-border bg-white p-4 ${
+        muted ? "opacity-60" : ""
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -40,9 +49,15 @@ export function AppointmentCard({
         </div>
       </div>
 
-      <div className="mt-3 border-t border-border pt-3">
-        <AppointmentActions id={appt.id} status={appt.status} isPast={isPast} />
-      </div>
+      {muted ? null : (
+        <div className="mt-3 border-t border-border pt-3">
+          <AppointmentActions
+            id={appt.id}
+            status={appt.status}
+            isPast={isPast}
+          />
+        </div>
+      )}
     </div>
   );
 }

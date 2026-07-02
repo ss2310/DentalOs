@@ -6,7 +6,7 @@ import type {
   RateCardOption,
 } from "@/lib/types";
 import { AppointmentsToolbar } from "./appointments-toolbar";
-import { AppointmentCard } from "./appointment-card";
+import { AppointmentsList } from "./appointments-list";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -63,25 +63,16 @@ export default async function AppointmentsPage({
       />
 
       <div className="mt-6">
-        {appts.length === 0 ? (
-          <div className="rounded-card border border-border bg-white p-10 text-center">
-            <p className="text-[15px] text-text-secondary">
-              No appointments for {formatDate(selected)}.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {appts.map((appt) => {
-              const isPast =
-                appt.appointment_date < now.date ||
-                (appt.appointment_date === now.date &&
-                  appt.appointment_time < now.time);
-              return (
-                <AppointmentCard key={appt.id} appt={appt} isPast={isPast} />
-              );
-            })}
-          </div>
-        )}
+        <AppointmentsList
+          items={appts.map((appt) => ({
+            appt,
+            isPast:
+              appt.appointment_date < now.date ||
+              (appt.appointment_date === now.date &&
+                appt.appointment_time < now.time),
+          }))}
+          dateLabel={formatDate(selected)}
+        />
       </div>
     </div>
   );
