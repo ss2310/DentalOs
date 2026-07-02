@@ -218,6 +218,29 @@ Stage transitions
 Patient detail
 - [ ] Pipeline Cases section shows the patient's cases with treatment name, stage badge, plan value, and follow-up date
 
+## Recalls (/recalls)
+
+- [ ] Header shows "X recalls due within 7 days" (active recalls, due_date within 7 days)
+- [ ] Tabs: Due Now (active, due_date <= today), Upcoming (active, due_date > today), Completed (status=completed); default Due Now
+- [ ] List sorted due_date asc; each row: patient (link), recall_type, due_date (red if overdue), source treatment (gray), status badge
+- [ ] Remind → opens wa.me with the recall message → status reminded, reminder_sent_at set, interaction (recall_reminder)
+- [ ] Book → appointment popup with patient pre-filled → on booking success status becomes scheduled
+- [ ] Complete → status completed, completed_date set (moves to Completed tab)
+- [ ] Dismiss → confirm dialog → status dismissed (drops out of all tabs)
+- [ ] Patient detail Recalls section shows their recalls with the status badge
+
+## Leads (/leads)
+
+- [ ] Stat cards: New (status=new), Contacted (status=contacted), Converted this month (status=converted, created this month)
+- [ ] "+ Add Lead" popup: name (required), phone, source dropdown, treatment interest, notes → creates lead (status new)
+- [ ] List sorted created_at desc; each row: name, phone, source badge, interest, status badge, follow_up_date (red if past)
+- [ ] Contact (new) → opens wa.me enquiry message → status contacted
+- [ ] Interested (new/contacted) → status interested
+- [ ] Book (interested) → status booked (no appointment, per spec)
+- [ ] Convert (booked/interested) → creates a patient from name+phone, sets converted_to_patient_id + status converted, redirects to the new patient detail
+- [ ] Lost → reason popup → status lost, lost_reason saved
+- [ ] Buttons only appear for the valid statuses; all writes clinic-scoped (RLS)
+
 ## Deploy checklist (before onboarding real clinics)
 
 - [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.

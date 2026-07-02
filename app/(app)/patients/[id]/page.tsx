@@ -5,6 +5,11 @@ import { WhatsAppIcon } from "@/components/icons";
 import { formatDate, formatINR, calcAge } from "@/lib/format";
 import { AGE_BUCKET, type AgeBucket } from "@/lib/age-bucket";
 import { PIPELINE_STAGE, type PipelineStage } from "@/lib/pipeline-stage";
+import {
+  RECALL_STATUS,
+  humanizeRecallType,
+  type RecallStatus,
+} from "@/lib/recall-status";
 import type { Patient, VisitLog, Recall } from "@/lib/types";
 import { EditPatientButton } from "./edit-patient-button";
 
@@ -293,24 +298,29 @@ export default async function PatientDetailPage({
           <EmptyCard text="No recalls scheduled." />
         ) : (
           <div className="space-y-3">
-            {recalls.map((r) => (
+            {recalls.map((r) => {
+              const badge = RECALL_STATUS[r.status as RecallStatus];
+              return (
               <div
                 key={r.id}
                 className="flex items-center justify-between rounded-card border border-border bg-white p-4"
               >
                 <div>
-                  <p className="font-medium capitalize text-text-primary">
-                    {r.recall_type.replace(/_/g, " ")}
+                  <p className="font-medium text-text-primary">
+                    {humanizeRecallType(r.recall_type)}
                   </p>
                   <p className="mt-0.5 text-sm text-text-secondary">
                     Due: {formatDate(r.due_date)}
                   </p>
                 </div>
-                <span className="rounded-pill bg-subtle px-2.5 py-1 text-xs font-medium capitalize text-text-secondary">
-                  {r.status}
+                <span
+                  className={`rounded-pill px-2.5 py-1 text-xs font-medium ${badge.badge}`}
+                >
+                  {badge.label}
                 </span>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
