@@ -165,7 +165,7 @@ export default async function PipelinePage() {
 
       <StatGrid>
         <StatCard
-          label="Pipeline Value"
+          label="Plan Value"
           value={formatINR(pipelineValue)}
           tone="success"
         />

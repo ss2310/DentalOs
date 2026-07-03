@@ -85,8 +85,8 @@ export default async function RecallsPage({
   return (
     <div>
       <PageHeader
-        title="Recalls"
-        subtitle={`${dueCount} recall${dueCount === 1 ? "" : "s"} due within 7 days`}
+        title="Check-up Reminders"
+        subtitle={`${dueCount} check-up${dueCount === 1 ? "" : "s"} due within 7 days`}
       />
 
       <div className="mt-5 flex flex-wrap gap-2">

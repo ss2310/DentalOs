@@ -16,7 +16,7 @@ export function PipelineToolbar({
 
   return (
     <div className="flex items-center justify-between gap-3">
-      <h1 className="text-2xl font-semibold text-text-primary">Pipeline</h1>
+      <h1 className="text-2xl font-semibold text-text-primary">Treatment Plans</h1>
       <button
         type="button"
         onClick={() => setOpen(true)}

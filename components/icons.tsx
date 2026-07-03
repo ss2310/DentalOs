@@ -177,6 +177,26 @@ export function MapPinIcon(p: IconProps) {
   );
 }
 
+// Robot head — AI Visibility (the "🤖" nav item).
+export function AiVisibilityIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <rect x="4.5" y="8" width="15" height="11" rx="2.5" />
+      <path d="M12 4.75V8M9 12.5h.01M15 12.5h.01M9.75 16h4.5M2.75 12.5v2M21.25 12.5v2" />
+    </Base>
+  );
+}
+
+export function HelpIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.75 9.6a2.25 2.25 0 113.4 1.93c-.72.46-1.15.9-1.15 1.72" />
+      <path d="M12 16.5h.01" />
+    </Base>
+  );
+}
+
 // Tooth — GrowthOS brand mark.
 export function ToothIcon(p: IconProps) {
   return (

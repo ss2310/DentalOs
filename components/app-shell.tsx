@@ -25,41 +25,59 @@ import {
   SwordsIcon,
   SearchIcon,
   ToothIcon,
+  AiVisibilityIcon,
 } from "@/components/icons";
 import { Toaster } from "@/components/toast";
+import { HowItWorks } from "@/components/how-it-works";
 import { signOutAction } from "@/app/actions";
 
 type IconType = (props: SVGProps<SVGSVGElement>) => JSX.Element;
-type NavLeaf = { label: string; href: string; Icon: IconType };
-type NavGroup = { label: string; items: NavLeaf[] };
+type NavLeaf = { label: string; href: string; Icon: IconType; adminOnly?: boolean };
+type NavGroup = { label: string; items: NavLeaf[]; adminOnly?: boolean };
 type NavEntry = NavLeaf | NavGroup;
 
-// Dashboard + Settings stay flat as the top/bottom anchors; everything else is
-// split into two collapsible groups: day-to-day clinic work vs. marketing.
+// Dashboard + Settings stay flat as the top/bottom anchors. Everything else is
+// grouped by the patient journey (mirrors components/how-it-works.tsx): Get
+// patients in → Run the clinic → Get paid & keep them, then Marketing. Group
+// labels and item names are written the way a busy receptionist thinks, not as
+// the underlying DB modules (Leads→Enquiries, Pipeline→Treatment Plans,
+// Billing→Payments, Recalls→Check-up Reminders, Recovery→Revenue Recovered).
 const NAV: NavEntry[] = [
   { label: "Dashboard", href: "/dashboard", Icon: HomeIcon },
   {
-    label: "Clinic Operations",
+    label: "Get Patients In",
+    items: [
+      { label: "Enquiries", href: "/leads", Icon: LeadsIcon },
+      { label: "Treatment Plans", href: "/pipeline", Icon: PipelineIcon },
+    ],
+  },
+  {
+    label: "Run the Clinic",
     items: [
       { label: "Appointments", href: "/appointments", Icon: CalendarIcon },
       { label: "Patients", href: "/patients", Icon: PatientsIcon },
-      { label: "Billing", href: "/billing", Icon: BillingIcon },
-      { label: "Pipeline", href: "/pipeline", Icon: PipelineIcon },
-      { label: "Recalls", href: "/recalls", Icon: RecallsIcon },
-      { label: "Leads", href: "/leads", Icon: LeadsIcon },
-      { label: "Recovery", href: "/recovery", Icon: RecoveryIcon },
+    ],
+  },
+  {
+    label: "Get Paid & Keep Them",
+    items: [
+      { label: "Payments", href: "/billing", Icon: BillingIcon },
+      { label: "Check-up Reminders", href: "/recalls", Icon: RecallsIcon },
       { label: "Reviews", href: "/reviews", Icon: ReviewsIcon },
+      { label: "Revenue Recovered", href: "/recovery", Icon: RecoveryIcon, adminOnly: true },
     ],
   },
   {
     label: "Marketing",
+    adminOnly: true,
     items: [
+      { label: "AI Visibility", href: "/ai-visibility", Icon: AiVisibilityIcon },
       { label: "Generate", href: "/generate", Icon: GenerateIcon },
       { label: "Map Rank", href: "/rank", Icon: MapPinIcon },
       { label: "Competitors", href: "/competitors", Icon: SwordsIcon },
     ],
   },
-  { label: "Settings", href: "/settings", Icon: SettingsIcon },
+  { label: "Settings", href: "/settings", Icon: SettingsIcon, adminOnly: true },
 ];
 
 function isGroup(entry: NavEntry): entry is NavGroup {
@@ -81,11 +99,13 @@ export function AppShell({
   clinicName,
   unreadCount = 0,
   isAgency = false,
+  isAdmin = false,
   children,
 }: {
   clinicName: string;
   unreadCount?: number;
   isAgency?: boolean;
+  isAdmin?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -100,6 +120,19 @@ export function AppShell({
         NAV[NAV.length - 1],
       ]
     : NAV;
+
+  // Receptionists get the front-desk subset; owner/doctor (isAdmin) see all.
+  // Drop admin-only leaves, and any group that's admin-only or left empty.
+  const visibleNav: NavEntry[] = nav
+    .map((entry) => {
+      if (isGroup(entry)) {
+        if (entry.adminOnly && !isAdmin) return null;
+        const items = entry.items.filter((i) => isAdmin || !i.adminOnly);
+        return items.length ? { ...entry, items } : null;
+      }
+      return isAdmin || !entry.adminOnly ? entry : null;
+    })
+    .filter((e): e is NavEntry => e !== null);
   // Explicit expand/collapse overrides, keyed by group label. When a group has
   // no entry here it defaults to open iff it contains the current page.
   const [openState, setOpenState] = useState<Record<string, boolean>>({});
@@ -111,7 +144,7 @@ export function AppShell({
 
   const navContent = (onNavigate: () => void) => (
     <nav className="flex flex-col gap-1">
-      {nav.map((entry) => {
+      {visibleNav.map((entry) => {
         if (!isGroup(entry)) {
           const active = isActive(entry.href);
           return (
@@ -241,6 +274,7 @@ export function AppShell({
           </div>
 
           <div className="flex items-center gap-1">
+            <HowItWorks />
             <Link
               href="/notifications"
               aria-label={

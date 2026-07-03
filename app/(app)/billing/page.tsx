@@ -166,7 +166,7 @@ export default async function BillingPage() {
 
   return (
     <div>
-      <PageHeader title="Billing" />
+      <PageHeader title="Payments" />
 
       <StatGrid>
         <StatCard
