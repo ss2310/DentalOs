@@ -40,7 +40,10 @@ export async function updateSession(request: NextRequest) {
   // /auth/callback exchanges the password-reset code (user has no session yet),
   // and /forgot-password is reached while logged out.
   const publicPaths = ["/", "/signup", "/forgot-password", "/auth/callback"];
-  const isPublic = publicPaths.includes(request.nextUrl.pathname);
+  // /audit/<token> is a public prospect report (anon, token-scoped read).
+  const isPublic =
+    publicPaths.includes(request.nextUrl.pathname) ||
+    request.nextUrl.pathname.startsWith("/audit/");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
