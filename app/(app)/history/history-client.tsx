@@ -16,6 +16,7 @@ export type HistoryRow = {
   status: "draft" | "scheduled" | "published";
   published_date: string | null;
   created_at: string;
+  citable_mode: boolean;
   post: { name: string; platform: string } | null;
 };
 
@@ -153,6 +154,11 @@ export function HistoryClient({ rows }: { rows: HistoryRow[] }) {
                       >
                         {badge.label}
                       </span>
+                      {r.citable_mode ? (
+                        <span className="rounded-pill bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                          ✨ Citable
+                        </span>
+                      ) : null}
                     </div>
                     {r.topic ? (
                       <p className="mt-1 truncate text-sm text-text-primary">

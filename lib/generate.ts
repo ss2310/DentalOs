@@ -60,11 +60,18 @@ export function fillTemplate(
 // Models can't count characters reliably, so we enforce the hard limits in
 // code after generation (see the spec's cheat-sheet).
 
-/** Web types that emit an inline JSON-LD schema block ("PART B — SCHEMA"). */
+/** Web types that emit an inline JSON-LD schema block ("PART B — SCHEMA").
+ *  Note: in AI-Citable mode the route also splits schema for any Website type,
+ *  since the citable block instructs schema emission for all of them. */
 export const SCHEMA_TYPES = new Set([
   "Service Page",
   "Geo Landing Page",
   "Blog Article with FAQ",
+  "City Dental Stats",
+  "Treatment Comparison",
+  "Clinician Guide (YMYL)",
+  "Dental Update / What's New",
+  "Question Answer Page",
 ]);
 
 /** Trims a string to `max` chars on a word boundary (no mid-word cuts). */

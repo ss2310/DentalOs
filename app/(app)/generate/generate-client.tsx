@@ -12,7 +12,12 @@ import {
 } from "@/lib/generate";
 import { saveContent } from "./actions";
 
-type Result = { content: string; schema: string | null; encoded: string | null };
+type Result = {
+  content: string;
+  schema: string | null;
+  encoded: string | null;
+  citable: boolean;
+};
 
 const inputClass =
   "h-11 w-full rounded-button border border-border px-3 text-[15px] text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
@@ -63,6 +68,8 @@ export function GenerateClient({
   const [tone, setTone] = useState<string>(TONES[0]);
   const [context, setContext] = useState("");
   const [extras, setExtras] = useState<Record<string, string>>({});
+  // AI-Citable Mode — defaults ON, shown only for web-crawlable (Website) types.
+  const [citable, setCitable] = useState(true);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +89,10 @@ export function GenerateClient({
   const topicRequired = topicShown && topicCfg.required !== false;
   const inputs: ExtraInput[] = ef?.inputs ?? [];
 
+  // Web-crawlable types (all platform "Website") get the AI-Citable toggle;
+  // GBP / Instagram / Reel / WhatsApp / review types never see it.
+  const isWebCrawlable = selected?.platform === "Website";
+
   const cost = selected?.credits_cost ?? 0;
   const canAfford = creditsLeft >= cost;
 
@@ -93,6 +104,7 @@ export function GenerateClient({
     setSelectedId(id);
     setTopic("");
     setExtras({});
+    setCitable(true); // default ON for each new selection
     setResult(null);
     setError(null);
     setSaved(false);
@@ -112,6 +124,7 @@ export function GenerateClient({
           topic,
           context,
           extras,
+          citable: isWebCrawlable ? citable : false,
         }),
       });
       const data = await res.json();
@@ -123,6 +136,7 @@ export function GenerateClient({
         content: data.content,
         schema: data.schema ?? null,
         encoded: data.encoded ?? null,
+        citable: data.citable === true,
       });
       setCreditsLeft(
         typeof data.creditsLeft === "number"
@@ -153,6 +167,7 @@ export function GenerateClient({
         toneUsed: tone,
         content: result.content,
         schema: result.schema,
+        citable: result.citable,
       });
       if (res?.error) {
         toast(res.error);
@@ -318,6 +333,38 @@ export function GenerateClient({
                 )}
               </div>
             ))}
+
+            {isWebCrawlable ? (
+              <div className="rounded-button border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-medium text-text-primary">
+                      ✨ AI-Citable Mode
+                    </p>
+                    <p className="mt-0.5 text-sm text-text-secondary">
+                      Structures the page so ChatGPT, Gemini &amp; Perplexity can
+                      quote it.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={citable}
+                    aria-label="AI-Citable Mode"
+                    onClick={() => setCitable((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-pill transition-colors ${
+                      citable ? "bg-primary" : "bg-border"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        citable ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <div>
               <label className={labelClass}>Tone</label>

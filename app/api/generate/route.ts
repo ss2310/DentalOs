@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { nowIST, formatDate } from "@/lib/format";
 import {
   fillTemplate,
   enforceLimits,
@@ -33,6 +34,25 @@ Hard rules for ALL content:
 - Prices only appear if explicitly provided in the context.
 - Output ONLY the requested content. No preamble ("Here's your post..."), no explanation, no markdown code fences unless asked for schema.`;
 
+// Injected into the system prompt ONLY for web-crawlable (Website) generations
+// when AI-Citable Mode is on. Structures the page so AI search engines can quote
+// it, and hard-locks YMYL safety (never fabricate health/cost/credential facts).
+const AI_CITABLE_BLOCK = `AI-CITABLE MODE — structure this page so AI search engines (ChatGPT, Gemini, Perplexity, Google AI Overviews) can quote it verbatim:
+- Lead with a self-contained 40–60 word DIRECT ANSWER to the page's core question, in the first paragraph (inverted pyramid). It must make sense quoted on its own, with no prior context.
+- Use QUESTION-SHAPED H2/H3 headings, the way a patient would ask them.
+- Write self-contained factual sentences that NAME THE ENTITY — "At {{clinic_name}} in {{area}}, {{city}}, …" — never a bare "we", "our", "it", or "this clinic".
+- State the treatment, the city, and the clinic together in the same sentence where relevant (e.g. "root canal treatment at {{clinic_name}} in {{city}}").
+- Put ALL numeric, cost, timeline, and comparative information in clean, LABELLED HTML <table>s with a header row — never bury numbers in prose.
+- Include a visible "Last updated: {{today}}" line, and place the year in a heading where it reads naturally.
+- Attribute clinical claims to Dr. {{doctor_name}}, using credentials ONLY if they were explicitly supplied in the inputs — never invent or embellish credentials.
+- Emit the appropriate JSON-LD schema for this page type under a "SEO Schema" heading, and include a consistent NAP block in the copy: {{clinic_name}} · {{area}}, {{city}} · 📞 {{clinic_phone}}.
+
+HARD YMYL RULES (health content — non-negotiable):
+- NEVER fabricate statistics, cost figures, success rates, study citations, journal names, DOIs, or credentials.
+- Use ONLY the numbers, references, and credentials explicitly supplied in the inputs or context.
+- Where a required figure or source is missing, output a VISIBLE placeholder exactly like "[clinic to supply: <what is needed>]" instead of inventing anything.
+- Make NO outcome guarantees and NO superlatives ("best", "guaranteed", "100% painless").`;
+
 export async function POST(req: Request) {
   let body: {
     postTypeId?: string;
@@ -40,6 +60,7 @@ export async function POST(req: Request) {
     topic?: string;
     context?: string;
     extras?: Record<string, string>;
+    citable?: boolean;
   };
   try {
     body = await req.json();
@@ -100,6 +121,7 @@ export async function POST(req: Request) {
     );
   }
 
+  const { date: istDate } = nowIST();
   const extras = body.extras ?? {};
   const vars: Record<string, string> = {
     clinic_name: clinic.business_name ?? "our clinic",
@@ -111,12 +133,22 @@ export async function POST(req: Request) {
     tone: String(body.tone ?? "Professional"),
     topic: String(body.topic ?? "").trim(),
     context: String(body.context ?? "").trim(),
+    // Available to every template + the citable block.
+    today: formatDate(istDate), // DD MMM YYYY, IST
+    year: istDate.slice(0, 4),
   };
   for (const [k, v] of Object.entries(extras)) {
     vars[k] = String(v ?? "").trim();
   }
 
-  const system = fillTemplate(SHARED_SYSTEM_PROMPT, vars);
+  // AI-Citable Mode applies only to web-crawlable (Website) pages; ignore the
+  // flag for GBP / Instagram / WhatsApp / review types even if it's sent.
+  const citable = body.citable === true && post.platform === "Website";
+  const systemTemplate = citable
+    ? `${SHARED_SYSTEM_PROMPT}\n\n${AI_CITABLE_BLOCK}`
+    : SHARED_SYSTEM_PROMPT;
+
+  const system = fillTemplate(systemTemplate, vars);
   const prompt = fillTemplate(post.prompt_template, vars);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -159,7 +191,9 @@ export async function POST(req: Request) {
     if (post.platform === "WhatsApp") {
       content = extractWhatsAppMessage(content);
     }
-    if (SCHEMA_TYPES.has(post.name)) {
+    // Split inline JSON-LD for types that always emit it, and for any citable
+    // web page (the citable block instructs schema for all of them).
+    if (SCHEMA_TYPES.has(post.name) || citable) {
       const split = splitSchema(content);
       content = split.main;
       schema = split.schema;
@@ -181,7 +215,7 @@ export async function POST(req: Request) {
     if (creditError) console.error("Failed to deduct credits:", creditError);
     const creditsLeft = (clinic.monthly_credits ?? 0) - newUsed;
 
-    return NextResponse.json({ content, schema, encoded, creditsLeft });
+    return NextResponse.json({ content, schema, encoded, creditsLeft, citable });
   } catch (err) {
     // Friendly, retryable message. Log the real error server-side only.
     console.error("Claude generation failed:", err);
