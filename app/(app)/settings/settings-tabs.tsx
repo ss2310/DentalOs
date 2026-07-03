@@ -8,8 +8,9 @@ import {
   type LandingPageRow,
 } from "./landing-pages-manager";
 import { StaffManager, type StaffMember } from "./staff-manager";
+import { DataMigration } from "./data-migration";
 
-type Tab = "clinic" | "rates" | "landing" | "staff";
+type Tab = "clinic" | "rates" | "landing" | "staff" | "migration";
 
 export function SettingsTabs({
   clinic,
@@ -50,6 +51,9 @@ export function SettingsTabs({
         <button type="button" className={tabClass("staff")} onClick={() => setTab("staff")}>
           Staff
         </button>
+        <button type="button" className={tabClass("migration")} onClick={() => setTab("migration")}>
+          Data Migration
+        </button>
       </div>
 
       <div className="mt-6">
@@ -59,8 +63,10 @@ export function SettingsTabs({
           <RateCardManager rateCards={rateCards} />
         ) : tab === "landing" ? (
           <LandingPagesManager pages={landingPages} bookingSlug={bookingSlug} />
-        ) : (
+        ) : tab === "staff" ? (
           <StaffManager staff={staff} currentUserId={currentUserId} />
+        ) : (
+          <DataMigration />
         )}
       </div>
     </div>
