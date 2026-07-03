@@ -461,6 +461,30 @@ key to store. (If you later add work that must call an external API, move it to
 an Edge Function and swap the cron command for a `net.http_post` to the function
 URL — not required for anything in this milestone.)
 
+## Password reset & welcome email
+
+Supabase config needed for real delivery (dashboard, do once)
+- [ ] Authentication → Emails → **SMTP Settings**: enable custom SMTP with Resend —
+      host `smtp.resend.com`, port `465`, user `resend`, password = your Resend API
+      key, sender = a verified `from` address
+- [ ] Authentication → URL Configuration → **Redirect URLs**: add
+      `http://localhost:3000/auth/callback` and `https://<your-vercel-domain>/auth/callback`
+- [ ] Set **Site URL** to your production URL
+- [ ] Vercel env: add `RESEND_API_KEY` and `RESEND_FROM` (server-only) for the welcome email
+
+Forgot-password flow
+- [ ] Login page shows a "Forgot password?" link → /forgot-password
+- [ ] Submitting an email shows "Check your email ✓" (same message whether or not the account exists — no enumeration)
+- [ ] The reset email link opens /auth/callback, which exchanges the code and lands on /reset-password (logged in via recovery session)
+- [ ] /reset-password requires the new password ≥6 chars and both fields to match (inline errors otherwise)
+- [ ] Saving updates the password and redirects to /dashboard; the new password works on next login
+- [ ] An expired/invalid link redirects to /forgot-password with an "invalid or expired" message
+- [ ] Visiting /reset-password directly (no recovery session) is bounced to / by middleware
+
+Welcome email
+- [ ] Completing signup sends a branded welcome email to the new owner (subject "Welcome to GrowthOS, {clinic}!")
+- [ ] Signup still succeeds and lands on /dashboard even if email sending fails or Resend is unconfigured (best-effort, non-blocking)
+
 ## Deploy checklist (before onboarding real clinics)
 
 - [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.

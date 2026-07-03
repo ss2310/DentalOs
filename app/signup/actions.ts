@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isValidEmail, normalizeIndianPhone } from "@/lib/validation";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export type SignupState = { error?: string };
 
@@ -111,6 +112,9 @@ export async function signUpAction(
     // Settings. Log for visibility rather than blocking onboarding.
     console.error("Failed to seed rate cards:", rateCardError.message);
   }
+
+  // Best-effort welcome email (no-op if Resend isn't configured).
+  await sendWelcomeEmail({ to: email, clinicName, doctorName });
 
   // 4. Sign the new owner in (sets the session cookie via the server client).
   const supabase = createClient();

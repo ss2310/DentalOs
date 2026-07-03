@@ -37,7 +37,9 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Public routes usable without auth. Everything else requires a session.
-  const publicPaths = ["/", "/signup"];
+  // /auth/callback exchanges the password-reset code (user has no session yet),
+  // and /forgot-password is reached while logged out.
+  const publicPaths = ["/", "/signup", "/forgot-password", "/auth/callback"];
   const isPublic = publicPaths.includes(request.nextUrl.pathname);
 
   if (!user && !isPublic) {

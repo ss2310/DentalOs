@@ -52,6 +52,15 @@ export function LoginForm() {
         />
       </div>
 
+      <div className="text-right">
+        <Link
+          href="/forgot-password"
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          Forgot password?
+        </Link>
+      </div>
+
       <SubmitButton pendingText="Signing in…">Sign in</SubmitButton>
 
       <p className="pt-1 text-center text-sm text-text-secondary">
