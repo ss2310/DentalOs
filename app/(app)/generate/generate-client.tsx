@@ -11,6 +11,7 @@ import {
   type ExtraInput,
 } from "@/lib/generate";
 import { saveContent } from "./actions";
+import { PublishHostedPage } from "./publish-hosted-page";
 
 type Result = {
   content: string;
@@ -536,6 +537,15 @@ export function GenerateClient({
             >
               {saved ? "✓ Saved" : savePending ? "Saving…" : "Save"}
             </button>
+            {/* Geo Landing Pages can be published as a standalone hosted page. */}
+            {selected?.name === "Geo Landing Page" ? (
+              <PublishHostedPage
+                content={result.content}
+                schema={result.schema}
+                suggestedArea={extras["target_area"] ?? ""}
+                onPublished={(left) => setCreditsLeft(left)}
+              />
+            ) : null}
           </div>
         </div>
       ) : null}

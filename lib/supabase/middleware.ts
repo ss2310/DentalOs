@@ -41,9 +41,12 @@ export async function updateSession(request: NextRequest) {
   // and /forgot-password is reached while logged out.
   const publicPaths = ["/", "/signup", "/forgot-password", "/auth/callback"];
   // /audit/<token> is a public prospect report (anon, token-scoped read).
+  // /p/<booking_slug>/<slug> is a public hosted landing page (anon read via the
+  // get_published_landing_page RPC).
   const isPublic =
     publicPaths.includes(request.nextUrl.pathname) ||
-    request.nextUrl.pathname.startsWith("/audit/");
+    request.nextUrl.pathname.startsWith("/audit/") ||
+    request.nextUrl.pathname.startsWith("/p/");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

@@ -802,3 +802,50 @@ Saved to history
       draft, credits_deducted 2) and appears in /history with the `Internal` platform badge
 - [ ] The `Insight Report` type does NOT appear in the /generate Content Studio grid (Internal excluded)
 - [ ] Revisiting /reviews → Insights shows the most recent saved report in the card (with its date)
+
+---
+
+## Geo Landing Page → Hosted Pages
+
+Migrations
+- [ ] Migration 007 already provides the `landing_pages` table, `clinics.booking_slug`, RLS, and the
+      anon `get_published_landing_page()` RPC — no new table needed.
+- [ ] Run `011_landing_page_plans.sql` (adds `clinics.plan`, default 'starter'). Before it's run,
+      publishing still works and treats the clinic as the 'starter' tier (graceful fallback).
+
+Publish from /generate (Geo Landing Page only)
+- [ ] "🌐 Publish as Hosted Page" button shows ONLY after a successful "Geo Landing Page" generation
+      (not for any other post type)
+- [ ] Popup pre-fills a slug auto-suggested from the target area (lowercase-hyphen); editing re-slugifies
+- [ ] Confirm → charges 1 credit (credits counter drops by 1); blocks at 0 with a clear message
+- [ ] On success the popup shows the live public URL with Copy URL + Open ↗
+- [ ] The generated META TITLE/DESCRIPTION land in <head>; the JSON-LD lands in a
+      <script type="application/ld+json"> tag; body copy becomes clean semantic HTML (h1/h2/ul/p)
+- [ ] Header + footer show clinic name / phone / address; sticky "📞 Call Now" is a tel: link;
+      "Book Appointment" → /book/<booking_slug> if the clinic has one, else a wa.me link
+- [ ] First publish auto-assigns the clinic a booking_slug (from business name) if it had none
+- [ ] Slug collisions auto-suffix (-2, -3…) so publishing never fails on a taken slug
+
+Plan cap (plan-based)
+- [ ] Publishing is blocked once the clinic hits its plan's page limit (free 1 / starter 5 / pro 25 /
+      agency 200 — see lib/plans.ts), with a message naming the plan + limit
+- [ ] Deleting a page in Settings frees a slot
+
+Public hosted page — /p/<booking_slug>/<page_slug>
+- [ ] Opens with NO login (allow-listed in middleware); served as a full standalone HTML document,
+      NOT wrapped in the app shell
+- [ ] Correct <title> and <meta name="description"> in the served document (view source)
+- [ ] Unknown/unpublished slug → a clean 404 HTML page (verified: 404 + text/html, not app shell)
+- [ ] Mobile-first: readable at 375px, ≥44px tap targets, sticky call bar doesn't cover the footer
+
+Settings → Landing Pages tab
+- [ ] New "Landing Pages" tab lists the clinic's pages: title, area, /slug, Published/Unpublished, date
+- [ ] Copy URL copies the full public URL; Open ↗ opens it
+- [ ] Unpublish sets status to draft → the public page then 404s; Delete (with confirm) removes it
+- [ ] Download HTML saves the stored document as <slug>.html (for hosting on the clinic's own domain /
+      the agency's static-site workflow)
+- [ ] Empty state points the user to Content Studio → Geo Landing Page → Publish
+
+Scope note
+- [ ] Pages are subdomain-hosted v1; custom-domain mapping is intentionally NOT built (see code comments
+      in 011_landing_page_plans.sql and app/p/[bookingSlug]/[pageSlug]/route.ts)

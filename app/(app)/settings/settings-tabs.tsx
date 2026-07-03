@@ -3,15 +3,23 @@
 import { useState } from "react";
 import { ClinicInfoForm, type Clinic } from "./clinic-info-form";
 import { RateCardManager, type RateCard } from "./rate-card-manager";
+import {
+  LandingPagesManager,
+  type LandingPageRow,
+} from "./landing-pages-manager";
 
-type Tab = "clinic" | "rates";
+type Tab = "clinic" | "rates" | "landing";
 
 export function SettingsTabs({
   clinic,
   rateCards,
+  landingPages,
+  bookingSlug,
 }: {
   clinic: Clinic;
   rateCards: RateCard[];
+  landingPages: LandingPageRow[];
+  bookingSlug: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("clinic");
 
@@ -31,13 +39,18 @@ export function SettingsTabs({
         <button type="button" className={tabClass("rates")} onClick={() => setTab("rates")}>
           Rate Card
         </button>
+        <button type="button" className={tabClass("landing")} onClick={() => setTab("landing")}>
+          Landing Pages
+        </button>
       </div>
 
       <div className="mt-6">
         {tab === "clinic" ? (
           <ClinicInfoForm clinic={clinic} />
-        ) : (
+        ) : tab === "rates" ? (
           <RateCardManager rateCards={rateCards} />
+        ) : (
+          <LandingPagesManager pages={landingPages} bookingSlug={bookingSlug} />
         )}
       </div>
     </div>
