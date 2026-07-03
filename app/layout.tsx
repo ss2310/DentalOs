@@ -1,19 +1,12 @@
 import type { Metadata } from "next";
-import { Inter, Sora } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
+// One family everywhere ("Clinical Minimal") — display sizes are the same face
+// tightened with tracking/weight, so the whole UI reads as a single voice.
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
-  display: "swap",
-});
-
-// Display face for page titles and big numbers — gives the app its own voice
-// while Inter keeps body copy maximally readable.
-const sora = Sora({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-sora",
   display: "swap",
 });
 
@@ -30,9 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${sora.variable} antialiased`}>
-        {children}
-      </body>
+      <body className={`${inter.variable} antialiased`}>{children}</body>
     </html>
   );
 }

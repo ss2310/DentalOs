@@ -94,7 +94,7 @@ export function NotificationsList({
             onClick={() => openNotification(n)}
             className={`flex w-full min-h-[44px] flex-col items-start gap-0.5 rounded-card border border-border border-l-4 p-4 text-left transition-colors hover:bg-subtle ${
               PRIORITY_BORDER[n.priority]
-            } ${unread ? "bg-[#EFF6FF]" : "bg-white"}`}
+            } ${unread ? "bg-primary/5" : "bg-white"}`}
           >
             <div className="flex w-full items-start justify-between gap-3">
               <span

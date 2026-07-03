@@ -17,7 +17,7 @@ export function PageHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 className="font-display text-[26px] font-semibold tracking-tight text-text-primary">
+        <h1 className="text-[28px] font-semibold tracking-[-0.02em] text-text-primary">
           {title}
         </h1>
         {subtitle ? (
@@ -79,23 +79,23 @@ export function StatCard({
   if (hero) {
     return (
       <div className="rounded-card bg-primary p-5 shadow-card">
-        <p className="text-sm text-white/80">{label}</p>
-        <p className="mt-1 font-display text-3xl font-semibold tracking-tight text-white">
+        <p className="text-sm font-medium text-white/75">{label}</p>
+        <p className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.02em] text-white">
           {value}
         </p>
-        {hint ? <p className="mt-0.5 text-sm text-white/70">{hint}</p> : null}
+        {hint ? <p className="mt-2 text-sm text-white/65">{hint}</p> : null}
       </div>
     );
   }
   return (
     <div className="rounded-card border border-border bg-white p-5 shadow-card">
-      <p className="text-sm text-text-secondary">{label}</p>
+      <p className="text-sm font-medium text-text-secondary">{label}</p>
       <p
-        className={`mt-1 font-display text-3xl font-semibold tracking-tight ${STAT_TONE[tone]}`}
+        className={`mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.02em] ${STAT_TONE[tone]}`}
       >
         {value}
       </p>
-      {hint ? <p className="mt-0.5 text-sm text-text-secondary">{hint}</p> : null}
+      {hint ? <p className="mt-2 text-sm text-text-secondary">{hint}</p> : null}
     </div>
   );
 }
@@ -114,7 +114,7 @@ export function SectionHeader({
 }) {
   return (
     <div className="mt-8 mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
+      <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-text-secondary">
         {children}
       </h2>
       {hint ? (

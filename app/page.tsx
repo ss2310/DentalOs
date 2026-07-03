@@ -18,14 +18,14 @@ export default async function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
           <div className="inline-flex items-center gap-2.5">
-            <span className="flex h-11 w-11 items-center justify-center rounded-card bg-ink text-mint">
+            <span className="flex h-11 w-11 items-center justify-center rounded-card bg-primary/10 text-primary">
               <ToothIcon width={24} height={24} />
             </span>
-            <span className="font-display text-2xl font-semibold tracking-tight text-text-primary">
+            <span className="text-2xl font-semibold tracking-tight text-text-primary">
               GrowthOS
             </span>
           </div>
-          <h1 className="mt-6 font-display text-2xl font-semibold tracking-tight text-text-primary">
+          <h1 className="mt-6 text-2xl font-semibold tracking-[-0.02em] text-text-primary">
             Welcome back
           </h1>
           <p className="mt-1 text-[15px] text-text-secondary">

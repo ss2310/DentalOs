@@ -49,7 +49,7 @@ export function ScoreCard({
               cy={size / 2}
               r={r}
               fill="none"
-              stroke="#E2E8F0"
+              stroke="#E8EAED"
               strokeWidth={stroke}
             />
             <circle

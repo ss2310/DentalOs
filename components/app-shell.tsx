@@ -84,16 +84,18 @@ function isGroup(entry: NavEntry): entry is NavGroup {
   return (entry as NavGroup).items !== undefined;
 }
 
-// Sidebar rail is deep teal ("ink"), so nav uses light-on-dark treatment with a
-// mint accent for the active item.
+// Sidebar is a quiet light rail ("Clinical Minimal"): neutral text on
+// near-white, a soft fill on the active item, and teal reserved for the
+// active icon — the one accent.
 const linkClass = (active: boolean) =>
-  `flex min-h-[44px] items-center gap-3 rounded-button px-3 text-[15px] font-medium transition-colors ${
+  `flex min-h-[44px] items-center gap-3 rounded-button px-3 text-[15px] transition-colors ${
     active
-      ? "bg-white/10 text-white"
-      : "text-white/65 hover:bg-white/5 hover:text-white"
+      ? "bg-black/[0.05] font-medium text-text-primary"
+      : "font-normal text-text-secondary hover:bg-black/[0.03] hover:text-text-primary"
   }`;
 
-const iconClass = (active: boolean) => (active ? "text-mint" : "text-white/55");
+const iconClass = (active: boolean) =>
+  active ? "text-primary" : "text-text-secondary/70";
 
 export function AppShell({
   clinicName,
@@ -170,21 +172,21 @@ export function AppShell({
               onClick={() =>
                 setOpenState((s) => ({ ...s, [entry.label]: !expanded }))
               }
-              className={`flex min-h-[44px] w-full items-center justify-between gap-3 rounded-button px-3 text-[15px] font-medium transition-colors hover:bg-white/5 ${
-                gActive ? "text-white" : "text-white/65"
+              className={`mt-2 flex min-h-[44px] w-full items-center justify-between gap-3 rounded-button px-3 text-[13px] font-semibold uppercase tracking-[0.07em] transition-colors hover:bg-black/[0.03] ${
+                gActive ? "text-text-primary" : "text-text-secondary"
               }`}
             >
               <span>{entry.label}</span>
               <ChevronDownIcon
                 width={16}
                 height={16}
-                className={`text-white/50 transition-transform ${
+                className={`text-text-secondary/50 transition-transform ${
                   expanded ? "" : "-rotate-90"
                 }`}
               />
             </button>
             {expanded ? (
-              <div className="mt-1 flex flex-col gap-1 border-l border-white/10 pl-2">
+              <div className="mt-1 flex flex-col gap-0.5">
                 {entry.items.map((item) => {
                   const active = isActive(item.href);
                   return (
@@ -209,13 +211,13 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-subtle">
-      {/* Desktop sidebar — deep teal rail */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-ink px-3 py-5 md:flex">
+      {/* Desktop sidebar — quiet light rail, hairline edge */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-white px-3 py-5 md:flex">
         <div className="flex items-center gap-2.5 px-3 pb-6">
-          <span className="flex h-9 w-9 items-center justify-center rounded-button bg-mint/15 text-mint">
+          <span className="flex h-9 w-9 items-center justify-center rounded-button bg-primary/10 text-primary">
             <ToothIcon width={20} height={20} />
           </span>
-          <span className="font-display text-lg font-semibold text-white">
+          <span className="text-lg font-semibold tracking-tight text-text-primary">
             GrowthOS
           </span>
         </div>
@@ -226,17 +228,17 @@ export function AppShell({
       {mobileOpen ? (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
-            className="absolute inset-0 bg-text-primary/40"
+            className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
-          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-ink px-3 py-5">
+          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-border bg-white px-3 py-5">
             <div className="flex items-center justify-between px-3 pb-6">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 items-center justify-center rounded-button bg-mint/15 text-mint">
+                <span className="flex h-9 w-9 items-center justify-center rounded-button bg-primary/10 text-primary">
                   <ToothIcon width={20} height={20} />
                 </span>
-                <span className="font-display text-lg font-semibold text-white">
+                <span className="text-lg font-semibold tracking-tight text-text-primary">
                   GrowthOS
                 </span>
               </div>
@@ -244,7 +246,7 @@ export function AppShell({
                 type="button"
                 onClick={() => setMobileOpen(false)}
                 aria-label="Close menu"
-                className="flex h-11 w-11 items-center justify-center rounded-button text-white/70 hover:bg-white/10"
+                className="flex h-11 w-11 items-center justify-center rounded-button text-text-secondary hover:bg-black/[0.04]"
               >
                 <CloseIcon />
               </button>
@@ -258,7 +260,7 @@ export function AppShell({
 
       {/* Main column */}
       <div className="md:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-white px-4 sm:px-6">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-white/80 px-4 backdrop-blur-md sm:px-6">
           <div className="flex items-center gap-2">
             <button
               type="button"

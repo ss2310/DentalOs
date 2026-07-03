@@ -36,7 +36,7 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div
-        className="absolute inset-0 bg-text-primary/40"
+        className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -44,10 +44,12 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-t-card border border-border bg-white sm:max-w-lg sm:rounded-card"
+        className="relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-t-card bg-white shadow-card sm:max-w-lg sm:rounded-card"
       >
-        <div className="sticky top-0 flex items-center justify-between border-b border-border bg-white px-5 py-4">
-          <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
+        <div className="sticky top-0 flex items-center justify-between border-b border-border bg-white/90 px-5 py-4 backdrop-blur-sm">
+          <h2 className="text-lg font-semibold tracking-tight text-text-primary">
+            {title}
+          </h2>
           <button
             type="button"
             onClick={onClose}

@@ -38,7 +38,7 @@ export function Toaster() {
         <div
           key={t.id}
           role="status"
-          className="pointer-events-auto rounded-button border border-border bg-text-primary px-4 py-2.5 text-sm font-medium text-white shadow-sm"
+          className="pointer-events-auto rounded-pill bg-[#1D1D1F]/90 px-4 py-2.5 text-sm font-medium text-white shadow-card backdrop-blur-sm"
         >
           {t.message}
         </div>

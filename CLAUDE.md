@@ -31,42 +31,59 @@ Permanent project rules. Read this before building any feature.
 - A data leak between clinics is the worst possible bug. When in doubt, add the
   RLS policy and the filter.
 
-### 2. Design system — "Clinical Fresh"
+### 2. Design system — "Clinical Minimal"
 
-Dental-native, bold yet accessible. Teal brand, deep-teal sidebar, clean ink.
+Apple-grade restraint: clean, quiet, premium. The interface is nearly
+colourless neutrals and generous whitespace; **teal is the single accent** and
+appears only where the eye should land (primary actions, the active nav item,
+the one hero metric, key numbers). Chrome recedes so content leads.
 
 - **Fonts:**
-  - **Inter** — all body/UI text (maximally readable).
-  - **Sora** (`font-display`) — page titles and big stat numbers only.
+  - **Inter everywhere** — body, UI, titles, and numbers all use one family.
+    There is no second display face; "display" sizes are the same Inter,
+    tightened (heavier weight + negative tracking). `font-display` still resolves
+    to Inter for backward-compat — don't rely on it looking different.
+  - Titles/numbers: negative letter-spacing (`tracking-[-0.02em]`) for the
+    crisp, tight Apple headline feel.
 - **Colors:**
-  - Primary (brand + actions) `#0D9488` (teal)
-  - Ink (the sidebar rail) `#0B2E2B`
-  - Mint (active states, accents) `#2DD4BF`
-  - Success `#059669`
-  - Warning `#D97706`
-  - Danger `#DC2626`
-  - Borders 1px `#E2E8F0`
-  - Text `#0F172A` primary / `#64748B` secondary
-  - Background white; `#F5F9F8` for subtle sections/canvas
-- **Sidebar:** deep-teal (`ink`) rail, light-on-dark nav, **mint** icon/accent on
-  the active item. Tooth brand mark + "GrowthOS" wordmark at the top.
-- **Cards:** white, 1px border, **16px radius**, soft lift (`shadow-card` — a
-  whisper, never heavy).
-- **Buttons:** teal fill, **10px radius**.
-- **Badges:** pill shape (999px radius), 12px text, tinted backgrounds.
-- **Page titles:** 26px semibold, `font-display`.
-- **Stat numbers:** `font-display`, large; the single most important metric on a
-  page uses the `hero` StatCard (solid teal fill).
-- **Section headers:** 14px uppercase, `#64748B`.
-- **NO neon. NO heavy shadows. Gradients:** avoid — the one hero metric uses a
-  solid brand fill, not a gradient.
+  - Primary (the one accent — actions, active state, key numbers) `#0D9488` (teal)
+  - Ink / primary text `#1D1D1F` (near-black, not pure black)
+  - Secondary text `#6E6E73`
+  - Borders 1px `#E8EAED` (neutral hairline, barely there)
+  - Background white; `#F5F5F7` (`subtle`) for canvas/quiet fills
+  - Success `#059669` / Warning `#D97706` / Danger `#DC2626` — semantic only,
+    used sparingly for status, never as decoration
+  - **`mint` and `ink`-as-teal are legacy tokens** — `ink` now maps to the
+    near-black text colour; avoid `mint` in new work.
+- **Sidebar:** a **quiet light rail** — white with a 1px right hairline (not the
+  old deep-teal slab). Nav items are neutral text; the active item gets a soft
+  `bg-black/5` fill and a **teal icon** (the only colour in the rail). Group
+  labels are small uppercase, tracked. Tooth mark sits in a soft teal-tint chip.
+- **Cards:** white, 1px hairline border, **16px radius**, whisper lift
+  (`shadow-card` — diffuse, neutral, never heavy).
+- **Buttons:** teal fill, white text, **10px radius**. Secondary = white with
+  hairline border. No gradients.
+- **Badges:** pill shape (999px), 12px, tinted backgrounds.
+- **Overlays:** modal/mobile-nav scrims are `bg-black/25` with a light
+  `backdrop-blur`; the header is a translucent `bg-white/80` + `backdrop-blur`.
+  This frosted-glass treatment is the one "premium" flourish — use it for
+  overlays and sticky bars, nowhere else.
+- **Page titles:** 28px semibold, tight tracking (via `PageHeader`).
+- **Stat numbers:** large, tight-tracked Inter; the single most important metric
+  on a page uses the `hero` StatCard (solid teal fill, white text).
+- **Section headers:** small uppercase, tracked, secondary colour.
+- **Focus:** rely on the global `:focus-visible` teal outline in `globals.css`;
+  don't add ad-hoc focus rings.
+- **NO neon. NO heavy shadows. NO gradients** (the hero metric is a solid fill).
+  **NO second accent colour** — resist adding blues/purples; teal or neutral.
 
 Tailwind tokens live in `tailwind.config.ts` (`primary`, `ink`, `mint`,
 `success`, `warning`, `danger`, `border`, `text.primary`, `text.secondary`,
-`subtle`; `rounded-card` / `rounded-button` / `rounded-pill`; `shadow-card`;
-`font-display`). Shared primitives: `components/page.tsx` (PageHeader, StatCard
-with `hero`, StatGrid, SectionHeader, EmptyState). Prefer these over ad-hoc
-styling so the look stays consistent.
+`subtle`; `rounded-card` / `rounded-button` / `rounded-pill`; `shadow-card`).
+Shared primitives: `components/page.tsx` (PageHeader, StatCard with `hero`,
+StatGrid, SectionHeader, EmptyState), `components/modal.tsx`,
+`components/toast.tsx`. Prefer these over ad-hoc styling so the look stays
+consistent. Never write raw hex in components — use tokens.
 
 ### 3. WhatsApp messaging
 

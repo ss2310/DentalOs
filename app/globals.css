@@ -4,13 +4,25 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #111827;
+  --foreground: #1d1d1f;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Quiet, consistent focus treatment — visible for keyboard users only. */
+:focus-visible {
+  outline: 2px solid #0d9488;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(13, 148, 136, 0.15);
 }
 
 @layer utilities {

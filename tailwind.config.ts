@@ -9,24 +9,27 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // GrowthOS design system — "Clinical Fresh" (see CLAUDE.md)
-        primary: "#0D9488", // teal-600 — brand + primary actions
-        ink: "#0B2E2B", // deep teal — the sidebar rail
-        mint: "#2DD4BF", // bright accent — active states, highlights
+        // GrowthOS design system — "Clinical Minimal" (see CLAUDE.md).
+        // Neutral, near-invisible chrome; teal appears ONLY as the accent.
+        primary: "#0D9488", // teal — the single accent (actions, active states, key numbers)
+        ink: "#1D1D1F", // near-black ink (legacy token; now maps to primary text)
+        mint: "#2DD4BF", // legacy accent — avoid in new work; kept for compat
         success: "#059669",
         warning: "#D97706",
         danger: "#DC2626",
-        border: "#E2E8F0", // cool slate hairline
+        border: "#E8EAED", // neutral hairline — barely-there
         text: {
-          primary: "#0F172A",
-          secondary: "#64748B",
+          primary: "#1D1D1F",
+          secondary: "#6E6E73",
         },
-        subtle: "#F5F9F8", // faint teal-tinted canvas
+        subtle: "#F5F5F7", // neutral canvas
       },
       fontFamily: {
-        // Inter for body/UI (accessible); Sora for display titles + big numbers.
+        // One family everywhere — Inter. "Display" is the same face, tightened
+        // with tracking/weight at the point of use, so titles and numbers feel
+        // like the UI rather than a second voice.
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
-        display: ["var(--font-sora)", "var(--font-inter)", "sans-serif"],
+        display: ["var(--font-inter)", "system-ui", "sans-serif"],
       },
       borderRadius: {
         card: "16px",
@@ -34,8 +37,8 @@ const config: Config = {
         pill: "999px",
       },
       boxShadow: {
-        // A whisper of lift — never heavy.
-        card: "0 1px 2px rgba(2, 44, 40, 0.04), 0 6px 16px -6px rgba(2, 44, 40, 0.10)",
+        // A whisper of lift — diffuse and neutral, never heavy.
+        card: "0 1px 2px rgba(0, 0, 0, 0.03), 0 8px 24px -12px rgba(0, 0, 0, 0.08)",
       },
     },
   },
