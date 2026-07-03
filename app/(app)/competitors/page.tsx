@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
 import { isLiveProvider } from "@/lib/serp";
 import {
@@ -43,6 +44,7 @@ export default async function CompetitorsPage({
 }: {
   searchParams: { k?: string };
 }) {
+  await requireAdmin();
   const supabase = createClient();
 
   const { data: kwData } = await supabase

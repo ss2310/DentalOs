@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeIndianPhone } from "@/lib/validation";
+import { getUserRole, isAdminRole } from "@/lib/roles";
 
 export type SettingsState = { ok?: boolean; error?: string };
 
@@ -20,12 +21,22 @@ async function clinicId(): Promise<string | null> {
   return data?.home_clinic_id ?? null;
 }
 
+/** Guard for the settings mutations below — owner/doctor only. */
+async function denyIfNotAdmin(): Promise<SettingsState | null> {
+  return isAdminRole(await getUserRole())
+    ? null
+    : { error: "Only an owner or doctor can change clinic settings." };
+}
+
 // --- Clinic info ----------------------------------------------------------
 
 export async function updateClinic(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
+  const denied = await denyIfNotAdmin();
+  if (denied) return denied;
+
   const business_name = String(formData.get("business_name") ?? "").trim();
   const doctor_name = String(formData.get("doctor_name") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
@@ -108,6 +119,9 @@ function parseRateCard(input: RateCardInput):
 export async function addRateCard(
   input: RateCardInput,
 ): Promise<SettingsState> {
+  const denied = await denyIfNotAdmin();
+  if (denied) return denied;
+
   const parsed = parseRateCard(input);
   if (!parsed.ok) return { error: parsed.error };
 
@@ -128,6 +142,9 @@ export async function updateRateCard(
   cardId: string,
   input: RateCardInput,
 ): Promise<SettingsState> {
+  const denied = await denyIfNotAdmin();
+  if (denied) return denied;
+
   const parsed = parseRateCard(input);
   if (!parsed.ok) return { error: parsed.error };
 
@@ -147,6 +164,9 @@ export async function setRateCardActive(
   cardId: string,
   active: boolean,
 ): Promise<SettingsState> {
+  const denied = await denyIfNotAdmin();
+  if (denied) return denied;
+
   const supabase = createClient();
   const { error } = await supabase
     .from("rate_cards")

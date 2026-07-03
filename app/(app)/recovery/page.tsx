@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/roles";
 import { formatINR, formatDate, nowIST } from "@/lib/format";
 import {
   RECOVERY_TYPE,
@@ -53,6 +54,7 @@ type AuditEvent = {
 };
 
 export default async function RecoveryPage() {
+  await requireAdmin();
   const supabase = createClient();
   const { date: today } = nowIST();
   const thisMonthKey = today.slice(0, 7);
@@ -116,7 +118,7 @@ export default async function RecoveryPage() {
 
   return (
     <div>
-      <PageHeader title="Revenue Recovery" />
+      <PageHeader title="Revenue Recovered" />
 
       {/* Hero */}
       <div className="mt-5 rounded-card border border-border bg-white p-6">

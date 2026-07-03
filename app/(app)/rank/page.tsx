@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
 import { getScanBudget } from "@/lib/serp/budget";
 import { isLiveProvider } from "@/lib/serp";
@@ -28,6 +29,7 @@ type ScanRow = {
 };
 
 export default async function RankPage() {
+  await requireAdmin();
   const supabase = createClient();
 
   const [{ data: kwData }, { data: scanData }, { data: clinic }, budget] =

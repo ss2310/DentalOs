@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole, type UserRole } from "@/lib/roles";
 import { nowIST, formatDate } from "@/lib/format";
 import {
   fillTemplate,
@@ -82,6 +83,20 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  // Content generation is an owner/doctor feature (hidden from receptionists in
+  // the nav + route-guarded); block a crafted request at the API too.
+  const { data: gate } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (!isAdminRole(gate?.role as UserRole | undefined)) {
+    return NextResponse.json(
+      { error: "Content generation is available to owner or doctor accounts only." },
+      { status: 403 },
+    );
   }
 
   // RLS: post_types is a global read-only catalog; clinics returns own clinic.

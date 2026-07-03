@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/roles";
 import { SettingsTabs } from "./settings-tabs";
+import type { StaffMember } from "./staff-manager";
 import type { Clinic } from "./clinic-info-form";
 import type { RateCard } from "./rate-card-manager";
 import type { LandingPageRow } from "./landing-pages-manager";
@@ -7,9 +9,14 @@ import type { LandingPageRow } from "./landing-pages-manager";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
+  await requireAdmin();
   const supabase = createClient();
 
-  const [{ data: clinic }, { data: cards }, { data: pages }] =
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const [{ data: clinic }, { data: cards }, { data: pages }, { data: staffRows }] =
     await Promise.all([
       supabase
         .from("clinics")
@@ -31,6 +38,11 @@ export default async function SettingsPage() {
         )
         .order("published_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false }),
+      supabase
+        .from("profiles")
+        .select("id, full_name, role")
+        .order("role", { ascending: true })
+        .order("full_name", { ascending: true }),
     ]);
 
   const clinicData = (clinic as (Clinic & { booking_slug: string | null }) | null) ?? null;
@@ -44,6 +56,8 @@ export default async function SettingsPage() {
           rateCards={(cards as RateCard[]) ?? []}
           landingPages={(pages as LandingPageRow[]) ?? []}
           bookingSlug={clinicData?.booking_slug ?? null}
+          staff={(staffRows as StaffMember[]) ?? []}
+          currentUserId={user?.id ?? ""}
         />
       </div>
     </div>

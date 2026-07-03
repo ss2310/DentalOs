@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
 import { generateGrid, isLiveProvider } from "@/lib/serp";
 import { getScanBudget } from "@/lib/serp/budget";
@@ -18,6 +19,7 @@ export default async function KeywordDetailPage({
 }: {
   params: { id: string };
 }) {
+  await requireAdmin();
   const supabase = createClient();
 
   const [{ data: kw }, { data: scanData }, budget] = await Promise.all([

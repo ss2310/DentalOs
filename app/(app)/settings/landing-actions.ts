@@ -2,8 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getUserRole, isAdminRole } from "@/lib/roles";
 
 export type LandingActionState = { ok?: boolean; error?: string };
+
+/** Owner/doctor-only guard for the hosted-page mutations below. */
+async function denyIfNotAdmin(): Promise<LandingActionState | null> {
+  return isAdminRole(await getUserRole())
+    ? null
+    : { error: "Only an owner or doctor can manage landing pages." };
+}
 
 // All queries are RLS-scoped to the caller's clinic (landing_pages policies,
 // migration 007), so an id from another clinic simply matches no rows.
@@ -18,6 +26,8 @@ export async function unpublishLandingPage(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
+  const denied = await denyIfNotAdmin();
+  if (denied) return denied;
 
   const { error } = await supabase
     .from("landing_pages")
@@ -39,6 +49,8 @@ export async function deleteLandingPage(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
+  const denied = await denyIfNotAdmin();
+  if (denied) return denied;
 
   const { error } = await supabase.from("landing_pages").delete().eq("id", id);
   if (error) return { error: "Could not delete. Please try again." };

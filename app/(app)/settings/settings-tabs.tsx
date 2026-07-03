@@ -7,19 +7,24 @@ import {
   LandingPagesManager,
   type LandingPageRow,
 } from "./landing-pages-manager";
+import { StaffManager, type StaffMember } from "./staff-manager";
 
-type Tab = "clinic" | "rates" | "landing";
+type Tab = "clinic" | "rates" | "landing" | "staff";
 
 export function SettingsTabs({
   clinic,
   rateCards,
   landingPages,
   bookingSlug,
+  staff,
+  currentUserId,
 }: {
   clinic: Clinic;
   rateCards: RateCard[];
   landingPages: LandingPageRow[];
   bookingSlug: string | null;
+  staff: StaffMember[];
+  currentUserId: string;
 }) {
   const [tab, setTab] = useState<Tab>("clinic");
 
@@ -42,6 +47,9 @@ export function SettingsTabs({
         <button type="button" className={tabClass("landing")} onClick={() => setTab("landing")}>
           Landing Pages
         </button>
+        <button type="button" className={tabClass("staff")} onClick={() => setTab("staff")}>
+          Staff
+        </button>
       </div>
 
       <div className="mt-6">
@@ -49,8 +57,10 @@ export function SettingsTabs({
           <ClinicInfoForm clinic={clinic} />
         ) : tab === "rates" ? (
           <RateCardManager rateCards={rateCards} />
-        ) : (
+        ) : tab === "landing" ? (
           <LandingPagesManager pages={landingPages} bookingSlug={bookingSlug} />
+        ) : (
+          <StaffManager staff={staff} currentUserId={currentUserId} />
         )}
       </div>
     </div>

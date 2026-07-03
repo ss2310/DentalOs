@@ -17,11 +17,16 @@ const TABS: { key: TabKey; label: string }[] = [
 export function ReviewsTabs({
   requests,
   insights,
+  showInsights = true,
 }: {
   requests: ReactNode;
   insights: ReactNode;
+  showInsights?: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>("requests");
+
+  // Receptionists don't get the business Insights report — just the request list.
+  if (!showInsights) return <div>{requests}</div>;
 
   return (
     <div>

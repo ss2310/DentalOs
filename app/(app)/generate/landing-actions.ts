@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getUserRole, isAdminRole } from "@/lib/roles";
 import { landingPageLimit, planLabel } from "@/lib/plans";
 import {
   slugify,
@@ -55,6 +56,8 @@ export async function publishLandingPage(input: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
+  if (!isAdminRole(await getUserRole()))
+    return { error: "Only an owner or doctor can publish hosted pages." };
 
   const { data: clinic } = await supabase
     .from("clinics")

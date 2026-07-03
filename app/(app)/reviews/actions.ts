@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { nowIST, addDays } from "@/lib/format";
+import { getUserRole, isAdminRole } from "@/lib/roles";
 
 // Mirrors the /api/generate route: Claude is called server-side only, the API
 // key never reaches the client, and credits are checked before + deducted after
@@ -64,6 +65,8 @@ export async function generateInsightReport(): Promise<InsightState> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
+  if (!isAdminRole(await getUserRole()))
+    return { error: "Only an owner or doctor can generate insight reports." };
 
   const [{ data: post }, { data: clinic }] = await Promise.all([
     supabase

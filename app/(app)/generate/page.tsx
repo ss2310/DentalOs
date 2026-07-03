@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/roles";
 import { GenerateClient } from "./generate-client";
 import type { PostType } from "@/lib/generate";
 
 export const dynamic = "force-dynamic";
 
 export default async function GeneratePage() {
+  await requireAdmin();
   const supabase = createClient();
 
   // 'Internal' types (e.g. Insight Report) are generated from their own feature

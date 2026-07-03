@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getUserRole, isAdminRole } from "@/lib/roles";
 import { formatDate, formatTime, nowIST, addDays } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
 import {
@@ -70,6 +71,7 @@ export default async function ReviewsPage() {
   const remainingCredits =
     (clinicRes.data?.monthly_credits ?? 0) - (clinicRes.data?.credits_used ?? 0);
   const insightReady = !!postRes.data;
+  const canSeeInsights = isAdminRole(await getUserRole());
 
   const lastReportRow = (
     (lastReportRes.data ?? []) as unknown as {
@@ -112,6 +114,7 @@ export default async function ReviewsPage() {
       />
 
       <ReviewsTabs
+        showInsights={canSeeInsights}
         insights={
           <InsightsClient
             remaining={remainingCredits}

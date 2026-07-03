@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole, type UserRole } from "@/lib/roles";
 import {
   formatINR,
   formatDate,
@@ -137,7 +138,7 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("full_name")
+      .select("full_name, role")
       .eq("id", user?.id ?? "")
       .maybeSingle(),
     supabase.from("clinics").select("business_name, doctor_name").single(),
@@ -231,6 +232,10 @@ export default async function DashboardPage() {
     nameSource.replace(/^dr\.?\s+/i, "").split(" ")[0] || "there";
   const clinicName = clinicRes.data?.business_name ?? "";
   const doctorName = clinicRes.data?.doctor_name ?? "";
+  // Owner/doctor see the money headlines; receptionists get the operational two.
+  const showBusiness = isAdminRole(
+    (profileRes.data?.role as UserRole | undefined) ?? null,
+  );
   const patients = (patientRes.data as PatientOption[]) ?? [];
   const rateCards = (rateCardRes.data as RateCardOption[]) ?? [];
 
@@ -289,7 +294,7 @@ export default async function DashboardPage() {
     {
       emoji: "📅",
       count: recallsDue,
-      text: `${recallsDue} recalls due this week`,
+      text: `${recallsDue} check-ups due this week`,
       href: "/recalls",
       color: "#0D9488",
     },
@@ -328,21 +333,25 @@ export default async function DashboardPage() {
       {/* Stat cards — the day's headline metric leads in solid brand teal */}
       <StatGrid cols={4}>
         <StatCard label="Appointments Today" value={String(apptToday)} hero />
-        <StatCard
-          label="Pipeline Value"
-          value={formatINR(pipelineValue)}
-          tone="success"
-        />
+        {showBusiness ? (
+          <StatCard
+            label="Plan Value"
+            value={formatINR(pipelineValue)}
+            tone="success"
+          />
+        ) : null}
         <StatCard
           label="Outstanding"
           value={formatINR(outstandingTotal)}
           tone={outstandingTotal > 0 ? "danger" : "default"}
         />
-        <StatCard
-          label="Recovered This Month"
-          value={formatINR(recoveredMonth)}
-          tone="success"
-        />
+        {showBusiness ? (
+          <StatCard
+            label="Recovered This Month"
+            value={formatINR(recoveredMonth)}
+            tone="success"
+          />
+        ) : null}
       </StatGrid>
 
       {/* Actions needed */}
