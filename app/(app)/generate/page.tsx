@@ -28,7 +28,7 @@ export default async function GeneratePage() {
       ).data
     : primary.data;
 
-  const [{ data: clinic }, suggestions] = await Promise.all([
+  const [{ data: clinic }, suggestions, cards] = await Promise.all([
     supabase.from("clinics").select("monthly_credits, credits_used").single(),
     // RLS returns curated (clinic_id NULL) + this clinic's own suggestions.
     supabase
@@ -37,6 +37,12 @@ export default async function GeneratePage() {
       .eq("is_active", true)
       .order("bank", { ascending: true })
       .order("sort_order", { ascending: true }),
+    // Service/Geo pages prefer the clinic's real treatment names for the picker.
+    supabase
+      .from("rate_cards")
+      .select("treatment_name")
+      .eq("is_active", true)
+      .order("treatment_name", { ascending: true }),
   ]);
 
   const postTypes = (types as unknown as PostType[]) ?? [];
@@ -50,11 +56,18 @@ export default async function GeneratePage() {
     (topicBanks[row.bank] ??= []).push(row.label);
   }
 
+  const rateCards = (
+    (cards.data as { treatment_name: string }[] | null) ?? []
+  )
+    .map((r) => r.treatment_name)
+    .filter(Boolean);
+
   return (
     <GenerateClient
       postTypes={postTypes}
       remaining={remaining}
       topicBanks={topicBanks}
+      rateCards={rateCards}
     />
   );
 }

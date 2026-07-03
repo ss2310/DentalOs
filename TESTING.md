@@ -856,3 +856,40 @@ Settings → Landing Pages tab
 Scope note
 - [ ] Pages are subdomain-hosted v1; custom-domain mapping is intentionally NOT built (see code comments
       in 011_landing_page_plans.sql and app/p/[bookingSlug]/[pageSlug]/route.ts)
+
+---
+
+## Content Studio topic dropdowns (topic_suggestions × post_types.topic_bank)
+
+Migration
+- [ ] Run `012_topic_suggestions.sql` first. Before it's run: /generate shows the old free-text
+      Topic box for every type (graceful fallback, no crash).
+
+Dropdown behaviour
+- [ ] Selecting a type whose topic_bank is set replaces the freeform Topic box with a native <select>
+      of curated options for that bank, ordered by sort_order
+- [ ] Options include curated rows (clinic_id NULL) and would include this clinic's own rows
+      (clinic_id = current clinic) automatically — RLS handles it
+- [ ] The final option is always "✏️ Something else…"; choosing it hides the dropdown and shows a
+      free-text box; "↩ Back to suggestions" returns to the dropdown
+- [ ] Choosing a curated option sets the value directly (no extra typing)
+
+Per-type wiring (dropdown feeds the RIGHT variable)
+- [ ] GBP Post, Instagram Caption, Reel Script, Blog Article, Blog+FAQ, Clinician Guide, Dental Update
+      → dropdown sets {{topic}}
+- [ ] Service Page → dropdown lists the clinic's OWN active rate_cards (real treatment names); if the
+      clinic has none, falls back to the 'service' bank; selection sets {{topic}} ("Treatment name")
+- [ ] Geo Landing Page → shows the same rate_cards/service picker AND still asks for {{target_area}}
+      separately. The chosen service is folded into {{context}} as "Focus treatment to feature: X"
+      (the Geo template consumes {{context}} but not {{topic}}), so the picked treatment DOES
+      influence the generated page. Confirm the output features the chosen treatment.
+- [ ] Treatment Comparison → dropdown feeds the "treatments to compare" input
+- [ ] Question Answer Page → dropdown feeds the patient question (free-text via "Something else")
+- [ ] WhatsApp Broadcast → dropdown feeds {{occasion}}
+- [ ] City Dental Stats, Review Response, GBP Q&A Response → NO dropdown (topic_bank NULL); their
+      existing inputs (stats box / pasted review / pasted question) are untouched
+
+Mobile + unchanged flow
+- [ ] Dropdown is a native <select> (≥44px tap target) and the free-text box meets tap-target/font rules
+- [ ] Tone dropdown, context box, credit cost, AI-Citable toggle, Generate/Save all behave exactly as
+      before — only how the topic value is chosen has changed
