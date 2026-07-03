@@ -11,7 +11,14 @@
 
 do $$
 declare
-  v_email  text := 'utsavgoyal1981@gmail.com';   -- <<< CHANGE THIS to your login email
+  -- Target your clinic ONE of two ways:
+  --   OPTION A (recommended): paste the clinic UUID from this query —
+  --     select c.id, c.business_name, u.email from clinics c
+  --       join profiles p on p.home_clinic_id = c.id
+  --       join auth.users u on u.id = p.id order by c.created_at desc;
+  --   OPTION B: leave v_clinic_id = '' and set v_email to the login email.
+  v_clinic_id text := '';                          -- e.g. '0c9d5e1a-...'; '' = use email
+  v_email     text := 'utsavgoyal1981@gmail.com';  -- used only when v_clinic_id is ''
   v_clinic uuid;
   v_user   uuid;
   v_doctor text;
@@ -35,15 +42,22 @@ declare
   -- post types (optional demo content)
   pt_gbp uuid; pt_ig uuid; pt_blog uuid;
 begin
-  -- ---- resolve the clinic from the owner's email --------------------------
-  select u.id, p.home_clinic_id
-    into v_user, v_clinic
-  from auth.users u
-  join profiles p on p.id = u.id
-  where lower(u.email) = lower(v_email);
+  -- ---- resolve the clinic (by UUID if given, else by owner email) ---------
+  if v_clinic_id <> '' then
+    v_clinic := v_clinic_id::uuid;
+    select id into v_user
+    from profiles where home_clinic_id = v_clinic
+    order by created_at limit 1;
+  else
+    select u.id, p.home_clinic_id
+      into v_user, v_clinic
+    from auth.users u
+    join profiles p on p.id = u.id
+    where lower(u.email) = lower(v_email);
+  end if;
 
   if v_clinic is null then
-    raise exception 'No clinic found for %. Check the email and that you have signed up.', v_email;
+    raise exception 'No clinic found. Set v_clinic_id to a valid clinic UUID, or v_email to your login email.';
   end if;
 
   select doctor_name into v_doctor from clinics where id = v_clinic;
