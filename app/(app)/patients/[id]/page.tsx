@@ -150,6 +150,21 @@ export default async function PatientDetailPage({
               {patient.gender ? <span>{patient.gender}</span> : null}
               {patient.area ? <span>{patient.area}</span> : null}
             </div>
+            {visits.length > 0 ? (
+              <p className="mt-2 text-sm text-text-secondary">
+                Last visit:{" "}
+                <span className="font-medium text-text-primary">
+                  {formatDate(visits[0].visit_date)}
+                </span>
+                {visits[0].treatment_name_text
+                  ? ` · ${visits[0].treatment_name_text}`
+                  : ""}
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-text-secondary">
+                No visits recorded yet.
+              </p>
+            )}
             {whatsapp ? (
               <a
                 href={`https://wa.me/91${whatsapp}`}

@@ -893,3 +893,161 @@ Mobile + unchanged flow
 - [ ] Dropdown is a native <select> (≥44px tap target) and the free-text box meets tap-target/font rules
 - [ ] Tone dropdown, context box, credit cost, AI-Citable toggle, Generate/Save all behave exactly as
       before — only how the topic value is chosen has changed
+
+---
+
+## Navigation reframe + "How it works" intro (journey-based IA)
+
+Reorganised the clinic-operations sidebar from one flat 8-tab "Clinic Operations"
+group into three plain-language journey groups, renamed the jargon tabs, and added
+a first-run product walkthrough. No schema/logic change — IA, labels, and one new
+client component only.
+
+### Sidebar structure + renames
+- [ ] Sidebar now shows: **Dashboard**, then groups **Get Patients In**, **Run the
+      Clinic**, **Get Paid & Keep Them**, **Marketing**, then **Settings**.
+- [ ] "Get Patients In" contains **Enquiries** (→ /leads) and **Treatment Plans** (→ /pipeline).
+- [ ] "Run the Clinic" contains **Appointments** and **Patients**.
+- [ ] "Get Paid & Keep Them" contains **Payments** (→ /billing), **Check-up Reminders**
+      (→ /recalls), **Reviews**, **Revenue Recovered** (→ /recovery).
+- [ ] Every link still lands on the correct page (hrefs unchanged; only labels changed).
+- [ ] The active item still highlights (mint icon) and its group auto-expands.
+- [ ] Agency users still see **Prospecting** injected just above Settings.
+
+### Page titles match the new names
+- [ ] /leads header reads **Enquiries**; /pipeline header reads **Treatment Plans**.
+- [ ] /billing title reads **Payments**; /recalls title reads **Check-up Reminders**
+      (subtitle: "N check-ups due within 7 days"); /recovery title reads **Revenue Recovered**.
+- [ ] Pipeline + Dashboard stat card now reads **Plan Value** (was "Pipeline Value").
+- [ ] Dashboard "Actions Needed" recall row reads "N check-ups due this week".
+
+### "How it works" intro
+- [ ] On first login (fresh browser / cleared localStorage) the **How GrowthOS works**
+      modal auto-opens once, showing the 3 journey steps + the Revenue Recovered safety net.
+- [ ] Closing it (Got it / X / Esc / backdrop) sets `growthos:intro-seen:v1` so it does
+      NOT reappear on the next load/navigation.
+- [ ] The header **How it works** button (question-mark icon; label hidden on mobile)
+      reopens the modal on demand.
+- [ ] Tool names in the modal match the sidebar labels exactly.
+- [ ] Mobile: modal is full-width bottom sheet, readable at ≥14px, "Got it" ≥44px tap target.
+
+---
+
+## Role-based access (RBAC) — owner/doctor vs receptionist
+
+Adds real per-user roles. `profiles.role` (owner/doctor/receptionist) already
+existed; this wires it into the nav, server route/action guards, RLS on sensitive
+writes, and a Settings → Staff manager so owners can create receptionist accounts.
+
+> **Run migration `013_roles_rbac.sql` first** (adds `current_user_role()` +
+> `is_clinic_admin()` and tightens `clinics`/`rate_cards` writes to owner/doctor).
+> The app still runs without it, but the write-level RLS backstop won't be active.
+
+### Setup for testing
+- [ ] Existing accounts are all `clinic_owner` (created at signup) → they still see
+      EVERYTHING. Confirm no regression for the owner.
+- [ ] As owner: Settings → **Staff** → Add Staff (name, email, temp password, role
+      = Receptionist). Log in as that account in a separate browser/incognito.
+
+### Nav + page visibility (receptionist)
+- [ ] Sidebar shows ONLY: Dashboard, Enquiries, Treatment Plans, Appointments,
+      Patients, Payments, Check-up Reminders, Reviews. NO Revenue Recovered, NO
+      Marketing group, NO Settings.
+- [ ] Dashboard hides the money stat cards (Plan Value, Recovered This Month);
+      shows Appointments Today + Outstanding. Action rows + schedule still show.
+- [ ] Reviews page shows the request list but NO Insights tab.
+
+### Route guards (the real gate — receptionist, via direct URL)
+- [ ] Typing `/settings`, `/recovery`, `/generate`, `/rank`, `/competitors` in the
+      address bar redirects to `/dashboard` (not the page).
+- [ ] Owner/doctor can open all of the above normally.
+
+### Action / API guards (defense-in-depth)
+- [ ] POST to `/api/generate` as a receptionist → 403 (owner/doctor → normal).
+- [ ] Insight Report generation, hosted-page publish, clinic-info save, rate-card
+      add/edit/deactivate, landing unpublish/delete all refuse for a receptionist
+      with an "owner or doctor" error (and work for owner/doctor).
+
+### RLS backstop (with 013 applied)
+- [ ] As a receptionist, a direct `update clinics …` / `insert rate_cards …`
+      (e.g. via the Supabase client) is rejected by RLS; SELECTs still work (they
+      need to read rate cards to book/log visits).
+
+### Staff management (Settings → Staff, owner/doctor only)
+- [ ] Add creates a working login in the SAME clinic with the chosen role.
+- [ ] The list shows each member's role; "(You)" marks the current user.
+- [ ] Remove is hidden for yourself and for the Owner row; removing a teammate
+      revokes their access immediately.
+- [ ] Adding a duplicate email shows "account already exists" (no orphan created).
+
+---
+
+## AI Visibility Tracker (/ai-visibility)
+
+Tracks how often AI assistants (ChatGPT, Gemini, Perplexity, Google AI Overview)
+cite the clinic. Uses the `ai_visibility_queries` / `ai_visibility_checks` tables
++ `prospect_audits.ai_visibility_summary` — all already shipped in **migration
+007** (no new migration). Manual check recording now; SERP auto-fill for Google
+AI Overview is a flagged TODO, not built.
+
+### Nav + access
+- [ ] Sidebar shows **AI Visibility** (robot icon) directly under Dashboard, for
+      ALL roles (owner, doctor AND receptionist — it's not admin-gated).
+- [ ] `/ai-visibility` opens for a receptionist too (no redirect).
+
+### Query set (#2)
+- [ ] First visit (no queries) shows a "Generate Query Set" empty state.
+- [ ] Generate seeds ~12 queries across layers (Brand, Service+Area, Best-of,
+      Comparison, Symptom, Voice) filled with the clinic's name/area/city.
+- [ ] Re-running Generate does NOT duplicate (dedupes by text).
+- [ ] "+ Add Query" (with layer), Edit, Pause/Activate, Delete all work.
+
+### Scorecard (#2)
+- [ ] Big % ring = latest-check cited across (active queries × 4 engines); ring is
+      red <20 / amber 20–60 / green >60.
+- [ ] Four per-engine sub-scores show pct + cited/total, dot-colored by the same
+      thresholds.
+
+### Check session (#3)
+- [ ] "Run Check Session" steps through query × engine one at a time: engine
+      badge, query text + Copy button, three big buttons (Cited / Mentioned / Absent).
+- [ ] Each answer saves an ai_visibility_checks row (check_method='manual',
+      checked_by = me) and auto-advances; progress bar + "Check X of Y".
+- [ ] "Add details" reveals source multi-add (chips), position note, excerpt —
+      all optional, saved on the check.
+- [ ] Completing the session returns to the dashboard with the score updated.
+
+### Results (#4)
+- [ ] Matrix: queries as rows, 4 engines as columns, latest status cells
+      (✓ cited / ~ mentioned / ✗ absent / – unchecked). Tap a cell → that
+      combo's history (status, date, sources, position, excerpt).
+- [ ] Citation Sources panel aggregates cited_sources across checks, most-cited
+      first (Practo/JustDial/etc.).
+- [ ] Trend shows a bar per check date once ≥2 dates exist.
+
+### Prospect tie-in (#5, agency-only)
+- [ ] From a prospect audit → "Add AI Visibility results" opens the SAME stepper
+      in prospect mode (queries generated from the audit business; no clinic rows
+      written).
+- [ ] On finish it writes prospect_audits.ai_visibility_summary and the PUBLIC
+      report (/audit/<token>) "AI search" section now shows per-engine Cited/
+      Mentioned/Not-cited pills + 2–3 finding lines.
+
+### Export (#6)
+- [ ] "Copy Scorecard Summary" copies a clean text block (score, per-engine,
+      biggest gaps, top sources) suitable for WhatsApp/email.
+
+---
+
+## UX fixes — completed appointments, patient last-visit, AI Visibility placement
+
+- [ ] Appointments: completed appointments no longer clutter the day list — they
+      collapse behind a "Show completed (n)" toggle (like cancelled/rescheduled).
+- [ ] When every appointment for the day is completed, the active area reads
+      "All N appointments for <date> are done ✓" and completed are one tap away.
+- [ ] Cancelled/rescheduled toggle still works alongside the completed toggle.
+- [ ] Patient detail header shows "Last visit: <date> · <treatment>" (or
+      "No visits recorded yet."); full Visit History section unchanged below.
+- [ ] AI Visibility now appears under the **Marketing** group (owner/doctor only),
+      NOT as a standalone item. Receptionists no longer see it in the nav, and
+      /ai-visibility redirects them to the dashboard.
