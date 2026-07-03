@@ -760,3 +760,45 @@ YMYL safety (applies even with the toggle OFF, via the templates)
 History (PART 3)
 - [ ] Generations saved with citable mode on show a "✨ Citable" pill in /history
 - [ ] Schema still shows in the collapsible block with Copy Schema (generate + history), save flow unchanged
+
+---
+
+## Reviews → Insights: Monthly Insight Report
+
+Migration
+- [ ] Run `010_insight_report.sql` (seeds the `Insight Report` post type, platform `Internal`,
+      2 credits). Before it's run: the Insights tab shows the "isn't set up yet — run
+      010_insight_report.sql" hint and the Generate button is disabled (no crash).
+
+Tabs
+- [ ] /reviews shows two tabs: "Review Requests" (default) and "Insights"
+- [ ] Switching tabs keeps the requests list + stats intact (server-rendered); Insights tab is its
+      own panel
+- [ ] Tab buttons are ≥44px tall; active tab has the teal underline
+
+Generate Monthly Insight Report
+- [ ] One button "Generate Monthly Insight Report" labelled "Uses 2 credits"
+- [ ] Credits-left shows in the panel; on success it drops by exactly 2 (deducted once, after a
+      successful generation — same pattern as /api/generate)
+- [ ] Blocked when remaining credits < 2: button disabled + "Not enough credits" message (block at 0)
+- [ ] Clicking shows a "Reading your last 90 days…" skeleton, then renders the report in a card
+- [ ] The report has exactly 4 labelled sections in order: "What patients love", "What's hurting
+      you", "One number to watch", "Do these 3 things this month" (3 = a numbered list of 3 actions)
+- [ ] Tone is plain-English / Hinglish-friendly, no jargon
+- [ ] Copy button copies the report text (toast "Copied ✓")
+
+Data gathering (last 90 days, all RLS-scoped to the clinic)
+- [ ] Uses survey_responses (scores + comments, responded within 90d), interactions counts by type,
+      appointment no-show rate (no_show / reached-their-date), and recovery_events outcomes + ₹ recovered
+- [ ] No fabricated facts: report only reflects patterns present in the supplied data
+- [ ] Thin/empty data → the report says so honestly (e.g. "not enough survey responses yet") instead
+      of padding; if there is NO activity at all in 90 days, generation is blocked with a friendly
+      message and no credit is spent
+- [ ] The Claude call is server-side only (server action); ANTHROPIC_API_KEY never reaches the client;
+      model claude-sonnet-4-6, max_tokens 1500
+
+Saved to history
+- [ ] Each report is saved as a generated_content row (topic "Monthly Insight — Mon YYYY", status
+      draft, credits_deducted 2) and appears in /history with the `Internal` platform badge
+- [ ] The `Insight Report` type does NOT appear in the /generate Content Studio grid (Internal excluded)
+- [ ] Revisiting /reviews → Insights shows the most recent saved report in the card (with its date)

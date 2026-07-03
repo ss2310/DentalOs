@@ -11,6 +11,8 @@ import {
 } from "@/components/page";
 import { WhatsAppActions } from "../appointments/whatsapp-actions";
 import type { WaAction } from "../appointments/wa-actions";
+import { ReviewsTabs } from "./reviews-tabs";
+import { InsightsClient, type LastReport } from "./insights-client";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +41,7 @@ export default async function ReviewsPage() {
   const thisMonthKey = today.slice(0, 7);
 
   // All RLS-scoped to the caller's clinic.
-  const [apptRes, clinicRes] = await Promise.all([
+  const [apptRes, clinicRes, postRes, lastReportRes] = await Promise.all([
     supabase
       .from("appointments")
       .select(
@@ -49,11 +51,36 @@ export default async function ReviewsPage() {
       .gte("appointment_date", windowStart)
       .order("appointment_date", { ascending: false })
       .order("appointment_time", { ascending: false }),
-    supabase.from("clinics").select("google_review_url").single(),
+    supabase
+      .from("clinics")
+      .select("google_review_url, monthly_credits, credits_used")
+      .single(),
+    // post_types is a global read-only catalog; presence gates the Insights tab.
+    supabase.from("post_types").select("id").eq("name", "Insight Report").single(),
+    // Most recent saved Insight Report, so the tab shows it on revisit.
+    supabase
+      .from("generated_content")
+      .select("generated_copy, created_at, post:post_type_id(name)")
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
   const appts = (apptRes.data as unknown as ReviewRow[]) ?? [];
   const reviewUrl = clinicRes.data?.google_review_url ?? "";
+  const remainingCredits =
+    (clinicRes.data?.monthly_credits ?? 0) - (clinicRes.data?.credits_used ?? 0);
+  const insightReady = !!postRes.data;
+
+  const lastReportRow = (
+    (lastReportRes.data ?? []) as unknown as {
+      generated_copy: string;
+      created_at: string;
+      post: { name: string } | null;
+    }[]
+  ).find((r) => r.post?.name === "Insight Report");
+  const lastReport: LastReport = lastReportRow
+    ? { content: lastReportRow.generated_copy, created_at: lastReportRow.created_at }
+    : null;
 
   const pending = appts.filter((a) => !a.review_requested);
   const sent = appts.filter((a) => a.review_requested);
@@ -81,9 +108,19 @@ export default async function ReviewsPage() {
     <div>
       <PageHeader
         title="Reviews"
-        subtitle="Ask happy patients for a Google review after their visit."
+        subtitle="Ask happy patients for a Google review, and read your monthly insights."
       />
 
+      <ReviewsTabs
+        insights={
+          <InsightsClient
+            remaining={remainingCredits}
+            ready={insightReady}
+            lastReport={lastReport}
+          />
+        }
+        requests={
+          <>
       <StatGrid cols={2}>
         <StatCard label="Pending Requests" value={String(pending.length)} />
         <StatCard
@@ -174,6 +211,9 @@ export default async function ReviewsPage() {
           </div>
         )}
       </div>
+          </>
+        }
+      />
     </div>
   );
 }
