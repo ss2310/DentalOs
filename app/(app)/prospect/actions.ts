@@ -12,6 +12,10 @@ import {
 import type { LocalResult } from "@/lib/serp";
 import { buildAuditFindings } from "@/lib/serp/findings";
 import { getAuditBudget } from "@/lib/serp/budget";
+import {
+  buildProspectSummary,
+  type ProspectCheckResult,
+} from "@/lib/ai-visibility";
 
 export type AuditActionState = {
   ok?: boolean;
@@ -182,4 +186,30 @@ export async function runAudit(
 
   revalidatePath("/prospect");
   return { ok: true, id: data.id, token: data.share_token };
+}
+
+/**
+ * Writes a prospect AI-visibility check session into the audit's
+ * ai_visibility_summary (the shape the public R3 report renders). Agency-only,
+ * like runAudit; RLS on prospect_audits also scopes the update to this user.
+ */
+export async function saveProspectAiSummary(
+  auditId: string,
+  results: ProspectCheckResult[],
+): Promise<AuditActionState> {
+  const supabase = createClient();
+  const user = await agencyUser(supabase);
+  if (!user) return { error: "Prospecting is available to agency accounts only." };
+  if (!auditId) return { error: "Missing audit." };
+  if (!results.length) return { error: "No checks to save." };
+
+  const summary = buildProspectSummary(results, new Date().toISOString());
+  const { error } = await supabase
+    .from("prospect_audits")
+    .update({ ai_visibility_summary: summary })
+    .eq("id", auditId);
+  if (error) return { error: "Could not save the AI visibility results." };
+
+  revalidatePath(`/prospect/${auditId}`);
+  return { ok: true, id: auditId };
 }

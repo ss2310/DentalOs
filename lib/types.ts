@@ -166,11 +166,17 @@ export type AiVisibilityEngineResult = {
   is_cited: boolean;
   is_mentioned?: boolean;
   note?: string | null;
+  // Enriched by the check-session tie-in (buildProspectSummary); the R3 report
+  // ignores unknown fields, so these are safe to include.
+  checked?: number;
+  cited?: number;
 };
 
 export type AiVisibilitySummary = {
   engines: AiVisibilityEngineResult[];
   checked_at?: string;
+  // 2–3 plain-English gap lines, rendered under the report's AI section.
+  findings?: string[];
 };
 
 // numeric columns arrive from Supabase as strings.

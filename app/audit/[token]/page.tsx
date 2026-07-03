@@ -143,6 +143,19 @@ export default async function PublicAuditPage({
               );
             })}
           </div>
+          {ai.findings && ai.findings.length > 0 ? (
+            <ul className="mt-3 space-y-1.5">
+              {ai.findings.map((f, idx) => (
+                <li
+                  key={idx}
+                  className="flex gap-2 text-sm text-text-secondary"
+                >
+                  <span className="text-danger">•</span>
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </>
       ) : null}
 
