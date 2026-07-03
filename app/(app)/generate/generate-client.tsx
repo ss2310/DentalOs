@@ -59,9 +59,11 @@ function Spinner({ className }: { className?: string }) {
 export function GenerateClient({
   postTypes,
   remaining,
+  topicBanks,
 }: {
   postTypes: PostType[];
   remaining: number;
+  topicBanks: Record<string, string[]>;
 }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -89,6 +91,12 @@ export function GenerateClient({
   const topicShown = topicCfg.show !== false;
   const topicRequired = topicShown && topicCfg.required !== false;
   const inputs: ExtraInput[] = ef?.inputs ?? [];
+
+  // Curated topic suggestions for this type's bank (empty if none / not seeded).
+  const topicSuggestions = useMemo(
+    () => (selected?.topic_bank ? topicBanks[selected.topic_bank] ?? [] : []),
+    [selected, topicBanks],
+  );
 
   // Web-crawlable types (all platform "Website") get the AI-Citable toggle;
   // GBP / Instagram / Reel / WhatsApp / review types never see it.
@@ -280,11 +288,33 @@ export function GenerateClient({
                     <span className="text-text-secondary"> (optional)</span>
                   )}
                 </label>
+                {/* Curated suggestions (if any) fill the field; free-text stays. */}
+                {topicSuggestions.length > 0 ? (
+                  <select
+                    aria-label="Pick a suggested topic"
+                    className={`${inputClass} mb-2`}
+                    value={topicSuggestions.includes(topic) ? topic : ""}
+                    onChange={(e) => {
+                      if (e.target.value) setTopic(e.target.value);
+                    }}
+                  >
+                    <option value="">💡 Pick a suggested topic…</option>
+                    {topicSuggestions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
                 <input
                   type="text"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  placeholder={topicCfg.placeholder ?? ""}
+                  placeholder={
+                    topicSuggestions.length > 0
+                      ? "…or write your own"
+                      : topicCfg.placeholder ?? ""
+                  }
                   className={inputClass}
                 />
               </div>
@@ -537,12 +567,12 @@ export function GenerateClient({
             >
               {saved ? "✓ Saved" : savePending ? "Saving…" : "Save"}
             </button>
-            {/* Geo Landing Pages can be published as a standalone hosted page. */}
-            {selected?.name === "Geo Landing Page" ? (
+            {/* Any web-crawlable (Website) page can be published as a hosted page. */}
+            {selected?.platform === "Website" ? (
               <PublishHostedPage
                 content={result.content}
                 schema={result.schema}
-                suggestedArea={extras["target_area"] ?? ""}
+                suggestedArea={extras["target_area"] || topic}
                 onPublished={(left) => setCreditsLeft(left)}
               />
             ) : null}

@@ -30,6 +30,9 @@ export type PostType = {
   credits_cost: number;
   schema_template: string | null;
   extra_fields: ExtraFields | null;
+  // Which topic_suggestions bank feeds this type's Topic dropdown (migration
+  // 012). null / undefined = no suggestions (free-text topic only).
+  topic_bank?: string | null;
 };
 
 export const TONES = ["Professional", "Friendly", "Warm"] as const;
