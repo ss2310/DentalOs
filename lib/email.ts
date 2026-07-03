@@ -5,7 +5,7 @@ import { Resend } from "resend";
 // component. Sending is best-effort: if the keys aren't set (e.g. local dev)
 // or the send fails, we log and move on so it never blocks the user's flow.
 
-const BRAND = "#2563EB";
+const BRAND = "#0D9488";
 
 export async function sendWelcomeEmail(opts: {
   to: string;

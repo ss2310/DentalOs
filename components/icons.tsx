@@ -160,6 +160,44 @@ export function PlusIcon(p: IconProps) {
   );
 }
 
+export function ChevronDownIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M6 9l6 6 6-6" />
+    </Base>
+  );
+}
+
+export function MapPinIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M12 21s-6.5-5.4-6.5-10.5a6.5 6.5 0 1113 0C18.5 15.6 12 21 12 21z" />
+      <circle cx="12" cy="10.5" r="2.25" />
+    </Base>
+  );
+}
+
+// Tooth — GrowthOS brand mark.
+export function ToothIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M12 5.5c-1.6-1.2-3-1.8-4.6-1.8C5.1 3.7 3.5 5.4 3.5 8c0 1.7.5 3.6 1.1 5.6.5 1.7.7 4.9 2.2 4.9 1.4 0 1.2-2.8 1.8-4.4.3-.9.7-1.3 1.4-1.3s1.1.4 1.4 1.3c.6 1.6.4 4.4 1.8 4.4 1.5 0 1.7-3.2 2.2-4.9.6-2 1.1-3.9 1.1-5.6 0-2.6-1.6-4.3-3.9-4.3-1.6 0-3 .6-4.6 1.8z" />
+    </Base>
+  );
+}
+
+// Crossed swords — Competitor Intelligence (the "⚔" nav item).
+export function SwordsIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M14.5 17.5 3 6V3h3l11.5 11.5" />
+      <path d="m13 19 6-6M16 16l4 4M19 21l2-2" />
+      <path d="M14.5 6.5 18 3h3v3l-3.5 3.5" />
+      <path d="m5 14 4 4M7 17l-3 3M3 19l2 2" />
+    </Base>
+  );
+}
+
 // Filled brand-style glyph — uses fill (not stroke), so it doesn't use Base.
 export function WhatsAppIcon(p: IconProps) {
   return (

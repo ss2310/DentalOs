@@ -31,27 +31,42 @@ Permanent project rules. Read this before building any feature.
 - A data leak between clinics is the worst possible bug. When in doubt, add the
   RLS policy and the filter.
 
-### 2. Design system
+### 2. Design system — "Clinical Fresh"
 
-- **Font:** Inter only.
+Dental-native, bold yet accessible. Teal brand, deep-teal sidebar, clean ink.
+
+- **Fonts:**
+  - **Inter** — all body/UI text (maximally readable).
+  - **Sora** (`font-display`) — page titles and big stat numbers only.
 - **Colors:**
-  - Primary `#2563EB`
+  - Primary (brand + actions) `#0D9488` (teal)
+  - Ink (the sidebar rail) `#0B2E2B`
+  - Mint (active states, accents) `#2DD4BF`
   - Success `#059669`
   - Warning `#D97706`
   - Danger `#DC2626`
-  - Borders 1px `#E5E7EB`
-  - Text `#111827` primary / `#6B7280` secondary
-  - Background white; `#F9FAFB` for subtle sections
-- **Cards:** white, 1px border, 12px radius, minimal shadow.
-- **Buttons:** 8px radius.
-- **Badges:** pill shape (999px radius), 12px text.
-- **Page titles:** 24px semibold.
-- **Section headers:** 14px uppercase, `#6B7280`.
-- **NO gradients. NO heavy shadows.**
+  - Borders 1px `#E2E8F0`
+  - Text `#0F172A` primary / `#64748B` secondary
+  - Background white; `#F5F9F8` for subtle sections/canvas
+- **Sidebar:** deep-teal (`ink`) rail, light-on-dark nav, **mint** icon/accent on
+  the active item. Tooth brand mark + "GrowthOS" wordmark at the top.
+- **Cards:** white, 1px border, **16px radius**, soft lift (`shadow-card` — a
+  whisper, never heavy).
+- **Buttons:** teal fill, **10px radius**.
+- **Badges:** pill shape (999px radius), 12px text, tinted backgrounds.
+- **Page titles:** 26px semibold, `font-display`.
+- **Stat numbers:** `font-display`, large; the single most important metric on a
+  page uses the `hero` StatCard (solid teal fill).
+- **Section headers:** 14px uppercase, `#64748B`.
+- **NO neon. NO heavy shadows. Gradients:** avoid — the one hero metric uses a
+  solid brand fill, not a gradient.
 
-Tailwind tokens for the above live in `tailwind.config.ts` (`primary`,
+Tailwind tokens live in `tailwind.config.ts` (`primary`, `ink`, `mint`,
 `success`, `warning`, `danger`, `border`, `text.primary`, `text.secondary`,
-`subtle`, and `rounded-card` / `rounded-button` / `rounded-pill`).
+`subtle`; `rounded-card` / `rounded-button` / `rounded-pill`; `shadow-card`;
+`font-display`). Shared primitives: `components/page.tsx` (PageHeader, StatCard
+with `hero`, StatGrid, SectionHeader, EmptyState). Prefer these over ad-hoc
+styling so the look stays consistent.
 
 ### 3. WhatsApp messaging
 
