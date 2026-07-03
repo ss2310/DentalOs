@@ -4,6 +4,12 @@ import { formatINR, formatDate, nowIST } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
 import { PIPELINE_STAGE, type PipelineStage } from "@/lib/pipeline-stage";
 import type { PatientOption, RateCardOption } from "@/lib/types";
+import {
+  StatGrid,
+  StatCard,
+  SectionHeader,
+  EmptyState,
+} from "@/components/page";
 import { PipelineToolbar } from "./pipeline-toolbar";
 import { CaseActions } from "./case-actions";
 import type { RateCard } from "./add-case";
@@ -18,28 +24,6 @@ type CaseRow = {
   patient: { full_name: string; whatsapp_number: string | null } | null;
   treatment: { treatment_name: string } | null;
 };
-
-function StatCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div className="rounded-card border border-border bg-white p-5">
-      <p className="text-sm text-text-secondary">{label}</p>
-      <p
-        className="mt-1 text-2xl font-semibold text-text-primary"
-        style={color ? { color } : undefined}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
 
 export default async function PipelinePage() {
   const supabase = createClient();
@@ -83,116 +67,137 @@ export default async function PipelinePage() {
   ).length;
   const readyToBook = cases.filter((c) => c.stage === "accepted").length;
 
+  // Group cases by stage, most actionable first. Cases arrive already sorted by
+  // follow-up date (soonest first), so ordering is preserved within each group.
+  const STAGE_ORDER: PipelineStage[] = [
+    "accepted",
+    "thinking",
+    "presented",
+    "identified",
+    "scheduled",
+    "completed",
+    "rejected",
+  ];
+  const grouped = STAGE_ORDER.map((stage) => ({
+    stage,
+    items: cases.filter((c) => c.stage === stage),
+  })).filter((g) => g.items.length > 0);
+
+  const renderCase = (c: CaseRow) => {
+    const name = c.patient?.full_name ?? "Unknown";
+    const treatmentName = c.treatment?.treatment_name ?? "Treatment";
+    const badge = PIPELINE_STAGE[c.stage];
+    const followUpPast = !!c.follow_up_date && c.follow_up_date < today;
+    const followUpDue =
+      c.stage === "thinking" &&
+      !!c.follow_up_date &&
+      c.follow_up_date <= today;
+    const number = c.patient?.whatsapp_number ?? null;
+    const followUpUrl =
+      followUpDue && number
+        ? waLink(
+            number,
+            `Hi ${name} ji, Dr. ne aapke ${treatmentName} ke baare mein baat ki thi. Kya decision liya? Koi sawal ho toh batayein. 🙏`,
+          )
+        : null;
+
+    return (
+      <div
+        key={c.id}
+        className="rounded-card border border-border bg-white p-4"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/patients/${c.patient_id}`}
+                className="font-semibold text-primary hover:underline"
+              >
+                {name}
+              </Link>
+              <span
+                className={`rounded-pill px-2.5 py-1 text-xs font-medium ${badge.badge}`}
+              >
+                {badge.label}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-text-secondary">
+              {treatmentName} · {formatINR(c.plan_value)}
+            </p>
+            {c.follow_up_date ? (
+              <p
+                className={`mt-0.5 text-sm ${
+                  followUpPast
+                    ? "font-medium text-danger"
+                    : "text-text-secondary"
+                }`}
+              >
+                Follow-up: {formatDate(c.follow_up_date)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-3 border-t border-border pt-3">
+          <CaseActions
+            view={{
+              id: c.id,
+              patientId: c.patient_id,
+              patientName: name,
+              patientWhatsapp: number,
+              stage: c.stage,
+              followUpDue,
+              followUpUrl,
+            }}
+            patients={patients}
+            rateCards={rateCards as RateCardOption[]}
+            doctorName={doctorName}
+            today={today}
+          />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div>
       <PipelineToolbar patients={patients} rateCards={rateCards} />
 
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <StatGrid>
         <StatCard
           label="Pipeline Value"
           value={formatINR(pipelineValue)}
-          color="#059669"
+          tone="success"
         />
         <StatCard
           label="Needs Follow-up"
           value={String(needsFollowUp)}
-          color="#D97706"
+          tone="warning"
         />
         <StatCard
           label="Ready to Book"
           value={String(readyToBook)}
-          color="#2563EB"
+          tone="primary"
         />
-      </div>
+      </StatGrid>
 
-      <div className="mt-6">
-        {cases.length === 0 ? (
-          <div className="rounded-card border border-border bg-white p-10 text-center">
-            <p className="text-[15px] text-text-secondary">
-              No treatment cases yet. Add your first case.
-            </p>
+      {cases.length === 0 ? (
+        <>
+          <SectionHeader>Treatment Cases</SectionHeader>
+          <EmptyState>No treatment cases yet. Add your first case.</EmptyState>
+        </>
+      ) : (
+        grouped.map((g) => (
+          <div key={g.stage}>
+            <SectionHeader
+              hint={`${g.items.length} ${g.items.length === 1 ? "case" : "cases"}`}
+            >
+              {PIPELINE_STAGE[g.stage].label}
+            </SectionHeader>
+            <div className="space-y-3">{g.items.map(renderCase)}</div>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {cases.map((c) => {
-              const name = c.patient?.full_name ?? "Unknown";
-              const treatmentName = c.treatment?.treatment_name ?? "Treatment";
-              const badge = PIPELINE_STAGE[c.stage];
-              const followUpPast =
-                !!c.follow_up_date && c.follow_up_date < today;
-              const followUpDue =
-                c.stage === "thinking" &&
-                !!c.follow_up_date &&
-                c.follow_up_date <= today;
-              const number = c.patient?.whatsapp_number ?? null;
-              const followUpUrl =
-                followUpDue && number
-                  ? waLink(
-                      number,
-                      `Hi ${name} ji, Dr. ne aapke ${treatmentName} ke baare mein baat ki thi. Kya decision liya? Koi sawal ho toh batayein. 🙏`,
-                    )
-                  : null;
-
-              return (
-                <div
-                  key={c.id}
-                  className="rounded-card border border-border bg-white p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/patients/${c.patient_id}`}
-                          className="font-semibold text-primary hover:underline"
-                        >
-                          {name}
-                        </Link>
-                        <span
-                          className={`rounded-pill px-2.5 py-1 text-xs font-medium ${badge.badge}`}
-                        >
-                          {badge.label}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-text-secondary">
-                        {treatmentName} · {formatINR(c.plan_value)}
-                      </p>
-                      {c.follow_up_date ? (
-                        <p
-                          className={`mt-0.5 text-sm ${
-                            followUpPast
-                              ? "font-medium text-danger"
-                              : "text-text-secondary"
-                          }`}
-                        >
-                          Follow-up: {formatDate(c.follow_up_date)}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 border-t border-border pt-3">
-                    <CaseActions
-                      view={{
-                        id: c.id,
-                        patientId: c.patient_id,
-                        patientName: name,
-                        patientWhatsapp: number,
-                        stage: c.stage,
-                        followUpDue,
-                        followUpUrl,
-                      }}
-                      patients={patients}
-                      rateCards={rateCards as RateCardOption[]}
-                      doctorName={doctorName}
-                      today={today}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+        ))
+      )}
     </div>
   );
 }

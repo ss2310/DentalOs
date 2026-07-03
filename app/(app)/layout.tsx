@@ -22,7 +22,7 @@ export default async function AppLayout({
     supabase.from("clinics").select("business_name").single(),
     supabase
       .from("profiles")
-      .select("unread_notification_count")
+      .select("unread_notification_count, is_agency")
       .eq("id", user.id)
       .single(),
   ]);
@@ -31,6 +31,7 @@ export default async function AppLayout({
     <AppShell
       clinicName={clinic?.business_name ?? "GrowthOS"}
       unreadCount={profile?.unread_notification_count ?? 0}
+      isAgency={profile?.is_agency ?? false}
     >
       {children}
     </AppShell>

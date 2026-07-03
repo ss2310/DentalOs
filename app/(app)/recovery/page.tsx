@@ -8,6 +8,13 @@ import {
   type RecoveryType,
   type RecoveryOutcome,
 } from "@/lib/recovery-badges";
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  SectionHeader,
+  EmptyState,
+} from "@/components/page";
 
 export const dynamic = "force-dynamic";
 
@@ -109,9 +116,7 @@ export default async function RecoveryPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-text-primary">
-        Revenue Recovery
-      </h1>
+      <PageHeader title="Revenue Recovery" />
 
       {/* Hero */}
       <div className="mt-5 rounded-card border border-border bg-white p-6">
@@ -127,25 +132,21 @@ export default async function RecoveryPage() {
       </div>
 
       {/* Breakdown cards */}
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <StatGrid cols={4}>
         {breakdown.map((b) => (
-          <div key={b.label} className="rounded-card border border-border bg-white p-5">
-            <p className="text-sm text-text-secondary">{b.label}</p>
-            <p className="mt-1 text-2xl font-semibold" style={{ color: "#059669" }}>
-              {formatINR(b.sum)}
-            </p>
-            <p className="mt-0.5 text-sm text-text-secondary">
-              {b.count} {b.count === 1 ? "patient" : "patients"}
-            </p>
-          </div>
+          <StatCard
+            key={b.label}
+            label={b.label}
+            value={formatINR(b.sum)}
+            hint={`${b.count} ${b.count === 1 ? "patient" : "patients"}`}
+            tone="success"
+          />
         ))}
-      </div>
+      </StatGrid>
 
       {/* 6-month bar chart */}
-      <h2 className="mt-8 text-sm font-medium uppercase tracking-wide text-text-secondary">
-        Last 6 Months
-      </h2>
-      <div className="mt-3 rounded-card border border-border bg-white p-5">
+      <SectionHeader>Last 6 Months</SectionHeader>
+      <div className="rounded-card border border-border bg-white p-5">
         {chart.every((c) => c.value === 0) ? (
           <p className="py-8 text-center text-sm text-text-secondary">
             No recovery recorded in the last 6 months yet.
@@ -173,16 +174,12 @@ export default async function RecoveryPage() {
       </div>
 
       {/* Audit trail */}
-      <h2 className="mt-8 text-sm font-medium uppercase tracking-wide text-text-secondary">
+      <SectionHeader hint="Most recent outcome first">
         Recovery Audit Trail
-      </h2>
-      <div className="mt-3">
+      </SectionHeader>
+      <div>
         {audit.length === 0 ? (
-          <div className="rounded-card border border-border bg-white p-10 text-center">
-            <p className="text-[15px] text-text-secondary">
-              No recovery outcomes recorded yet.
-            </p>
-          </div>
+          <EmptyState>No recovery outcomes recorded yet.</EmptyState>
         ) : (
           <div className="space-y-3">
             {audit.map((e) => {

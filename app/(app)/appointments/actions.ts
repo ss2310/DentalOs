@@ -509,5 +509,6 @@ export async function requestReview(id: string): Promise<ApptActionState> {
   });
 
   revalidatePath("/appointments");
+  revalidatePath("/reviews");
   return { ok: true };
 }

@@ -10,7 +10,13 @@ import {
 } from "@/lib/format";
 import { POSITIVE_OUTCOMES } from "@/lib/recovery-badges";
 import { APPT_STATUS } from "@/app/(app)/appointments/status";
-import type { AppointmentStatus } from "@/lib/types";
+import type {
+  AppointmentStatus,
+  PatientOption,
+  RateCardOption,
+} from "@/lib/types";
+import { DashboardBookButton } from "./book-button";
+import { StatCard, StatGrid } from "@/components/page";
 
 export const dynamic = "force-dynamic";
 
@@ -38,28 +44,6 @@ function firstOfNextMonth(dateStr: string): string {
   const [y, m] = dateStr.split("-").map(Number);
   const d = new Date(Date.UTC(y, m, 1)); // m is 1-based → month index m = next month
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function StatCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div className="rounded-card border border-border bg-white p-5">
-      <p className="text-sm text-text-secondary">{label}</p>
-      <p
-        className="mt-1 text-2xl font-semibold text-text-primary"
-        style={color ? { color } : undefined}
-      >
-        {value}
-      </p>
-    </div>
-  );
 }
 
 type ActionRow = {
@@ -148,6 +132,8 @@ export default async function DashboardPage() {
     thinkingRes,
     scheduleRes,
     activityRes,
+    patientRes,
+    rateCardRes,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -224,6 +210,16 @@ export default async function DashboardPage() {
       .select("id, type, sent_at, patient:patient_id(full_name)")
       .order("sent_at", { ascending: false })
       .limit(5),
+    // For the Book Appointment quick action
+    supabase
+      .from("patients")
+      .select("id, full_name, whatsapp_number, phone")
+      .order("full_name", { ascending: true }),
+    supabase
+      .from("rate_cards")
+      .select("id, treatment_name")
+      .eq("is_active", true)
+      .order("treatment_name", { ascending: true }),
   ]);
 
   // Prefer the logged-in user's own name; fall back to the clinic's doctor
@@ -234,6 +230,9 @@ export default async function DashboardPage() {
   const firstName =
     nameSource.replace(/^dr\.?\s+/i, "").split(" ")[0] || "there";
   const clinicName = clinicRes.data?.business_name ?? "";
+  const doctorName = clinicRes.data?.doctor_name ?? "";
+  const patients = (patientRes.data as PatientOption[]) ?? [];
+  const rateCards = (rateCardRes.data as RateCardOption[]) ?? [];
 
   const apptToday = apptTodayRes.count ?? 0;
   const pipelineValue = ((pipelineRes.data as { plan_value: string }[]) ?? []).reduce(
@@ -268,8 +267,8 @@ export default async function DashboardPage() {
       emoji: "⭐",
       count: reviewPending,
       text: `${reviewPending} review requests pending`,
-      href: "/appointments",
-      color: "#2563EB",
+      href: "/reviews",
+      color: "#0D9488",
     },
     {
       emoji: "🔄",
@@ -292,7 +291,7 @@ export default async function DashboardPage() {
       count: recallsDue,
       text: `${recallsDue} recalls due this week`,
       href: "/recalls",
-      color: "#2563EB",
+      color: "#0D9488",
     },
     {
       emoji: "💼",
@@ -308,33 +307,43 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-text-primary">
-        {greetingFor(hour)}, {firstName}
-      </h1>
-      <p className="mt-1 text-sm text-text-secondary">
-        {clinicName ? `${clinicName} · ` : ""}
-        {formatDate(today)}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-[26px] font-semibold tracking-tight text-text-primary">
+            {greetingFor(hour)}, {firstName}
+          </h1>
+          <p className="mt-1 text-sm text-text-secondary">
+            {clinicName ? `${clinicName} · ` : ""}
+            {formatDate(today)}
+          </p>
+        </div>
+        <DashboardBookButton
+          patients={patients}
+          rateCards={rateCards}
+          defaultDate={today}
+          defaultDoctor={doctorName}
+        />
+      </div>
 
-      {/* Stat cards */}
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Appointments Today" value={String(apptToday)} />
+      {/* Stat cards — the day's headline metric leads in solid brand teal */}
+      <StatGrid cols={4}>
+        <StatCard label="Appointments Today" value={String(apptToday)} hero />
         <StatCard
           label="Pipeline Value"
           value={formatINR(pipelineValue)}
-          color="#059669"
+          tone="success"
         />
         <StatCard
           label="Outstanding"
           value={formatINR(outstandingTotal)}
-          color={outstandingTotal > 0 ? "#DC2626" : undefined}
+          tone={outstandingTotal > 0 ? "danger" : "default"}
         />
         <StatCard
           label="Recovered This Month"
           value={formatINR(recoveredMonth)}
-          color="#059669"
+          tone="success"
         />
-      </div>
+      </StatGrid>
 
       {/* Actions needed */}
       <h2 className="mt-8 text-sm font-medium uppercase tracking-wide text-text-secondary">

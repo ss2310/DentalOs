@@ -8,6 +8,7 @@ import {
   type RecallStatus,
 } from "@/lib/recall-status";
 import type { PatientOption, RateCardOption } from "@/lib/types";
+import { PageHeader, SectionHeader, EmptyState } from "@/components/page";
 import { RecallActions } from "./recall-actions";
 
 type RecallRow = {
@@ -83,10 +84,10 @@ export default async function RecallsPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-text-primary">Recalls</h1>
-      <p className="mt-1 text-sm text-text-secondary">
-        {dueCount} recall{dueCount === 1 ? "" : "s"} due within 7 days
-      </p>
+      <PageHeader
+        title="Recalls"
+        subtitle={`${dueCount} recall${dueCount === 1 ? "" : "s"} due within 7 days`}
+      />
 
       <div className="mt-5 flex flex-wrap gap-2">
         {TABS.map((t) => (
@@ -104,13 +105,13 @@ export default async function RecallsPage({
         ))}
       </div>
 
-      <div className="mt-6">
+      <SectionHeader hint="Earliest due first">
+        {TABS.find((t) => t.key === tab)?.label ?? "Recalls"}
+      </SectionHeader>
+
+      <div>
         {recalls.length === 0 ? (
-          <div className="rounded-card border border-border bg-white p-10 text-center">
-            <p className="text-[15px] text-text-secondary">
-              No recalls in this view.
-            </p>
-          </div>
+          <EmptyState>No recalls in this view.</EmptyState>
         ) : (
           <div className="space-y-3">
             {recalls.map((r) => {

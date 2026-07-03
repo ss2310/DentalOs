@@ -3,6 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { formatINR, formatDate } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
 import { AGE_BUCKET, type AgeBucket } from "@/lib/age-bucket";
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  SectionHeader,
+  EmptyState,
+} from "@/components/page";
 import { BillingRowActions } from "./billing-actions";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -19,28 +26,6 @@ type OutstandingRow = {
   patient: { full_name: string; whatsapp_number: string | null } | null;
   visit: { visit_date: string; treatment_name_text: string } | null;
 };
-
-function StatCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div className="rounded-card border border-border bg-white p-5">
-      <p className="text-sm text-text-secondary">{label}</p>
-      <p
-        className="mt-1 text-2xl font-semibold text-text-primary"
-        style={color ? { color } : undefined}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
 
 export default async function BillingPage() {
   const supabase = createClient();
@@ -80,156 +65,165 @@ export default async function BillingPage() {
       : null;
     return { r, name, nettDue, remindedWithin7, remindUrl };
   });
+  type BillingView = (typeof view)[number];
+
+  // Group by age bucket, most overdue first (query already sorts each group by
+  // highest balance). The section header carries the age band, so the per-row
+  // Age badge is dropped as redundant.
+  const AGE_ORDER: AgeBucket[] = [
+    "days_90_plus",
+    "days_60",
+    "days_30",
+    "current",
+  ];
+  const grouped = AGE_ORDER.map((bucket) => ({
+    bucket,
+    items: view.filter((v) => v.r.age_bucket === bucket),
+  })).filter((g) => g.items.length > 0);
+
+  const renderRow = ({
+    r,
+    name,
+    nettDue,
+    remindedWithin7,
+    remindUrl,
+  }: BillingView) => (
+    <tr key={r.id} className="border-b border-border last:border-0">
+      <td className="px-4 py-3">
+        <Link
+          href={`/patients/${r.patient_id}`}
+          className="font-semibold text-primary hover:underline"
+        >
+          {name}
+        </Link>
+      </td>
+      <td className="px-4 py-3 text-text-secondary">
+        {formatDate(r.visit?.visit_date)}
+      </td>
+      <td className="px-4 py-3 text-text-secondary">
+        {r.visit?.treatment_name_text ?? "—"}
+      </td>
+      <td className="px-4 py-3 text-right text-text-secondary">
+        {formatINR(r.total_amount)}
+      </td>
+      <td className="px-4 py-3 text-right text-text-secondary">
+        {formatINR(r.amount_paid)}
+      </td>
+      <td className="px-4 py-3 text-right font-bold text-danger">
+        {formatINR(nettDue)}
+      </td>
+      <td className="px-4 py-3">
+        <BillingRowActions
+          row={{
+            id: r.id,
+            patientName: name,
+            nettDue,
+            remindUrl,
+            reminded: remindedWithin7,
+          }}
+        />
+      </td>
+    </tr>
+  );
+
+  const renderCard = ({
+    r,
+    name,
+    nettDue,
+    remindedWithin7,
+    remindUrl,
+  }: BillingView) => (
+    <div key={r.id} className="rounded-card border border-border bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <Link
+          href={`/patients/${r.patient_id}`}
+          className="font-semibold text-primary hover:underline"
+        >
+          {name}
+        </Link>
+        <span className="font-bold text-danger">{formatINR(nettDue)}</span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-secondary">
+        <span>{formatDate(r.visit?.visit_date)}</span>
+        <span>{r.visit?.treatment_name_text ?? "—"}</span>
+      </div>
+      <div className="mt-1 text-sm text-text-secondary">
+        Total {formatINR(r.total_amount)} · Paid {formatINR(r.amount_paid)}
+      </div>
+      <div className="mt-3 border-t border-border pt-3">
+        <BillingRowActions
+          row={{
+            id: r.id,
+            patientName: name,
+            nettDue,
+            remindUrl,
+            reminded: remindedWithin7,
+          }}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-text-primary">Billing</h1>
+      <PageHeader title="Billing" />
 
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <StatGrid>
         <StatCard
           label="Total Outstanding"
           value={formatINR(totalOutstanding)}
-          color="#DC2626"
+          tone="danger"
         />
         <StatCard
           label="Overdue 30+ Days"
           value={formatINR(overdue30)}
-          color="#D97706"
+          tone="warning"
         />
         <StatCard
           label="Patients with Balance"
           value={String(patientsWithBalance)}
         />
-      </div>
+      </StatGrid>
 
       {view.length === 0 ? (
-        <div className="mt-6 rounded-card border border-border bg-white p-10 text-center">
-          <p className="text-[15px] text-text-secondary">
-            No outstanding balances. 🎉
-          </p>
-        </div>
-      ) : (
         <>
-          {/* Desktop table */}
-          <div className="mt-6 hidden overflow-hidden rounded-card border border-border bg-white lg:block">
-            <table className="w-full text-left text-[15px]">
-              <thead>
-                <tr className="border-b border-border text-xs uppercase tracking-wide text-text-secondary">
-                  <th className="px-4 py-3 font-medium">Patient</th>
-                  <th className="px-4 py-3 font-medium">Visit</th>
-                  <th className="px-4 py-3 font-medium">Treatment</th>
-                  <th className="px-4 py-3 text-right font-medium">Total</th>
-                  <th className="px-4 py-3 text-right font-medium">Paid</th>
-                  <th className="px-4 py-3 text-right font-medium">Due</th>
-                  <th className="px-4 py-3 font-medium">Age</th>
-                  <th className="px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {view.map(({ r, name, nettDue, remindedWithin7, remindUrl }) => {
-                  const age = AGE_BUCKET[r.age_bucket];
-                  return (
-                    <tr
-                      key={r.id}
-                      className="border-b border-border last:border-0"
-                    >
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/patients/${r.patient_id}`}
-                          className="font-semibold text-primary hover:underline"
-                        >
-                          {name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-text-secondary">
-                        {formatDate(r.visit?.visit_date)}
-                      </td>
-                      <td className="px-4 py-3 text-text-secondary">
-                        {r.visit?.treatment_name_text ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-right text-text-secondary">
-                        {formatINR(r.total_amount)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-text-secondary">
-                        {formatINR(r.amount_paid)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-danger">
-                        {formatINR(nettDue)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-pill px-2.5 py-1 text-xs font-medium ${age.badge}`}
-                        >
-                          {age.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <BillingRowActions
-                          row={{
-                            id: r.id,
-                            patientName: name,
-                            nettDue,
-                            remindUrl,
-                            reminded: remindedWithin7,
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile / tablet cards */}
-          <div className="mt-6 space-y-3 lg:hidden">
-            {view.map(({ r, name, nettDue, remindedWithin7, remindUrl }) => {
-              const age = AGE_BUCKET[r.age_bucket];
-              return (
-                <div
-                  key={r.id}
-                  className="rounded-card border border-border bg-white p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <Link
-                      href={`/patients/${r.patient_id}`}
-                      className="font-semibold text-primary hover:underline"
-                    >
-                      {name}
-                    </Link>
-                    <span className="font-bold text-danger">
-                      {formatINR(nettDue)}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-secondary">
-                    <span>{formatDate(r.visit?.visit_date)}</span>
-                    <span>{r.visit?.treatment_name_text ?? "—"}</span>
-                    <span
-                      className={`rounded-pill px-2 py-0.5 text-xs font-medium ${age.badge}`}
-                    >
-                      {age.label}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-sm text-text-secondary">
-                    Total {formatINR(r.total_amount)} · Paid{" "}
-                    {formatINR(r.amount_paid)}
-                  </div>
-                  <div className="mt-3 border-t border-border pt-3">
-                    <BillingRowActions
-                      row={{
-                        id: r.id,
-                        patientName: name,
-                        nettDue,
-                        remindUrl,
-                        reminded: remindedWithin7,
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <SectionHeader>Outstanding Balances</SectionHeader>
+          <EmptyState>No outstanding balances. 🎉</EmptyState>
         </>
+      ) : (
+        grouped.map((g) => {
+          const sum = g.items.reduce((s, v) => s + v.nettDue, 0);
+          return (
+            <div key={g.bucket}>
+              <SectionHeader hint={`${formatINR(sum)} due`}>
+                {AGE_BUCKET[g.bucket].label}
+              </SectionHeader>
+
+              {/* Desktop table */}
+              <div className="hidden overflow-hidden rounded-card border border-border bg-white lg:block">
+                <table className="w-full text-left text-[15px]">
+                  <thead>
+                    <tr className="border-b border-border text-xs uppercase tracking-wide text-text-secondary">
+                      <th className="px-4 py-3 font-medium">Patient</th>
+                      <th className="px-4 py-3 font-medium">Visit</th>
+                      <th className="px-4 py-3 font-medium">Treatment</th>
+                      <th className="px-4 py-3 text-right font-medium">Total</th>
+                      <th className="px-4 py-3 text-right font-medium">Paid</th>
+                      <th className="px-4 py-3 text-right font-medium">Due</th>
+                      <th className="px-4 py-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>{g.items.map(renderRow)}</tbody>
+                </table>
+              </div>
+
+              {/* Mobile / tablet cards */}
+              <div className="space-y-3 lg:hidden">
+                {g.items.map(renderCard)}
+              </div>
+            </div>
+          );
+        })
       )}
     </div>
   );
