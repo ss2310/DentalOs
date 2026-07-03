@@ -24,6 +24,13 @@ export async function sendWelcomeEmail(opts: {
     ? doctorName.replace(/^dr\.?\s+/i, "").trim()
     : "there";
 
+  // Link to the real app when configured; omit the button otherwise (a link
+  // whose domain doesn't match the sender hurts deliverability).
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+  const ctaButton = appUrl
+    ? `<a href="${appUrl}" style="display:inline-block;background:${BRAND};color:#fff;text-decoration:none;font-size:15px;font-weight:500;padding:10px 18px;border-radius:8px">Open GrowthOS</a>`
+    : "";
+
   const html = `
   <div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#111827">
     <div style="padding:24px 0;text-align:center">
@@ -38,9 +45,7 @@ export async function sendWelcomeEmail(opts: {
       <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 20px">
         Sign in any time to manage your patients and grow your practice.
       </p>
-      <a href="https://growthos.app" style="display:inline-block;background:${BRAND};color:#fff;text-decoration:none;font-size:15px;font-weight:500;padding:10px 18px;border-radius:8px">
-        Open GrowthOS
-      </a>
+      ${ctaButton}
     </div>
     <p style="font-size:12px;color:#6B7280;text-align:center;padding:16px 0">
       You're receiving this because a GrowthOS account was created with this email.

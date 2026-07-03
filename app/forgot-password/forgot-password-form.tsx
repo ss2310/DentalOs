@@ -41,6 +41,9 @@ export function ForgotPasswordForm() {
           <span className="font-medium text-text-primary">{email}</span>, a
           password-reset link is on its way. It expires in an hour.
         </p>
+        <p className="mt-2 text-sm text-text-secondary">
+          Don&apos;t see it? Check your spam/junk folder.
+        </p>
       </div>
     );
   }
