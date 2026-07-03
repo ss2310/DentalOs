@@ -134,17 +134,10 @@ begin
     );
   end if;
 
-  -- Step 6: review notification.
-  -- TODO: Day 3 — replace this immediate insert with a 2-day delayed job
-  -- via the cron function; for now it's created right away.
-  insert into notifications (
-    clinic_id, type, priority, title, body, related_patient_id, action_url
-  ) values (
-    v_clinic, 'review_due', 'routine',
-    'Request review from ' || coalesce(v_patient_name, 'patient'),
-    'Had ' || v_rate.treatment_name || ' — follow up in 2 days',
-    v_patient, '/patients/' || v_patient
-  );
+  -- Step 6: (removed) the post-visit review reminder is no longer created
+  -- here. The morning briefing's check (b) groups "review requests pending"
+  -- for appointments completed 2-7 days ago (see 004_notifications.sql), so
+  -- an immediate per-visit notification would double up.
 
   return v_patient;
 end;

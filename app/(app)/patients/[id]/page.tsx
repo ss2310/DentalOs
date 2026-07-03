@@ -12,6 +12,7 @@ import {
 } from "@/lib/recall-status";
 import type { Patient, VisitLog, Recall } from "@/lib/types";
 import { EditPatientButton } from "./edit-patient-button";
+import { TreatmentPlans, type SavedPlan } from "./treatment-plans";
 
 type OpenBalance = {
   id: string;
@@ -73,6 +74,9 @@ export default async function PatientDetailPage({
     { data: caseRows },
     { data: recallRows },
     { data: balanceRows },
+    { data: planRows },
+    { data: rateCardRows },
+    { data: clinicRow },
   ] = await Promise.all([
     supabase
       .from("visit_logs")
@@ -99,12 +103,27 @@ export default async function PatientDetailPage({
       .eq("patient_id", patient.id)
       .gt("nett_due", 0)
       .order("nett_due", { ascending: false }),
+    supabase
+      .from("treatment_plans")
+      .select("id, plan_name, items, total_cost, sent_to_patient, created_at")
+      .eq("patient_id", patient.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("rate_cards")
+      .select("id, treatment_name, base_price")
+      .eq("is_active", true)
+      .order("treatment_name", { ascending: true }),
+    supabase.from("clinics").select("business_name, doctor_name, phone").single(),
   ]);
 
   const visits = (visitRows as VisitLog[]) ?? [];
   const cases = (caseRows as unknown as DetailCase[]) ?? [];
   const recalls = (recallRows as Recall[]) ?? [];
   const balances = (balanceRows as unknown as OpenBalance[]) ?? [];
+  const plans = (planRows as unknown as SavedPlan[]) ?? [];
+  const rateCards =
+    (rateCardRows as { id: string; treatment_name: string; base_price: string }[]) ??
+    [];
 
   const age = calcAge(patient.date_of_birth);
   const whatsapp = patient.whatsapp_number ?? patient.phone;
@@ -173,6 +192,20 @@ export default async function PatientDetailPage({
             {formatINR(patient.total_outstanding)}
           </p>
         </div>
+      </div>
+
+      {/* Treatment Plan */}
+      <div className="mt-8">
+        <TreatmentPlans
+          patientId={patient.id}
+          patientName={patient.full_name}
+          patientWhatsapp={whatsapp}
+          doctorName={clinicRow?.doctor_name ?? ""}
+          clinicName={clinicRow?.business_name ?? ""}
+          clinicPhone={clinicRow?.phone ?? ""}
+          rateCards={rateCards}
+          plans={plans}
+        />
       </div>
 
       {/* Outstanding balances */}

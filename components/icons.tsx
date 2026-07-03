@@ -112,6 +112,14 @@ export function BellIcon(p: IconProps) {
   );
 }
 
+export function RecoveryIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M3 17l6-6 4 4 8-8M21 7v5.25M21 7h-5.25" />
+    </Base>
+  );
+}
+
 export function LogoutIcon(p: IconProps) {
   return (
     <Base {...p}>

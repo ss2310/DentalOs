@@ -11,6 +11,7 @@ import {
   PipelineIcon,
   RecallsIcon,
   LeadsIcon,
+  RecoveryIcon,
   GenerateIcon,
   ReviewsIcon,
   SettingsIcon,
@@ -30,6 +31,7 @@ const NAV = [
   { label: "Pipeline", href: "/pipeline", Icon: PipelineIcon },
   { label: "Recalls", href: "/recalls", Icon: RecallsIcon },
   { label: "Leads", href: "/leads", Icon: LeadsIcon },
+  { label: "Recovery", href: "/recovery", Icon: RecoveryIcon },
   { label: "Generate", href: "/generate", Icon: GenerateIcon },
   { label: "Reviews", href: "/reviews", Icon: ReviewsIcon },
   { label: "Settings", href: "/settings", Icon: SettingsIcon },
@@ -37,9 +39,11 @@ const NAV = [
 
 export function AppShell({
   clinicName,
+  unreadCount = 0,
   children,
 }: {
   clinicName: string;
+  unreadCount?: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -126,13 +130,22 @@ export function AppShell({
           </div>
 
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Notifications"
-              className="flex h-11 w-11 items-center justify-center rounded-button text-text-secondary hover:bg-subtle"
+            <Link
+              href="/notifications"
+              aria-label={
+                unreadCount > 0
+                  ? `Notifications, ${unreadCount} unread`
+                  : "Notifications"
+              }
+              className="relative flex h-11 w-11 items-center justify-center rounded-button text-text-secondary hover:bg-subtle"
             >
               <BellIcon />
-            </button>
+              {unreadCount > 0 ? (
+                <span className="absolute right-1.5 top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-pill bg-danger px-1 text-[10px] font-semibold leading-none text-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              ) : null}
+            </Link>
             <form action={signOutAction}>
               <button
                 type="submit"

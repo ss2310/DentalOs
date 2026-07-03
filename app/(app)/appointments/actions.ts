@@ -179,13 +179,13 @@ export async function completeAppointment(id: string): Promise<ApptActionState> 
   const { error } = await setStatus(supabase, id, "completed");
   if (error) return { error: "Could not update. Please try again." };
 
-  await supabase.from("notifications").insert({
-    clinic_id: appt.clinic_id,
-    type: "system",
-    priority: "routine",
-    title: `Log visit for ${appt.patientName}`,
-    related_patient_id: appt.patient_id,
-    action_url: `/visit-log/${id}`,
+  await supabase.rpc("create_notification", {
+    p_clinic_id: appt.clinic_id,
+    p_type: "system",
+    p_priority: "routine",
+    p_title: `Log visit for ${appt.patientName}`,
+    p_related_patient_id: appt.patient_id,
+    p_action_url: `/visit-log/${id}`,
   });
 
   revalidatePath("/appointments");
@@ -232,13 +232,13 @@ export async function noShowAppointment(id: string): Promise<ApptActionState> {
     trigger_date: now.date,
   });
 
-  await supabase.from("notifications").insert({
-    clinic_id: appt.clinic_id,
-    type: "recovery_due",
-    priority: "urgent",
-    title: `No-show: ${appt.patientName}. Send recovery.`,
-    related_patient_id: appt.patient_id,
-    action_url: `/patients/${appt.patient_id}`,
+  await supabase.rpc("create_notification", {
+    p_clinic_id: appt.clinic_id,
+    p_type: "recovery_due",
+    p_priority: "urgent",
+    p_title: `No-show: ${appt.patientName}. Send recovery.`,
+    p_related_patient_id: appt.patient_id,
+    p_action_url: `/patients/${appt.patient_id}`,
   });
 
   revalidatePath("/appointments");
@@ -268,13 +268,13 @@ export async function cancelAppointment(id: string): Promise<ApptActionState> {
     trigger_date: now.date,
   });
 
-  await supabase.from("notifications").insert({
-    clinic_id: appt.clinic_id,
-    type: "recovery_due",
-    priority: "important",
-    title: `Cancelled: ${appt.patientName}`,
-    related_patient_id: appt.patient_id,
-    action_url: `/patients/${appt.patient_id}`,
+  await supabase.rpc("create_notification", {
+    p_clinic_id: appt.clinic_id,
+    p_type: "recovery_due",
+    p_priority: "important",
+    p_title: `Cancelled: ${appt.patientName}`,
+    p_related_patient_id: appt.patient_id,
+    p_action_url: `/patients/${appt.patient_id}`,
   });
 
   revalidatePath("/appointments");

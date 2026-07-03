@@ -267,6 +267,200 @@ Patient detail
 - [ ] Lost → reason popup → status lost, lost_reason saved
 - [ ] Buttons only appear for the valid statuses; all writes clinic-scoped (RLS)
 
+## Notifications (/notifications + header bell)
+
+Prereq
+- [ ] Run supabase/migrations/004_notifications.sql (defines create_notification,
+      mark_notification_read, mark_all_notifications_read, run_morning_briefing,
+      run_weekly_maintenance, and registers the two pg_cron schedules)
+- [ ] Re-run supabase/migrations/002_log_visit.sql (the immediate post-visit
+      review notification was removed — check (b) of the briefing replaces it)
+
+Header bell
+- [ ] Bell shows a red badge = the current user's unread_notification_count; badge hidden when 0; shows "99+" above 99
+- [ ] Clicking the bell navigates to /notifications
+- [ ] After marking notifications read, the badge count drops (or disappears) without a manual reload
+
+Counter integrity (each creation point increments the count)
+- [ ] Completing an appointment ("Log visit for {name}") bumps the count by 1
+- [ ] No Show ("No-show: {name}") bumps the count by 1
+- [ ] Cancel ("Cancelled: {name}") bumps the count by 1
+- [ ] Accepting a pipeline case ("{treatment} accepted…") bumps the count by 1
+- [ ] Logging a visit does NOT create a notification anymore (no immediate "Request review" row)
+
+/notifications list
+- [ ] Sorted newest-first, at most 30 rows
+- [ ] Left border color by priority: urgent #DC2626, important #D97706, routine #2563EB
+- [ ] Unread rows have a #EFF6FF background and a bold title; read rows are white with a normal-weight title
+- [ ] Body text is gray; relative time ("3h ago", "2d ago") shows at the right
+- [ ] Clicking a row marks it read (title un-bolds, background clears), decrements the count, and navigates to action_url when present
+- [ ] Clicking a row with no action_url marks it read and stays on the page
+- [ ] "Mark all read" clears every unread row and zeroes the badge; the button is disabled when nothing is unread
+- [ ] Empty state shows "✓ All caught up" in green
+- [ ] A notification from another clinic never appears (RLS); another clinic's count is untouched by your activity
+
+Morning briefing (run `select run_morning_briefing();` manually to test)
+- [ ] With tomorrow's un-reminded scheduled/confirmed appts → one "X patients need 24h reminders" (important, /appointments)
+- [ ] With appts completed 2–7 days ago & review_requested=false → one "X review requests pending" (routine)
+- [ ] With no_show appts & recovery_sent_at null → one "X no-shows need recovery" (urgent, /appointments)
+- [ ] With outstandings nett_due>0 aged 30+ → one "₹X overdue from Y patients" (important, /billing)
+- [ ] With pending recalls due within 7 days → one "X recalls due this week" (routine, /recalls)
+- [ ] With thinking cases follow_up_date<=today → one "X follow-ups due (₹Y)" (important, /pipeline)
+- [ ] A check with count 0 creates NO notification; each notification bumps every clinic user's count
+- [ ] Runs per active clinic only (is_active=true); clinics stay isolated
+
+Weekly maintenance (run `select run_weekly_maintenance();` manually to test)
+- [ ] Outstanding age_bucket recomputed from visit_date: ≤30 current, 31–60 days_30, 61–90 days_60, 91+ days_90_plus
+- [ ] Notifications older than 14 days are deleted; newer ones remain
+
+## Operations dashboard (/dashboard)
+
+Header & stat cards
+- [ ] Greeting matches the IST time of day: "Good morning" (<12), "Good afternoon" (12–16), "Good evening" (17+), with the user's first name
+- [ ] Subtitle shows the clinic name and today's date (DD MMM YYYY, IST)
+- [ ] "Appointments Today" = count of today's appointments whose status is NOT completed/cancelled_patient
+- [ ] "Pipeline Value" = sum of plan_value for cases not in rejected/completed, green
+- [ ] "Outstanding" = sum of nett_due (>0), red only when > ₹0
+- [ ] "Recovered This Month" = sum revenue_recovered for positive outcomes with outcome_date in the current IST month, green
+
+Actions Needed (6 rows, each links to the right module)
+- [ ] 📩 "{X} patients need 24h reminders" → /appointments (tomorrow, scheduled/confirmed, reminder_24h_sent_at null)
+- [ ] ⭐ "{X} review requests pending" → /appointments (completed 2–7 days ago, review_requested=false)
+- [ ] 🔄 "{X} no-shows/cancellations need recovery" → /appointments (status no_show/cancelled_patient, recovery_sent_at null)
+- [ ] 💰 "₹{X} outstanding from {Y} patients" → /billing
+- [ ] 📅 "{X} recalls due this week" → /recalls (pending, due within 7 days)
+- [ ] 💼 "{X} case follow-ups due (₹{Y})" → /pipeline (thinking, follow_up_date <= today)
+- [ ] A row with count 0 shows a green "✓ All done" instead of the count/arrow
+- [ ] The counts here match the morning-briefing notifications for the same clinic/day
+
+Mini schedule & activity
+- [ ] "Today's Schedule" lists today's first 5 active appointments (time, name, treatment, status badge), earliest first; cancelled/rescheduled excluded
+- [ ] Empty state "No appointments today." when none; "View all →" links to /appointments
+- [ ] "Recent Activity" shows the last 5 interactions as "{relative time} · {type label} · {patient}"
+- [ ] Empty state "No activity yet." when none
+- [ ] All figures reflect only the logged-in user's clinic (RLS)
+
+## Revenue Recovery dashboard (/recovery)
+
+- [ ] "Recovery" appears in the sidebar (with the 💰/recovery icon) and routes to /recovery; active state highlights
+- [ ] Hero shows "Recovered This Month" at 36px in #059669 = sum of positive-outcome revenue_recovered this IST month
+- [ ] Four breakdown cards (this month) show sum + patient count:
+      No-Shows Rebooked (no_show/rebooked), Deferred Converted (deferred_treatment/accepted),
+      Recalls Returned (recall_overdue/returned), Outstanding Collected (outstanding_payment/paid)
+- [ ] Bar chart shows the last 6 months (oldest→newest) with bar height scaled to the max month; each bar labelled with the month and its ₹ total; zero months render as an empty slot
+- [ ] Chart shows "No recovery recorded in the last 6 months yet." when all six are zero
+- [ ] Audit trail lists the last 15 recovery_events with an outcome: date, patient, type badge, outcome badge (positive green, lost red), ₹ recovered (green when > 0, "—" when 0)
+- [ ] Audit empty state "No recovery outcomes recorded yet." when none
+- [ ] Everything is clinic-scoped (RLS); another clinic's recoveries never appear
+
+## Content Studio (/generate + /history)
+
+Prereq
+- [ ] `ANTHROPIC_API_KEY` is set in `.env.local` (server-only; never sent to the client)
+- [ ] `@anthropic-ai/sdk` is installed (`npm install` if pulling fresh)
+- [ ] Run supabase/migrations/005_seed_post_types.sql in the SQL Editor (seeds the 10 post_types; upsert-idempotent)
+
+Generate — layout & selection
+- [ ] `/generate` shows a grid of 10 post-type cards, each with name, platform badge, and credit cost
+- [ ] "Credits left" (monthly_credits − credits_used) shows top-right; "History →" links to /history
+- [ ] Selecting a card highlights it and opens the input panel below
+- [ ] Type-specific inputs render from extra_fields: Review Response shows review text + star rating; Geo Landing Page shows area name; GBP Q&A shows the question; WhatsApp Broadcast shows occasion; the rest show just Topic
+- [ ] Review Response and GBP Q&A hide the Topic field; others require it
+
+Generate — flow
+- [ ] "This will use X credits" reflects the selected type's cost
+- [ ] Generate is disabled until required fields are filled
+- [ ] If credits left < cost, generation is blocked with a red message (and blocked server-side too — the route returns 402)
+- [ ] Clicking Generate shows a spinner in the button ("Generating…") and an animated skeleton "Writing your {type}…" card, then the readable result card
+- [ ] Generate and Regenerate each deduct the type's credits (the "Credits left" counter drops on every generation); Save does NOT deduct again
+- [ ] The Claude call is server-side only (Network tab shows a request to /api/generate, never to api.anthropic.com; the key is not in any client bundle)
+- [ ] The SHARED SYSTEM PROMPT (clinic identity + guardrails) is sent as `system` on every call; the filled template is the `user` message
+- [ ] Long web types (Blog, Service Page, Geo, Blog+FAQ) use max_tokens 4000; all others 1500 (web pages don't truncate mid-page)
+- [ ] Content matches the brief: GBP posts are 150–200 words, Hinglish, 3–5 emojis, no hashtags, end with clinic name + phone; review responses are empathetic and never admit fault on 1–3★ and invite offline resolution
+- [ ] Guardrails hold: no medical guarantees / "best in city", no invented prices or facts, no patient medical details
+- [ ] API errors show a friendly retry message (e.g. temporarily unset the key or simulate 429)
+
+Character limits (enforced in code, not just the prompt)
+- [ ] Web types output "META TITLE:" (trimmed ≤60 chars) and "META DESCRIPTION:" (trimmed ≤155 chars) on a word boundary
+- [ ] A GBP post over 1,400 chars is trimmed on a word boundary; an Instagram caption is capped at 2,200
+
+Generate — schema, WhatsApp, actions
+- [ ] Service Page, Geo Landing Page, and Blog Article with FAQ generate their JSON-LD inline ("PART B — SCHEMA"); the route splits it out and it shows in a collapsible "SEO Schema (JSON-LD)" with a "Copy Schema" button (Blog+FAQ's FAQPage questions match the article's FAQ)
+- [ ] WhatsApp Broadcast: the reply body shows in the result; a url-encoded "wa.me-ready text" box (encoded in code, not by the model) shows with a Copy button; the {name} token is preserved for per-patient replacement
+- [ ] Copy copies the content and toasts; Regenerate asks to confirm and produces a new version
+- [ ] Save creates a generated_content row (status draft, credits_deducted = cost), toasts "Saved to history ✓", and the Save button then shows "✓ Saved" (Save does not change the credit counter — generation already charged it)
+
+History (/history)
+- [ ] Lists saved content newest-first with type name, platform badge, topic, date, and status badge (draft gray / scheduled amber / published green)
+- [ ] Search filters by topic / type name / body text; platform and status dropdowns filter the list
+- [ ] "View content" expands the full text (and the JSON-LD schema if present)
+- [ ] Copy copies the body; Mark Published sets status=published + published_date=today (button hides once published); Delete asks to confirm then removes the row
+- [ ] Empty state shows "No saved content yet" (or "No content matches your filters")
+- [ ] Everything is clinic-scoped (RLS); another clinic's content never appears
+
+> Credits note: credits are charged **per generation** (Generate and Regenerate each cost a real API call) in app/api/generate/route.ts, which also blocks when the clinic can't afford the next generation. Save persists the draft and records `credits_deducted` but does not charge again.
+
+## Settings (/settings)
+
+Clinic Info tab
+- [ ] Form is pre-filled from the clinic row (business_name, doctor_name, phone, address, city, area, google_review_url, instagram_handle, website_url)
+- [ ] Clinic name and a valid 10-digit phone are required; invalid phone shows an inline error and blocks save
+- [ ] Save shows toast "Clinic details saved ✓"; the header clinic name updates without a manual reload
+- [ ] Empty optional fields are stored as NULL
+
+Rate Card tab
+- [ ] Active treatments show in a table (name, category, ₹ price, duration, recall days); collapses to stacked cards on mobile
+- [ ] "+ Add Treatment" opens a popup; name + price required; Save adds an active treatment and it appears in the table
+- [ ] "Edit" opens the popup pre-filled; saving updates the row
+- [ ] "Deactivate" asks to confirm, sets is_active=false (never deletes); the row moves to the collapsed "Deactivated (N)" section
+- [ ] "Reactivate" in the deactivated section restores it to the active table
+- [ ] A deactivated treatment no longer appears in booking / visit-log / treatment-plan dropdowns; existing visit history is unaffected
+- [ ] All writes are clinic-scoped (RLS)
+
+## Treatment Plan Presenter (patient detail)
+
+Prereq
+- [ ] Run supabase/migrations/006_treatment_plans.sql (creates treatment_plans + RLS)
+
+Create & list
+- [ ] The patient page shows a "Treatment Plan" section with a "+ Create Plan" button
+- [ ] "Create Plan" opens a popup: plan name, plus line-item rows (treatment dropdown + auto-filled, editable price)
+- [ ] Selecting a treatment auto-fills its price from the rate card; the price is editable
+- [ ] "+ Add treatment" adds a row; the ✕ removes one (can't remove the last)
+- [ ] The live Total updates as items/prices change
+- [ ] Save requires a plan name and at least one treatment; on save it stores a treatment_plans row (items jsonb, total_cost) and the plan appears in the list with its total and date
+- [ ] Empty state "No treatment plans yet." when none
+
+Send to Patient (WhatsApp)
+- [ ] "Send to Patient" opens wa.me in a new tab to the patient's number with the plan message
+- [ ] Message format matches spec: "🦷 *Treatment Plan*", Patient/Doctor lines, each item "{name} - ₹{cost}", "*Total: ₹{total}*", then "{clinic} | {phone}"
+- [ ] Bold survives encoding: the asterisks render as **bold** in WhatsApp (encodeURIComponent leaves * literal); newlines appear as line breaks; ₹ and emoji encode correctly
+- [ ] After sending, the button is replaced by a green "✓ Sent" (sent_to_patient=true; anti-duplicate)
+- [ ] "Send" is disabled when the patient has no WhatsApp number
+- [ ] Plans are clinic-scoped (RLS); another clinic's plans never appear
+
+## Scheduled functions — Supabase dashboard steps (do once)
+
+1. **Enable pg_cron.** Dashboard → **Database** → **Extensions** → search `pg_cron`
+   → toggle **ON** (schema `pg_cron`/default is fine).
+2. **Run the migration.** Dashboard → **SQL Editor** → paste all of
+   `supabase/migrations/004_notifications.sql` → **Run**. The `do` block at the
+   bottom registers both jobs via `cron.schedule`. (If you ran the file *before*
+   enabling pg_cron, it prints a NOTICE and skips scheduling — just run it again.)
+3. **Verify the schedule.** In the SQL Editor run `select jobname, schedule,
+   command from cron.job;` — you should see `morning-briefing` at `30 1 * * *`
+   and `weekly-maintenance` at `30 18 * * 6` (UTC; = 7:00 AM IST daily and
+   Sunday 00:00 IST weekly).
+4. **Smoke test now (optional).** Run `select run_morning_briefing();` and
+   `select run_weekly_maintenance();` in the SQL Editor and confirm rows appear
+   in `notifications` / the bell badge updates.
+
+No Edge Function deploy is needed: both jobs are pure SQL run in-database by
+pg_cron, so there is nothing to `supabase functions deploy` and no service-role
+key to store. (If you later add work that must call an external API, move it to
+an Edge Function and swap the cron command for a `net.http_post` to the function
+URL — not required for anything in this milestone.)
+
 ## Deploy checklist (before onboarding real clinics)
 
 - [ ] Turn ON Authentication > Email > Confirm email in Supabase before onboarding real clinics.

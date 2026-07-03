@@ -140,13 +140,13 @@ export async function acceptCase(id: string): Promise<CaseActionState> {
     .eq("id", id);
   if (error) return { error: "Could not update. Please try again." };
 
-  await supabase.from("notifications").insert({
-    clinic_id: c.clinic_id,
-    type: "case_follow_up",
-    priority: "important",
-    title: `${c.treatmentName} accepted ${formatINR(c.plan_value)}. Book appointment.`,
-    related_patient_id: c.patient_id,
-    action_url: "/pipeline",
+  await supabase.rpc("create_notification", {
+    p_clinic_id: c.clinic_id,
+    p_type: "case_follow_up",
+    p_priority: "important",
+    p_title: `${c.treatmentName} accepted ${formatINR(c.plan_value)}. Book appointment.`,
+    p_related_patient_id: c.patient_id,
+    p_action_url: "/pipeline",
   });
 
   // Close the linked recovery_event as a win.

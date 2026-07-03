@@ -18,13 +18,20 @@ export default async function AppLayout({
   }
 
   // RLS returns only the logged-in user's own clinic.
-  const { data: clinic } = await supabase
-    .from("clinics")
-    .select("business_name")
-    .single();
+  const [{ data: clinic }, { data: profile }] = await Promise.all([
+    supabase.from("clinics").select("business_name").single(),
+    supabase
+      .from("profiles")
+      .select("unread_notification_count")
+      .eq("id", user.id)
+      .single(),
+  ]);
 
   return (
-    <AppShell clinicName={clinic?.business_name ?? "GrowthOS"}>
+    <AppShell
+      clinicName={clinic?.business_name ?? "GrowthOS"}
+      unreadCount={profile?.unread_notification_count ?? 0}
+    >
       {children}
     </AppShell>
   );

@@ -67,6 +67,24 @@ export function addDays(dateStr: string, n: number): string {
   return `${y}-${mo}-${da}`;
 }
 
+/** Compact relative time from a timestamp, e.g. "just now", "3h ago", "2d ago". */
+export function formatRelativeTime(value: string | null | undefined): string {
+  if (!value) return "";
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return "";
+  const secs = Math.floor((Date.now() - then) / 1000);
+  if (secs < 45) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w ago`;
+  return formatDate(value);
+}
+
 /** Whole-year age from a 'YYYY-MM-DD' DOB, or null if missing/invalid. */
 export function calcAge(dob: string | null | undefined): number | null {
   if (!dob) return null;
