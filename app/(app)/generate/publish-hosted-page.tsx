@@ -13,9 +13,10 @@ const inputClass =
   "h-11 w-full rounded-button border border-border px-3 text-[15px] text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
 
 /**
- * "Publish as Hosted Page" for a generated Geo Landing Page. Opens a slug popup
- * (auto-suggested from the target area), publishes via the server action, and
- * shows the public URL. Publishing costs 1 credit (handled server-side).
+ * "Publish as Hosted Page" for a generated web-crawlable (Website) page — Geo
+ * Landing / Service / Blog / the citable types. Opens a slug popup (auto-
+ * suggested from the target area or topic), publishes via the server action,
+ * and shows the public URL. Publishing costs 1 credit (handled server-side).
  */
 export function PublishHostedPage({
   content,

@@ -81,10 +81,60 @@ export function parseMeta(
   };
 }
 
+// Structural tags we keep when passing through embedded HTML. Everything else
+// (and ALL attributes, bar a safe href on <a>) is stripped.
+const ALLOWED_TAGS = new Set([
+  "p", "br", "hr", "strong", "em", "b", "i", "u", "small", "span",
+  "ul", "ol", "li", "dl", "dt", "dd",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup", "col",
+  "a", "blockquote", "figure", "figcaption", "section", "article", "div",
+]);
+
+// Block-level tags whose raw HTML (e.g. the citable Website types' <table>s) we
+// keep verbatim rather than escaping as prose.
+const BLOCK_OPEN = /^\s*<(table|ul|ol|h[1-6]|p|div|section|blockquote|figure|dl)\b/i;
+
 /**
- * Heuristic plain-text → semantic HTML. Handles markdown headings (`#`..`###`)
- * and "H1:".."H3:" labels, `- `/`* ` bullet lists, **bold**, and blank-line
- * separated paragraphs. Everything is HTML-escaped first (AI text is untrusted).
+ * Pragmatic allow-list sanitiser for the semi-trusted HTML some Website types
+ * emit. Removes script/style/iframe blocks outright, drops any non-allowed tag,
+ * and strips every attribute except a safe-scheme href on <a>. This is NOT a
+ * hardened sanitiser — the input is our own Claude output, not arbitrary user
+ * HTML — but it keeps obvious injection vectors out of a published page.
+ */
+export function sanitizeHtml(html: string): string {
+  let out = html.replace(
+    /<(script|style|iframe|object|embed|noscript)[\s\S]*?<\/\1>/gi,
+    "",
+  );
+  out = out.replace(
+    /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g,
+    (_m, close: string, tag: string, attrs: string) => {
+      const t = tag.toLowerCase();
+      if (!ALLOWED_TAGS.has(t)) return "";
+      if (close) return `</${t}>`;
+      if (t === "a") {
+        const href = (attrs.match(/\bhref\s*=\s*("([^"]*)"|'([^']*)')/i) ?? [])
+          .slice(2)
+          .find((v) => v != null)
+          ?.trim();
+        if (href && /^(https?:|tel:|mailto:|\/)/i.test(href)) {
+          return `<a href="${href.replace(/"/g, "&quot;")}" rel="noopener">`;
+        }
+        return "<a>";
+      }
+      return `<${t}>`;
+    },
+  );
+  return out;
+}
+
+/**
+ * Heuristic copy → semantic HTML. Handles markdown headings (`#`..`###`) and
+ * "H1:".."H3:" labels, `- `/`* ` bullet lists, **bold**, and blank-line
+ * separated paragraphs, all HTML-escaped (AI prose is untrusted). Raw HTML
+ * blocks (e.g. a citable page's `<table>`) are captured through their close tag
+ * and passed through sanitised instead of being escaped.
  */
 export function copyToHtml(body: string): string {
   const lines = body.replace(/\r/g, "").split("\n");
@@ -105,11 +155,30 @@ export function copyToHtml(body: string): string {
     }
   };
 
-  for (const raw of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
     const line = raw.trim();
     if (!line) {
       flushPara();
       flushList();
+      continue;
+    }
+
+    // Raw HTML block: capture through its matching close tag, sanitise, emit.
+    const bo = line.match(BLOCK_OPEN);
+    if (bo) {
+      flushPara();
+      flushList();
+      const closeRe = new RegExp(`</${bo[1].toLowerCase()}>`, "i");
+      const chunk = [raw];
+      if (!closeRe.test(raw)) {
+        while (i + 1 < lines.length) {
+          i++;
+          chunk.push(lines[i]);
+          if (closeRe.test(lines[i])) break;
+        }
+      }
+      out.push(sanitizeHtml(chunk.join("\n")));
       continue;
     }
 
@@ -160,6 +229,12 @@ article h3{font-size:17px;margin:22px 0 8px}
 article p{margin:0 0 14px}
 article ul{margin:0 0 16px;padding-left:22px}
 article li{margin:6px 0}
+article a{color:var(--teal)}
+article figure{margin:0 0 18px;overflow-x:auto}
+article table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:14px}
+article caption{text-align:left;font-weight:600;margin:0 0 8px}
+article th,article td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+article th{background:var(--subtle);font-weight:600}
 .book{margin:28px 0 8px}
 a.btn-book{display:inline-flex;align-items:center;justify-content:center;background:var(--teal);color:#fff;text-decoration:none;font-weight:600;font-size:16px;padding:0 22px;min-height:48px;border-radius:10px}
 footer.site{border-top:1px solid var(--border);background:var(--subtle);color:var(--muted);font-size:14px;padding:24px 20px;margin-top:24px}

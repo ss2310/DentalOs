@@ -128,10 +128,13 @@ export async function publishLandingPage(input: {
     },
   );
 
-  // Build the standalone document.
-  const fallbackTitle = `Dentist in ${input.targetArea || clinic.area || clinic.city || ""} | ${
-    clinic.business_name ?? "Our Clinic"
-  }`.trim();
+  // Build the standalone document. META TITLE from the copy is used when
+  // present (all Website types emit one); this is only the fallback.
+  const fallbackTitle = (
+    input.targetArea
+      ? `${input.targetArea} | ${clinic.business_name ?? "Our Clinic"}`
+      : (clinic.business_name ?? "Landing page")
+  ).trim();
   const meta = parseMeta(content, fallbackTitle);
   const html = buildLandingPageHtml({
     title: meta.title,

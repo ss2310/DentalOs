@@ -813,14 +813,21 @@ Migrations
 - [ ] Run `011_landing_page_plans.sql` (adds `clinics.plan`, default 'starter'). Before it's run,
       publishing still works and treats the clinic as the 'starter' tier (graceful fallback).
 
-Publish from /generate (Geo Landing Page only)
-- [ ] "🌐 Publish as Hosted Page" button shows ONLY after a successful "Geo Landing Page" generation
-      (not for any other post type)
-- [ ] Popup pre-fills a slug auto-suggested from the target area (lowercase-hyphen); editing re-slugifies
+Publish from /generate (any web-crawlable "Website" type)
+- [ ] "🌐 Publish as Hosted Page" button shows after a successful generation for ANY Website-platform
+      type (Geo Landing Page, Service Page, Blog Article/with FAQ, and the citable types: City Dental
+      Stats, Treatment Comparison, Clinician Guide, Question Answer Page, Dental Update)
+- [ ] Button is HIDDEN for non-Website types (GBP, Instagram, WhatsApp, Review Response, GBP Q&A)
+- [ ] Popup pre-fills a slug auto-suggested from the target area or topic (lowercase-hyphen); editing
+      re-slugifies
 - [ ] Confirm → charges 1 credit (credits counter drops by 1); blocks at 0 with a clear message
 - [ ] On success the popup shows the live public URL with Copy URL + Open ↗
 - [ ] The generated META TITLE/DESCRIPTION land in <head>; the JSON-LD lands in a
-      <script type="application/ld+json"> tag; body copy becomes clean semantic HTML (h1/h2/ul/p)
+      <script type="application/ld+json"> tag; prose becomes clean semantic HTML (h1/h2/ul/p)
+- [ ] HTML VIABILITY CHECK (why this was generalised): the citable types emit raw HTML <table>s —
+      confirm tables render as real tables on the published page (NOT escaped as visible &lt;table&gt;
+      text), styled with borders/caption, and that <script>/unsafe attributes are stripped by the
+      sanitizer. If any type renders poorly, we can restrict the button again per type.
 - [ ] Header + footer show clinic name / phone / address; sticky "📞 Call Now" is a tel: link;
       "Book Appointment" → /book/<booking_slug> if the clinic has one, else a wa.me link
 - [ ] First publish auto-assigns the clinic a booking_slug (from business name) if it had none
