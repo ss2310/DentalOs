@@ -29,6 +29,7 @@ import {
 } from "@/components/icons";
 import { Toaster } from "@/components/toast";
 import { HowItWorks } from "@/components/how-it-works";
+import { HelpChat } from "@/components/help-chat";
 import { signOutAction } from "@/app/actions";
 
 type IconType = (props: SVGProps<SVGSVGElement>) => JSX.Element;
@@ -309,6 +310,7 @@ export function AppShell({
         <main className="px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       </div>
 
+      <HelpChat />
       <Toaster />
     </div>
   );

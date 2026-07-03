@@ -48,6 +48,24 @@ export function PatientsIcon(p: IconProps) {
   );
 }
 
+export function SendIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M6 12L3.75 4.5l16.5 7.5-16.5 7.5L6 12zm0 0h6" />
+    </Base>
+  );
+}
+
+// Chat/assistant bubble mark for the floating help button.
+export function ChatIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M4.5 5.25h15A1.5 1.5 0 0121 6.75v8.5A1.5 1.5 0 0119.5 16.75H12l-4.5 3.5v-3.5H4.5A1.5 1.5 0 013 15.25v-8.5A1.5 1.5 0 014.5 5.25z" />
+      <path d="M7.75 9.5h8.5M7.75 12.5h5.5" />
+    </Base>
+  );
+}
+
 export function BillingIcon(p: IconProps) {
   return (
     <Base {...p}>
