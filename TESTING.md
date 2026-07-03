@@ -1051,3 +1051,58 @@ AI Overview is a flagged TODO, not built.
 - [ ] AI Visibility now appears under the **Marketing** group (owner/doctor only),
       NOT as a standalone item. Receptionists no longer see it in the nav, and
       /ai-visibility redirects them to the dashboard.
+
+---
+
+## Design redesign — "Clinical Minimal" (Apple-style)
+
+- [ ] Sidebar is a **white rail with a thin right border** (not the old deep-teal
+      slab); the active nav item has a soft grey fill and a **teal icon**.
+- [ ] Group labels (Get Patients In, etc.) read as small tracked uppercase.
+- [ ] Page titles are large and tightly tracked; only teal appears as an accent
+      (buttons, active states, key numbers) — no other colour as decoration.
+- [ ] Header is a translucent frosted bar; modals/mobile-nav use a blurred scrim.
+- [ ] Login page: teal-tint tooth chip, tight "Welcome back" heading.
+
+## Bug fix — modal no longer overflows the screen
+
+- [ ] The first-run "How it works" popup on login fits within the screen; its
+      body scrolls and the "Got it" button is always reachable.
+- [ ] On a phone, the bottom button is not hidden behind the browser chrome
+      (uses dynamic viewport height).
+
+## FAQ Help Chatbot
+
+- [ ] A teal chat bubble sits bottom-right on every page (all roles, incl.
+      receptionist).
+- [ ] Clicking it opens a chat panel with a greeting + 4 suggestion chips.
+- [ ] Tapping a suggestion (or typing a question + Enter) returns a helpful,
+      GrowthOS-specific answer within a few seconds.
+- [ ] Ask something off-topic (e.g. "what's the weather") — it politely declines
+      and steers back to GrowthOS help.
+- [ ] Ask "how do I import my old patients" — it points to Settings → Data
+      Migration.
+- [ ] Close (X) / Escape exits; reopening keeps the conversation.
+- [ ] Very long input is capped at 2000 chars; the send button is disabled while
+      a reply is loading and when the box is empty.
+
+## Data Migration (Settings → Data Migration, owner/doctor only)
+
+- [ ] Tab appears in Settings for owner/doctor; a receptionist can't reach
+      Settings at all.
+- [ ] Upload a patients CSV (name, phone, DOB, etc.) — the AI detects
+      "Patients", shows a confidence badge, and pre-fills the column mapping.
+- [ ] Upload a treatments/price CSV — the AI detects "Treatments / Rate card".
+- [ ] Change the "This file is:" dropdown — the mapping resets for manual mapping.
+- [ ] Mapping enforces one CSV column per field (picking a field clears it
+      elsewhere); required field (Full name / Treatment name) must be mapped to
+      proceed.
+- [ ] Preview shows coerced values; rows with a missing name / unreadable value
+      are flagged (⚠) and counted as "will be skipped".
+- [ ] Dates in DD/MM/YYYY and "15 Aug 1990" import correctly; "+91 98765 43210"
+      normalises to a 10-digit number; "₹1,200" imports as 1200.
+- [ ] Import inserts the valid rows (check the Patients / Rate Card list) with
+      the correct clinic_id; skipped-row details are listed.
+- [ ] A > 5 MB file or > 5000 rows is rejected / capped.
+- [ ] "Exit" (mid-flow) and "Close"/"Import another" (after) reset the wizard.
+- [ ] Multi-tenancy: imported rows appear only for THIS clinic.
