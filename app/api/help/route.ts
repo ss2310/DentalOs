@@ -8,7 +8,9 @@ import { HELP_SYSTEM_PROMPT } from "@/lib/help-kb";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MODEL = "claude-sonnet-4-6";
+// Haiku 4.5: ~3x cheaper than Sonnet ($1/$5 vs $3/$15 per Mtok) and plenty
+// capable for grounded FAQ answers. Marketing generation stays on Sonnet.
+const MODEL = "claude-haiku-4-5";
 
 // Abuse caps. The help chat is FREE (no credits), so bound it hard instead:
 // short replies, a short rolling history, and per-message length limits so a
@@ -81,10 +83,21 @@ export async function POST(req: Request) {
 
   try {
     const client = new Anthropic({ apiKey, timeout: 30_000, maxRetries: 1 });
+    // Cache the (identical every call) knowledge base as a prompt-cache prefix.
+    // NOTE: Haiku's minimum cacheable prefix is ~4096 tokens; the current KB is
+    // ~1600 tokens, so this is DORMANT today (bills at full price, no error) and
+    // starts saving automatically once the KB grows past ~4096 tokens. The
+    // volatile per-user messages come after, so they never invalidate it.
     const message = await client.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      system: HELP_SYSTEM_PROMPT,
+      system: [
+        {
+          type: "text",
+          text: HELP_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       messages,
     });
 
