@@ -72,7 +72,12 @@ Route protection
 - [ ] Logout button returns to `/` and `/dashboard` is no longer reachable
 
 App shell
-- [ ] Sidebar lists all 10 links with icons; the current page is highlighted
+- [ ] Sidebar shows Dashboard as a top-level link, then 2 collapsible groups
+      (Clinic Operations, Marketing), then Settings
+- [ ] Clinic Operations = Appointments, Patients, Billing, Pipeline, Recalls,
+      Leads, Recovery, Reviews; Marketing = Generate, Map Rank
+- [ ] The group holding the current page is auto-expanded and its header shows in blue
+- [ ] Clicking a group header toggles it open/closed (chevron rotates); child links highlight when active
 - [ ] Header shows the clinic's name (left) and bell + logout (right)
 - [ ] On mobile (<768px) the sidebar collapses to a hamburger; tapping it opens the drawer, tapping a link or the overlay closes it
 - [ ] All tap targets are ≥44px and text ≥14px; no gradients or heavy shadows
@@ -164,8 +169,8 @@ Visibility & effects
 - [ ] "Send 1h Reminder": shows only when today AND start is within the next 90 min AND status scheduled/confirmed AND not already sent; sets reminder_1h_sent_at
 - [ ] "Recover No-Show": shows when status no_show and recovery not sent; sends → status becomes recovery_sent, recovery_sent_at set, linked recovery_event gets action_taken_date + wa_message_sent=true
 - [ ] "Recover Cancelled": reachable via "Show cancelled/rescheduled" on a cancelled card; same effect with interaction recovery_cancelled
-- [ ] "Request Review": shows when status completed and review_requested=false; uses the clinic's google_review_url; sets review_requested + review_requested_at
-- [ ] Message content matches spec, with {name}, {time h:mm a}, clinic phone, and review URL interpolated correctly
+- [ ] "Request Review" is NOT shown on appointment cards anymore — review requests live only on /reviews
+- [ ] Message content matches spec, with {name}, {time h:mm a}, and clinic phone interpolated correctly
 
 ## Visit log (/visit-log/[appointmentId])
 
@@ -325,7 +330,7 @@ Header & stat cards
 
 Actions Needed (6 rows, each links to the right module)
 - [ ] 📩 "{X} patients need 24h reminders" → /appointments (tomorrow, scheduled/confirmed, reminder_24h_sent_at null)
-- [ ] ⭐ "{X} review requests pending" → /appointments (completed 2–7 days ago, review_requested=false)
+- [ ] ⭐ "{X} review requests pending" → /reviews (completed 2–7 days ago, review_requested=false)
 - [ ] 🔄 "{X} no-shows/cancellations need recovery" → /appointments (status no_show/cancelled_patient, recovery_sent_at null)
 - [ ] 💰 "₹{X} outstanding from {Y} patients" → /billing
 - [ ] 📅 "{X} recalls due this week" → /recalls (pending, due within 7 days)
@@ -492,3 +497,266 @@ Welcome email
 - [ ] Also remove `email_confirm: true` in `app/signup/actions.ts` — because signup uses the
       admin API, that flag overrides the dashboard toggle, so the toggle alone won't enforce
       confirmation for new clinics.
+
+## Reviews page (/reviews)
+
+- [ ] The sidebar "Reviews" link opens /reviews (previously 404'd — page now exists)
+- [ ] Summary cards show correct "Pending Requests" and "Requested This Month" counts
+- [ ] If the clinic has no Google review URL set (Settings), a warning banner appears and
+      links to /settings; the WhatsApp message still sends but without a link
+- [ ] "Pending Review Requests" lists completed appointments from the last 30 days that
+      haven't been requested yet (patient name, date/time, treatment)
+- [ ] "Request Review" opens a wa.me tab with the Hinglish review message + Google link,
+      then the row flips to "✓ Sent" (anti-duplicate) without a full reload
+- [ ] A completed appointment with no WhatsApp number shows "No WhatsApp number" (no button)
+- [ ] Reviews are handled only here — appointment cards no longer show a "Request Review" button
+- [ ] "Recently Requested" lists already-requested visits with the request date and ✓ Sent
+- [ ] Multi-tenant: only the logged-in clinic's completed appointments appear (RLS-scoped)
+- [ ] Mobile: cards stack, tap targets ≥44px, no horizontal scroll
+
+## Page layout consistency (shared primitives in components/page.tsx)
+
+- [ ] Billing, Pipeline, Leads, Recalls, Reviews, Recovery, Patients all read the same
+      top-to-bottom: page title → stat cards → uppercase section header → list/table
+- [ ] Stat-card numbers are colour-coded by meaning: green = money/positive, amber =
+      needs attention, red = overdue/bad, blue = neutral info
+- [ ] Each list's section header shows a sort hint (e.g. "Highest balance first",
+      "Newest first", "Soonest follow-up first", "Earliest due first") and the rows
+      actually follow that order
+- [ ] Empty states use the same bordered card style across all pages
+- [ ] Spacing is even — no double gaps between the section header and the list on
+      desktop or mobile (check both table and stacked-card breakpoints)
+- [ ] Patients: section header reads "All Patients", switches to "N results" while searching
+
+## List grouping by state (Pipeline / Leads / Billing)
+
+- [ ] Pipeline: cases are split into per-stage sections (Accepted, Thinking, Presented,
+      Identified, Scheduled, Completed, Rejected) in that order; only non-empty stages show;
+      each header shows a "N cases" count; within a stage, soonest follow-up is first
+- [ ] Leads: split into per-status sections (New, Contacted, Interested, Booked, Converted,
+      Lost) in that order; only non-empty statuses show; header shows "N leads"; newest first within
+- [ ] Billing: split into age-band sections (90+ days, 60+ days, 30+ days, Current) in that
+      order; each header shows the "₹X due" total for that band; highest balance first within;
+      the per-row Age badge/column is gone (the section header conveys it)
+- [ ] Each grouped page's empty state still shows a single section header + empty card
+- [ ] Recalls (tabs) and Reviews (Pending / Recently Requested) already group by state — unchanged
+
+## Dashboard — Book Appointment quick action
+
+- [ ] Dashboard header shows a primary "Book Appointment" button (right of the greeting;
+      collapses to "Book" on mobile, ≥44px tap target)
+- [ ] Clicking it opens the same booking modal used on /appointments (patient combobox,
+      inline "add new patient", date defaults to today, doctor defaults to the clinic doctor)
+- [ ] Booking a slot shows "Appointment booked ✓", closes the modal, and the dashboard
+      refreshes so "Appointments Today" and the mini schedule reflect the new booking
+- [ ] The new appointment also appears on /appointments (bookAppointment revalidates it)
+
+## Migration 007 — growth features (schema)
+
+Run `supabase/migrations/007_growth_features.sql` in the Supabase SQL Editor. It is
+additive + idempotent (safe to re-run). Schema only — no app UI yet.
+
+Structure
+- [ ] Runs with no errors; re-running it a second time also succeeds (idempotent)
+- [ ] 7 new tables exist: rank_tracking_keywords, rank_scans, prospect_audits,
+      ai_visibility_queries, ai_visibility_checks, automation_rules, landing_pages
+- [ ] Every new table shows RLS **enabled + forced** (Table editor → each table → RLS on)
+- [ ] `profiles.is_agency` (bool, default false) and `clinics.default_lat`,
+      `clinics.default_lng`, `clinics.booking_slug` columns exist
+- [ ] Functions exist: is_agency(), get_prospect_audit_by_token(text),
+      get_published_landing_page(text, text)
+
+Clinic isolation (log in as clinic A; run in SQL editor is service-role, so test via the app or `set role`)
+- [ ] Inserting a rank_tracking_keywords / landing_pages row with your own clinic_id works;
+      with another clinic_id is rejected by WITH CHECK
+- [ ] Selecting rank_scans / ai_visibility_* / automation_rules returns only your clinic's rows
+
+Agency scoping (prospect_audits)
+- [ ] With is_agency = false on your profile: select/insert on prospect_audits returns nothing / is denied
+- [ ] After setting is_agency = true on your own profile: you can insert (created_by = your uid)
+      and read back only your own audits
+- [ ] You cannot read another user's prospect_audits even with is_agency = true
+
+Public (anon) token reads — no other anon access
+- [ ] `select * from get_prospect_audit_by_token('<share_token>')` returns that one audit's
+      public fields when called with the anon key; a wrong/empty token returns 0 rows
+- [ ] Direct anon `select * from prospect_audits` returns nothing (RLS blocks; only the fn works)
+- [ ] `select * from get_published_landing_page('<clinic booking_slug>','<page slug>')` returns a row
+      only when the page status = 'published'; draft pages and unknown slugs return 0 rows
+- [ ] Direct anon `select * from landing_pages` returns nothing
+
+## Grid Rank Tracker (/rank) + SERP adapter
+
+Provider layer (verified by a compiled unit test; also re-checkable in code)
+- [ ] `SERP_PROVIDER` unset or unknown → mock adapter (free, offline, deterministic)
+- [ ] Serper adapter: POST https://google.serper.dev/maps, X-API-KEY header, ll=@lat,lng,14z,
+      reads `places[]` (position/title/rating/ratingCount/website/placeId)
+- [ ] SerpApi adapter: GET serpapi.com/search?engine=google_maps&type=search, ll=@lat,lng,14z,
+      reads `local_results[]` (position/title/rating/reviews/website/place_id)
+- [ ] API keys never reach the client (adapters + index + budget are `import "server-only"`)
+- [ ] generateGrid: 3/5/7 → 9/25/49 points; gridSize 9 caps to 7; latOffset=stepKm/111
+- [ ] Target match: exact place_id first, else fuzzy (case/punctuation-insensitive, partial); else null
+
+Cost guard (monthly per-clinic scan allowance)
+- [ ] Budget = this clinic's rank_scans rows in the current calendar month (RLS-scoped,
+      no service role) vs SERP_MONTHLY_SCAN_CAP (default 15); one scan = 1 regardless of grid size
+- [ ] Run Scan confirm shows "uses 1 of your 15 monthly scans (N left this month)"
+- [ ] With cap reached (e.g. SERP_MONTHLY_SCAN_CAP=1 after one scan): Continue is disabled and
+      runScan refuses server-side with a "credit top-ups coming" message
+- [ ] Each rank_scans row still stores provider + requests_made = grid points scanned
+- [ ] Data source: mock shows the yellow "Sample data" banner; serper/serpapi hide it (live)
+
+UI (/rank)
+- [ ] "Map Rank" appears under Marketing in the sidebar
+- [ ] "+ Add Keyword" prefills target business = clinic business_name and centre = clinic default_lat/lng;
+      grid size defaults to 5, radius to 3
+- [ ] List shows each keyword with last avg rank, % top-3, last scanned; "Not scanned yet" before first scan
+- [ ] Header line shows "This month: X/15 scans used"
+- [ ] Keyword detail: Run Scan → mock scan completes, big "Average Map Rank" + "In Top 3 %" appear
+- [ ] Heatmap: colours 1–3 green, 4–7 light-green, 8–10 yellow, 11–15 orange, 16–20 red, not-found grey ✕;
+      each cell shows its rank; tapping a cell reveals its lat/lng
+- [ ] avg_rank treats not-found as 21 in the mean; pct_in_top3 = cells ranked 1–3
+- [ ] History lists scans newest-first with date + avg rank; plain-div trend bars (taller = better)
+- [ ] Multi-tenant: only your clinic's keywords/scans are visible (RLS)
+
+## Competitor Intelligence (/competitors)
+
+Data source (no extra API calls)
+- [ ] Each rank_scans row created after migration 008 stores a `competitors` jsonb aggregate;
+      it is computed from the top-10 local results the scan already fetched — running /competitors
+      makes ZERO new SERP requests (requests_made is unchanged by opening this page)
+- [ ] Scans created before 008 have `competitors = null`; /competitors ignores them and asks for a
+      fresh scan
+- [ ] buildCompetitorSummary is pure (no network/DB): target row excluded from rivals by fuzzy
+      name match; empty target name never swallows every competitor
+
+UI + selector
+- [ ] "⚔ Competitors" (crossed-swords icon) appears under Marketing in the sidebar, for all clinic users
+- [ ] No keywords at all → empty state "Run a Map Rank scan first — competitor data comes from it."
+      with a link to /rank
+- [ ] Keyword picker lists tracked keywords; "Analyze latest scan" loads that keyword's newest scan
+      (?k=<id>); button disabled until you pick a different keyword
+- [ ] Selected keyword with no competitor-bearing scan → same empty state, linking to scan that keyword
+- [ ] mock provider shows the yellow "Sample data" banner; serper/serpapi hide it
+
+Biggest threat card
+- [ ] Names the rival with the highest cells_beating_target; shows "beats you in X of {total} areas"
+- [ ] Reviews / rating / website each show them-vs-you; the metric is red when the rival is ahead
+- [ ] When the rival has a website and you don't, a ⚠ "quick win" note appears
+- [ ] If no rival outranks you anywhere → green "No rival is beating you" card instead
+
+You-vs-competitors table
+- [ ] Sorted by cells_beating_target desc; YOUR row is pinned at top and colour-highlighted (primary)
+- [ ] Columns: business, avg rank (yours on your row for contrast), reviews (red ▲ if more than yours),
+      rating (red if higher than yours), website (⚠ on any gap), beats-you X/{total}
+- [ ] Desktop shows an aligned table; mobile collapses to stacked cards (your card pinned first)
+
+Share of local pack
+- [ ] Horizontal plain-div bars (no chart lib): you + top 5 rivals by top-3 appearances
+- [ ] Percentages are each business's share of all top-3 Map slots across the grid (they sum to ~100%)
+
+Gap map
+- [ ] gridSize×gridSize heatmap: green ✓ you're top-3 here · amber • rival leads but you're present ·
+      red ✕ you're absent while rivals rank · grey – no data
+- [ ] Tapping a cell shows its lat/lng and who leads there; the section hint counts absent areas
+
+Trend (multiple scans only)
+- [ ] Shown only when the keyword has >1 competitor-bearing scan
+- [ ] For the top 3 threats, plain-div bars of cells_beating_target across scans (oldest→newest);
+      taller = they beat you in more areas (rival gaining)
+
+Copy summary
+- [ ] "Copy Competitor Summary" copies a plain-text block (your position, top 3 threats, biggest gap)
+      to the clipboard for WhatsApp/reports; toast confirms
+
+Multi-tenancy
+- [ ] Only your clinic's keywords/scans/competitor data are visible (rank_scans RLS, clinic-scoped)
+
+## Agency Prospecting — Competitor Intelligence (/prospect + public /audit)
+
+Access control (agency-only)
+- [ ] "🔎 Prospecting" appears in the sidebar ONLY when the logged-in profile has is_agency = true
+- [ ] A non-agency user visiting /prospect or /prospect/[id] is redirected to /dashboard
+- [ ] runAudit rejects non-agency callers server-side ("agency accounts only"), on top of
+      prospect_audits RLS (created_by = auth.uid() AND is_agency())
+- [ ] prospect_audits is agency-scoped, NOT clinic-scoped (no clinic_id involved)
+
+New audit + run (reuses the SERP adapter + R2b aggregation)
+- [ ] "+ New Audit" collects business, area, city, keyword, centre lat/lng, grid (default 5),
+      radius (default 3), optional place_id
+- [ ] Confirm-cost-first: the modal states "makes N requests, uses 1 of your {cap} monthly audits
+      (M left)"; Run Audit disabled when over the monthly cap (AGENCY_MONTHLY_AUDIT_CAP, default 30)
+- [ ] Run Audit grid-scans the target, aggregates competitors with the SAME buildCompetitorSummary
+      as the clinic feature, computes avg_rank / pct_in_top3, generates findings, and stores a
+      prospect_audits row (random share_token, provider, requests_made); ai_visibility_summary = null
+- [ ] Every-point-failure does NOT save a blank audit (error toast instead)
+- [ ] On success, redirects to the audit detail
+
+Findings (plain-English flags, computed from the aggregate)
+- [ ] "Not in the top 20 for '{keyword}' across X% of {area}" (when the business is absent anywhere)
+- [ ] Top-3 coverage line; "N of the top 5 competitors have more reviews (avg vs yours)"
+- [ ] "No website is listed on the Google Maps profile" only when the target has_website is false
+- [ ] "Beaten by {top competitor} in X% of the grid"
+
+Audit detail (agency view)
+- [ ] Back link, business + area/city + keyword + date header
+- [ ] Metrics (avg rank, in-top-3 %), the colour grid (reused Heatmap — red/grey cells are the hook)
+- [ ] Reused R2b competitor table (target pinned as youLabel = business name)
+- [ ] Findings list
+- [ ] "Copy shareable link" copies {NEXT_PUBLIC_APP_URL or window.origin}/audit/{share_token}
+- [ ] "Add AI Visibility results" links to /prospect/[id]/ai-visibility (intentionally 404s until R4)
+- [ ] /prospect list shows each audit (business, area, avg rank, date) + a "Share link ↗" to the report
+
+Public report (/audit/[token] — no login)
+- [ ] Middleware treats /audit/* as public (reachable while logged out)
+- [ ] Reads ONLY via get_prospect_audit_by_token(); a guessed/blank token → notFound (nothing leaks);
+      direct anon select on prospect_audits still returns nothing
+- [ ] Mobile-first, branded to the prospect: headline "How visible is {business} on Google Maps in {area}?"
+- [ ] Colour grid + Average Map Rank + In Top 3 %
+- [ ] "Who's winning instead" competitor table; "What's holding you back" findings
+- [ ] AI-search section renders ONLY when ai_visibility_summary is non-null (per-engine cited/mentioned/
+      not-cited badges); hidden while null
+- [ ] Closing CTA line comes from the AUDIT_CTA constant (edit one line to change it)
+- [ ] Desktop shows the aligned table; at 375px it collapses to stacked cards
+
+## Content Studio — AI-Citable Mode + citable content types (/generate, /history)
+
+Migration
+- [ ] Run `009_citable_content.sql` (adds `generated_content.citable_mode` + seeds 5 new
+      "Website" post types). Before it's run: /generate PART 1 still works on the existing web
+      types, and /history + Save degrade gracefully (no badge, no crash) via the code fallbacks.
+
+AI-Citable Mode toggle (PART 1)
+- [ ] The "✨ AI-Citable Mode" toggle appears ONLY on web-crawlable types (platform "Website":
+      Blog Article, Service Page, Geo Landing Page, Blog Article with FAQ + the 5 new types)
+- [ ] Toggle is HIDDEN for GBP, Instagram, Reel, WhatsApp, Review Response, GBP Q&A
+- [ ] Toggle defaults ON; helper reads "Structures the page so ChatGPT, Gemini & Perplexity can quote it."
+- [ ] ON → the route injects AI_CITABLE_BLOCK into the system prompt (answer-first 40–60w, question
+      headings, entity-named sentences, HTML tables for all numbers, "Last updated: {{today}}", NAP,
+      schema) + the HARD YMYL rules; OFF → generates as before
+- [ ] `{{today}}` (DD MMM YYYY, IST) and `{{year}}` are available to every template
+- [ ] max_tokens = 4000 for all Website types (tables + schema + guide length)
+- [ ] Citable web generations get their JSON-LD split into the collapsible "SEO Schema" block even
+      for types without an inline PART B in their template (e.g. Blog Article)
+
+New citable post types (PART 2, all platform "Website")
+- [ ] City Dental Stats (3 cr): tables built ONLY from the supplied "stats data"; any missing figure
+      shows "[clinic to supply: …]"; never invents a number; Article (+ Dataset) schema
+- [ ] Treatment Comparison (3 cr): comparison table (Option/cost/time/visibility/maintenance/best-for/
+      age); cost+time cells use supplied data or a placeholder, never invented; Article + FAQPage
+- [ ] Clinician Guide (YMYL) (3 cr): author bio uses ONLY the supplied credentials; References lists
+      ONLY supplied links, else "Sources: Indian Dental Association, WHO" + "[clinic to add specific
+      references]" — never a fabricated citation/DOI; Article + MedicalWebPage
+- [ ] Dental Update / What's New (2 cr): dated news post, "Published: {{today}}", headline includes
+      {{year}}; Article with datePublished = today
+- [ ] Question Answer Page (1 cr): question as H1, self-contained 40–60w answer directly below;
+      QAPage schema
+
+YMYL safety (applies even with the toggle OFF, via the templates)
+- [ ] No fabricated statistics, costs, success rates, citations, journals, DOIs, or credentials
+- [ ] Missing data → visible "[clinic to supply: …]" placeholder, never an invented value
+- [ ] No outcome guarantees / superlatives
+
+History (PART 3)
+- [ ] Generations saved with citable mode on show a "✨ Citable" pill in /history
+- [ ] Schema still shows in the collapsible block with Copy Schema (generate + history), save flow unchanged
