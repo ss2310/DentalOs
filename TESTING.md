@@ -1659,3 +1659,56 @@ is 019's — NOT 015's `credit_transactions` (reserve/refund, left untouched).
       status change; event confirmed + audited.
 - [ ] **Cancel** a pending order: `status='cancelled'`, nothing granted; audited.
 - [ ] Confirm/cancel re-verify super-admin (a non-admin still 404s the route).
+
+---
+
+## Trial / Subscription Lifecycle Automation (migration 021, pg_cron)
+
+Requires **`021_subscription_lifecycle.sql`** applied (idempotent). It adds
+`clinics.past_due_since`, the `subscription_reminders` ledger, the
+`run_subscription_lifecycle()` function, and a daily pg_cron job. It runs
+**in-database** (like the morning briefing) — NOT a Deno Edge Function.
+
+### Supabase dashboard steps (do once)
+1. **pg_cron** — Dashboard → **Database** → **Extensions** → search `pg_cron` →
+   ensure it's **ON** (it already is if the morning briefing runs).
+2. **Run** `021_subscription_lifecycle.sql` in the **SQL Editor**. (Ensure `020`
+   and `014` are applied too.) Re-running is safe.
+3. **Verify the schedule** — `select jobname, schedule, command from cron.job;`
+   → you should see `subscription-lifecycle` at `45 1 * * *` (UTC = **7:15 AM
+   IST**, just after `morning-briefing` at `30 1 * * *`).
+4. **Smoke test now** — `select run_subscription_lifecycle();` (safe to run
+   anytime; idempotent).
+
+### Transitions (set a test clinic's dates, then run the function)
+- [ ] **Trial reminders**: with `subscription_status='trial'` and `trial_ends_at`
+      exactly 7 / 2 / 0 days out (IST), the run creates an **important** in-app
+      notification (→ /upgrade) and a `subscription_reminders` row `trial_7` /
+      `trial_2` / `trial_0`. Re-running the same day adds **no** duplicate.
+- [ ] **Trial expiry**: `trial` with `trial_ends_at < now` → `past_due`,
+      `past_due_since=now`, a `billing_events('past_due')` row, an in-app
+      notification, no access loss (banner still shows, per middleware).
+- [ ] **Active renewal lapse**: `active` with `current_period_end < now` →
+      `past_due` (same path).
+- [ ] **Grace + deactivation**: `past_due` with `past_due_since` older than
+      **3 days** (GRACE_DAYS) → `deactivated`, `is_active=false`,
+      `deactivated_at=now`, `billing_events('deactivated')`, final notification.
+      A clinic that only just became past_due this run is NOT deactivated yet.
+- [ ] **Idempotency**: running `run_subscription_lifecycle()` twice back-to-back
+      produces no duplicate notifications, reminders, or billing_events.
+- [ ] **Tunables**: the reminder offsets `[7,2,0]` and `GRACE_DAYS=3` are
+      constants at the top of the function — edit + re-run the migration to change.
+
+### Admin dunning follow-ups (`/admin/subscriptions`, super-admin)
+- [ ] A **"Trial & dunning follow-ups"** section lists clinics with a trial
+      ending ≤7 days, all past_due, and those deactivated in the last 7 days —
+      sorted most-urgent first.
+- [ ] Each row has a green **WhatsApp owner** button opening a `wa.me` link to
+      the owner's number (`clinics.phone`) pre-filled with the stage's Hinglish
+      message ending in `{NEXT_PUBLIC_APP_URL}/upgrade` (set that env var).
+- [ ] A clinic with no phone shows "No phone" instead of a button.
+- [ ] A non-super-admin hitting `/admin/subscriptions` still gets a **404**.
+
+### Not in this version
+- [ ] No email is sent — each stage has a clearly-commented Resend **seam** in
+      `run_subscription_lifecycle()` for later.
