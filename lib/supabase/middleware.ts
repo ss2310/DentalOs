@@ -85,7 +85,10 @@ export async function updateSession(request: NextRequest) {
     publicPaths.includes(request.nextUrl.pathname) ||
     request.nextUrl.pathname.startsWith("/audit/") ||
     request.nextUrl.pathname.startsWith("/p/") ||
-    request.nextUrl.pathname.startsWith("/s/");
+    request.nextUrl.pathname.startsWith("/s/") ||
+    // Payment gateway webhooks — server-to-server, no session; verified by
+    // signature inside the route (app/api/webhooks/cashfree).
+    request.nextUrl.pathname.startsWith("/api/webhooks/");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

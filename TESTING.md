@@ -2239,8 +2239,90 @@ price on a plan/pack in `/admin/plans` first (₹0 is refused — see the guard 
 - [ ] A **receptionist** can't start a checkout (`startCheckout` is owner/doctor
       only — "Only an owner or doctor can manage billing.").
 
-### Without the webhook (current state — expected)
-- [ ] A successful sandbox payment leaves `pending_payments.status='created'` (the
-      webhook that flips it to `paid` + calls `confirm_billing_event` is the next
-      slice). The result page therefore lands on the "processing" state after its
-      poll window — this is expected until the webhook ships.
+## Cashfree webhook — auto-apply plans & credits (migration 033)
+
+Fulfillment for verified webhooks. **Requires `033_cashfree_webhook.sql` applied**
+(on top of 032). Route: `POST /api/webhooks/cashfree` (public, signature-verified).
+Register it in the Cashfree **sandbox** dashboard (Developers → Webhooks) for
+**Payment Success / Failed / User Dropped**; for local testing expose port 3000
+with `cloudflared tunnel --url http://localhost:3000` and use
+`https://<tunnel>/api/webhooks/cashfree`.
+
+### Signature verification (deny first)
+- [ ] `POST /api/webhooks/cashfree` with **no** `x-webhook-signature` /
+      `x-webhook-timestamp` headers → **400**, nothing written.
+- [ ] `POST` with a **wrong** signature (any bogus header value) → **401**, body
+      not trusted/parsed, `system_heartbeats.cashfree_webhook` gets an `error`
+      row. No `pending_payments`/`billing_events` change.
+- [ ] The route reads the **raw** body before parsing (verified by a real
+      Cashfree "Test" send from the dashboard passing, and a hand-crafted
+      re-serialized body failing).
+
+### Payment success — plan (end-to-end, sandbox)
+- [ ] Buy a **plan** on `/upgrade`, complete sandbox payment. The webhook fires and:
+      `pending_payments.status` → **`paid`**, `raw_event` populated; the clinic is
+      **`active`** with `plan_id`, `current_period_end` (+1 month / +12 for annual),
+      `last_payment_at`, `is_active=true`; plan credits added (ledger `topup` rows);
+      a `billing_events` row `payment_received`/`confirmed`/provider **`cashfree`**
+      with the cf payment id in the note; `clinics.billing_provider='cashfree'` and
+      `provider_customer_id` set.
+- [ ] An **invoice** row exists: `invoice_number` like `GOS-2026-0001`, correct
+      `amount_inr`, `item_description` = plan name, `cf_payment_id` set,
+      `pending_payment_id` linked.
+- [ ] The clinic gets an in-app notification **"Payment received — your account is
+      active 🎉"**.
+- [ ] `/upgrade/result?order_id=<id>` now shows **"Payment received — activating
+      your account"** (it polls `paid`).
+
+### Payment success — pack
+- [ ] Buy a **credit pack**, complete payment → pack credits added (`topup` ledger
+      rows), `billing_events` `topup`/`cashfree`, an invoice row, notification. The
+      subscription status/period is unchanged (packs don't activate a plan).
+
+### Idempotency & concurrency (money-into-access safety)
+- [ ] **Re-deliver** the same success webhook (dashboard "Resend", or replay the
+      same body): second call returns 200 and does **nothing** — no double credits,
+      no second `billing_events`/`invoice`. (`confirm_cashfree_payment` returns
+      `already_paid`.)
+- [ ] Two concurrent deliveries of the same order fulfill **exactly once** (the
+      `status <> 'paid'` guarded flip serializes them).
+
+### Failure / user-dropped
+- [ ] A **failed** or **user-dropped** sandbox payment → `pending_payments.status`
+      = **`failed`**, a `payment_failed`/`cashfree` `billing_events` row, and **no**
+      credit/subscription change. A later genuine SUCCESS for the same order still
+      fulfills (failed→paid is allowed).
+
+### Orphan / unknown order
+- [ ] A verified webhook whose `order_id` matches **no** `pending_payments` row →
+      200, a `billing_events` row `webhook_orphan`/`cashfree` (clinic_id null) noting
+      the unknown order. No crash.
+
+### Shared confirmation (no drift) + admin invoice
+- [ ] Admin **Mark as Paid** (`/admin/clinics/[id]`) still activates the plan and
+      now also writes an **invoice** row (`cf_payment_id` null). The manual
+      Subscriptions **Confirm** path likewise writes an invoice.
+- [ ] Plan activation values (status/period/credits) are identical across the
+      admin, manual-confirm, and webhook paths (all call `apply_plan_purchase`).
+
+### Health wiring
+- [ ] After the first successful webhook, **/admin/system → Health → "Last webhook
+      received"** flips **green**; the payment shows in the A3 audit viewer
+      (billing source). A bad-signature attempt shows the card **red/amber** with
+      the error detail.
+
+### Failure resilience (retry, don't lose money)
+- [ ] If fulfillment throws an unexpected DB error, the route returns **500** so
+      Cashfree retries; because the RPC is idempotent, the retry completes the
+      fulfillment exactly once (no double-apply).
+
+### Security / multi-tenancy
+- [ ] `invoices` — a clinic reads only its **own** invoices (RLS
+      `clinic_id = current_clinic_id()`); no client write policy. `invoice_counters`
+      is fully client-inaccessible.
+- [ ] All fulfillment RPCs (`confirm_cashfree_payment`, `fail_cashfree_payment`,
+      `apply_*_purchase`, `create_invoice`) are `revoke … authenticated` /
+      `grant … service_role` — a normal client can't call them.
+- [ ] Cashfree secret is server-only (route runs `nodejs` runtime, key never sent
+      to the browser); the webhook is reachable without a session but does nothing
+      on an invalid signature.
