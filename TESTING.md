@@ -2019,3 +2019,147 @@ picker. Deterministic proof: `npm test` (flag truth table) +
 - [ ] `verticals` has no client write policy — a normal clinic client can't
       INSERT/UPDATE/DELETE it; only the admin service-role path (with `writeAudit`)
       changes `is_active`.
+
+## Interactive product tour (`/tour`)
+
+Public, self-contained marketing demo — a faux GrowthOS screen with a
+user-driven guided tour over it. No auth, no real data.
+
+- [ ] **Reachable logged out**: from `/` (login) and `/signup`, the "See how it
+      works →" link opens `/tour` without a login bounce. Visiting `/tour`
+      directly while logged in also renders (no redirect to /dashboard).
+- [ ] **Step flow**: the callout starts at "Step 1 of 6" with the teal hero
+      metric spotlit and the cursor on it. **Next** / clicking anywhere / **→** /
+      **Enter** advance; **Back** / **←** go back; **Skip** / **Esc** jump to the
+      end card. Progress dots track the current step.
+- [ ] **Progressive reveals**: step 3 reveals the AI-drafted Hinglish WhatsApp
+      message; step 4 spotlights the teal "Send on WhatsApp" button; step 5 the
+      button has flipped to a green **"✓ Sent on WhatsApp"** (anti-duplicate);
+      step 6 spotlights the voice-note "AI staged 2 follow-ups for review" card.
+- [ ] **Finish card**: after step 6 (or Skip) a centered card shows "That's the
+      GrowthOS loop" with **Start your 30-day free trial** (→ /signup),
+      **Replay tour** (restarts at step 1), and **Sign in** (→ /).
+- [ ] **Responsive**: on a phone-width viewport the callout is a bottom sheet;
+      on desktop it floats below (or above) the spotlit element. In both, the
+      spotlight never sits hidden behind the callout (trailing spacer lets low
+      targets scroll clear).
+- [ ] **A11y/motion**: keyboard fully drives it; with reduced-motion the cursor
+      doesn't animate. Tap targets ≥44px.
+
+## Help chatbot — refreshed KB + page-aware context
+
+The help assistant (floating 💬 bubble) now reads from a structured, per-section
+knowledge base (`lib/help-kb.ts`) and knows which screen you're on.
+
+- [ ] **Content is current**: ask "How do I record a voice note?" → explains the
+      🎙️ flow, that AI stages follow-ups/recalls for review, and that it **never
+      messages a patient automatically**. Ask "How do I re-engage dormant
+      patients?" → explains Campaigns + segments. Ask "What do credits get used
+      for?" → distinguishes **content credits** vs **map-scan credits** (older KB
+      conflated them).
+- [ ] **Page-aware**: open the chat on **Payments** → the Topic dropdown defaults
+      to "Payments" and the suggested chips are payment questions. A vague
+      question ("how do I do this?") is answered about Payments.
+- [ ] **Topic dropdown**: change it to another section (e.g. "Generate") →
+      suggested chips update; the next answer focuses on that section. "General
+      help" gives the cross-cutting default chips.
+- [ ] **Role scoping**: as a **receptionist**, the dropdown omits Revenue
+      Recovered, the Marketing tools, and Settings (admin-only). As owner/doctor,
+      all sections appear, grouped by journey stage.
+- [ ] **Safety**: an off-topic question (general dental advice, other software)
+      is politely declined. A "how many patients do I have" question explains it's
+      a help guide and points to the screen instead. The `section` value is
+      validated server-side (an unknown/injected section string is ignored).
+- [ ] **Tap targets** ≥44px (bubble, topic select, send button); panel is a
+      bottom sheet on mobile, docked card on desktop.
+
+### Language (English / Hinglish)
+
+- [ ] **Pick at start**: opening a new chat shows a "Reply in [English | Hinglish]"
+      toggle above the suggested questions. Picking **Hinglish** switches the
+      greeting, the suggested-question chips, and the input placeholder to
+      Hinglish (Roman script).
+- [ ] **Answers follow the language**: with Hinglish selected, ask a question →
+      the reply comes back in Roman-script Hinglish, with GrowthOS feature names
+      kept in English (Enquiries, Payments, etc.). With English selected, replies
+      are in English (unchanged from before).
+- [ ] **Remembered**: the last language choice is restored next time the panel is
+      opened (localStorage). Private-mode/blocked storage falls back to English
+      without error.
+- [ ] **New chat**: once a chat has started, a "New chat" button appears in the
+      header; it clears the transcript and re-shows the language + question
+      pickers (keeping the remembered language and current topic).
+- [ ] **Server guard**: the `lang` value is validated server-side — an unknown
+      value falls back to English, so a crafted request can't inject a language
+      instruction.
+
+## Admin plan & pack management (A2 — /admin/plans)
+
+Super-admin only. **Requires migration 030 applied** (extends billing_events'
+event_type CHECK + makes clinic_id nullable) for the price-change logging to
+write; edits still save without it (the billing_events insert just no-ops).
+
+- [ ] **Gating**: a non-super-admin hitting `/admin/plans` gets a **404** (never
+      403/redirect). The tab appears in the admin nav only for the platform owner.
+- [ ] **Plans table**: edits to name, price, content/map credits, billing period,
+      sort order, and the active toggle save via the row's Save button (disabled
+      until the row is dirty). The change is reflected on reload and on `/upgrade`.
+- [ ] **Create Growth Annual**: when no annual plan exists, a "+ Create Growth
+      Annual (₹24,990)" button appears; it creates the plan with credits copied
+      from Growth Monthly, `billing_period='annual'`, **inactive**. The button
+      then disappears. Running it twice warns "An annual plan already exists."
+- [ ] **Packs table**: existing packs edit + save; the bottom "Add pack" row
+      creates a new pack (needs a name; must grant some credits). It clears on
+      success and the new row appears.
+- [ ] **Activation guard (warn, don't crash)**: toggling a monthly/annual plan or
+      any pack to Active while its price is ₹0 is rejected with an inline warning
+      ("Set a price above ₹0 before activating…"). The **trial** plan is exempt —
+      it can stay active at ₹0. A ₹0 item can still be saved *inactive*.
+- [ ] **Validation**: negative or non-numeric price/credits, or a pack with 0+0
+      credits, are rejected with a message; nothing crashes. A duplicate name
+      returns "already exists".
+- [ ] **Price-change audit**: changing a price writes a `billing_events` row
+      (`plan_price_changed`/`pack_price_changed`, `clinic_id` null, `actor` = the
+      admin, note "Name: ₹old → ₹new") **and** an `admin_audit` row. Changing a
+      non-price field writes only `admin_audit`. Confirm the price rows do NOT
+      appear in the Subscriptions pending list (they're `status='confirmed'`).
+- [ ] **Live to /upgrade & checkout**: after a price/credit edit, `/upgrade`
+      shows the new values (it reads plans/credit_packs live), and a manual
+      checkout files the new amount — nothing is hardcoded.
+
+## Admin System panel (A3 — /admin/system)
+
+Super-admin only. **Requires migration 031 applied** (system_heartbeats +
+record_heartbeat + lifecycle heartbeat wrapper, applied_migrations registry,
+feature_flag_defaults). Read-only except the feature-flag-default toggles.
+
+- [ ] **Gating**: a non-super-admin hitting `/admin/system` gets a **404**. The
+      page renders four sections for the platform owner.
+- [ ] **Health**: four cards render with a green/amber/red dot each —
+      **Database** (green when reachable), **Cashfree API** (green "Reachable
+      (sandbox)"; amber if creds rejected/not configured; red on timeout —
+      note the check has a 5s timeout and never hangs the page), **Daily
+      scheduled job** (amber "No run recorded yet" until the cron runs once, then
+      green "Last ran …"; amber "Stale" if it stops advancing past ~26h), **Last
+      webhook received** (amber "No webhook received yet" until a Cashfree webhook
+      exists).
+- [ ] **Heartbeat live-wiring**: after the `subscription-lifecycle` cron runs
+      (or `select run_subscription_lifecycle_hb();` is run manually), the Daily
+      job card flips to green and `system_heartbeats` has a `subscription_lifecycle`
+      row with a fresh `last_run_at`. (A *failed* run re-raises and rolls back,
+      so the heartbeat stops advancing rather than writing an error row.)
+- [ ] **Migrations**: the Applied migrations table lists 001–031 newest-first
+      with names; confirms prod matches the repo. (A future migration must append
+      its own `applied_migrations` row to show here.)
+- [ ] **Feature-flag defaults**: toggling any flag persists (survives reload),
+      writes an `admin_audit` row (`feature_default.set`, target the flag key,
+      details `{enabled}`), and reverts with a message if the save fails. No
+      clinic data changes.
+- [ ] **Audit viewer**: shows a merged, newest-first feed of `admin_audit` +
+      `billing_events` (actor name, action/event type with an admin/billing
+      badge, clinic name or —, relative time, note). The **actor** and
+      **action** dropdowns filter in place (client-side, so filtering does NOT
+      re-run the health pings); Clear resets. System/cron billing events show
+      actor "system".
+- [ ] **Read-only**: nothing on the page except the feature-flag toggles issues
+      a write; the audit viewer and migration/health sections never mutate.
