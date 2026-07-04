@@ -146,8 +146,11 @@ export default async function AdminSubscriptionsPage() {
         </div>
         <p className="mt-2 max-w-2xl text-[15px] text-text-secondary">
           Confirm manual payments and follow up with clinics whose trial is
-          ending or has lapsed. Setting plan/pack prices and full per-clinic
-          management land in a later step (A2).
+          ending or has lapsed. Set plan &amp; pack prices in{" "}
+          <a href="/admin/plans" className="font-medium text-[#4F46E5] hover:underline">
+            Plans &amp; Packs
+          </a>
+          .
         </p>
       </div>
 
