@@ -3,6 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { spendCredits, refundCredit } from "@/lib/credits";
 import { nowIST, addDays } from "@/lib/format";
 import { getUserRole, isAdminRole } from "@/lib/roles";
 
@@ -77,7 +78,7 @@ export async function generateInsightReport(): Promise<InsightState> {
     supabase
       .from("clinics")
       .select(
-        "id, business_name, city, area, doctor_name, monthly_credits, credits_used",
+        "id, business_name, city, area, doctor_name, content_credits_balance",
       )
       .single(),
   ]);
@@ -212,28 +213,20 @@ export async function generateInsightReport(): Promise<InsightState> {
     2,
   )}`;
 
-  // Reserve credits ATOMICALLY before the paid call (SEC-H1/L1). NULL means
-  // not enough credits — we stop before spending anything. Refunded below if
-  // the generation fails after reserving.
-  const reference = crypto.randomUUID();
-  const { data: reservedLeft, error: reserveError } = await supabase.rpc(
-    "reserve_credits",
-    { p_cost: cost, p_reason: "insight_report", p_reference: reference },
-  );
-  if (reserveError) {
-    console.error("Credit reserve failed:", reserveError);
-    return { error: "Could not check your credits. Please try again." };
+  // Spend content credits ATOMICALLY before the paid call (SEC-H1/L1).
+  // `insufficient` means not enough credits — we stop before spending anything.
+  // Refunded below if the generation fails after spending.
+  const spend = await spendCredits("content", cost, "generation");
+  if (!spend.ok) {
+    if ("insufficient" in spend) {
+      return {
+        error: `Not enough content credits — this needs ${cost}, you have ${Math.max(clinic.content_credits_balance ?? 0, 0)} left. Upgrade to add more.`,
+      };
+    }
+    return { error: spend.error };
   }
-  if (reservedLeft === null) {
-    const remaining =
-      (clinic.monthly_credits ?? 0) - (clinic.credits_used ?? 0);
-    return {
-      error: `Not enough credits — this needs ${cost}, you have ${Math.max(remaining, 0)} left this month.`,
-    };
-  }
-  const creditsLeft = reservedLeft as number;
-  const refund = () =>
-    supabase.rpc("refund_credits", { p_reference: reference });
+  const creditsLeft = spend.balanceAfter;
+  const refund = () => refundCredit(spend.ledgerId);
 
   let content: string;
   try {

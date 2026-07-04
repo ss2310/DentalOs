@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
 import { generateGrid, isLiveProvider } from "@/lib/serp";
-import { getScanBudget } from "@/lib/serp/budget";
 import { SectionHeader, EmptyState } from "@/components/page";
 import { SampleDataBanner } from "../sample-banner";
 import type { RankKeyword, RankScan } from "@/lib/types";
@@ -22,7 +21,7 @@ export default async function KeywordDetailPage({
   await requireAdmin();
   const supabase = createClient();
 
-  const [{ data: kw }, { data: scanData }, budget] = await Promise.all([
+  const [{ data: kw }, { data: scanData }, { data: clinic }] = await Promise.all([
     supabase
       .from("rank_tracking_keywords")
       .select(
@@ -38,8 +37,10 @@ export default async function KeywordDetailPage({
       .eq("keyword_id", params.id)
       .eq("status", "complete")
       .order("scanned_at", { ascending: false }),
-    getScanBudget(supabase),
+    supabase.from("clinics").select("map_credits_balance").single(),
   ]);
+
+  const mapCredits = clinic?.map_credits_balance ?? 0;
 
   if (!kw) notFound();
   const keyword = kw as RankKeyword;
@@ -75,8 +76,7 @@ export default async function KeywordDetailPage({
         <RunScan
           keywordId={keyword.id}
           pointCount={pointCount}
-          remaining={budget.remaining}
-          cap={budget.cap}
+          mapCredits={mapCredits}
         />
       </div>
 

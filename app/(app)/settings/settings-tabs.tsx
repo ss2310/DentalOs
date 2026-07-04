@@ -9,8 +9,9 @@ import {
 } from "./landing-pages-manager";
 import { StaffManager, type StaffMember } from "./staff-manager";
 import { DataMigration } from "./data-migration";
+import { BillingTab, type BillingInfo } from "./billing-tab";
 
-type Tab = "clinic" | "rates" | "landing" | "staff" | "migration";
+type Tab = "clinic" | "rates" | "landing" | "staff" | "billing" | "migration";
 
 export function SettingsTabs({
   clinic,
@@ -19,6 +20,7 @@ export function SettingsTabs({
   bookingSlug,
   staff,
   currentUserId,
+  billing,
 }: {
   clinic: Clinic;
   rateCards: RateCard[];
@@ -26,6 +28,7 @@ export function SettingsTabs({
   bookingSlug: string | null;
   staff: StaffMember[];
   currentUserId: string;
+  billing: BillingInfo;
 }) {
   const [tab, setTab] = useState<Tab>("clinic");
 
@@ -51,6 +54,9 @@ export function SettingsTabs({
         <button type="button" className={tabClass("staff")} onClick={() => setTab("staff")}>
           Staff
         </button>
+        <button type="button" className={tabClass("billing")} onClick={() => setTab("billing")}>
+          Billing
+        </button>
         <button type="button" className={tabClass("migration")} onClick={() => setTab("migration")}>
           Data Migration
         </button>
@@ -65,6 +71,8 @@ export function SettingsTabs({
           <LandingPagesManager pages={landingPages} bookingSlug={bookingSlug} />
         ) : tab === "staff" ? (
           <StaffManager staff={staff} currentUserId={currentUserId} />
+        ) : tab === "billing" ? (
+          <BillingTab info={billing} />
         ) : (
           <DataMigration />
         )}

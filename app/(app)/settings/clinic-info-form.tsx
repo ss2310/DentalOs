@@ -18,6 +18,7 @@ export type Clinic = {
   google_review_url: string | null;
   instagram_handle: string | null;
   website_url: string | null;
+  upi_id: string | null;
   default_lat: number | null;
   default_lng: number | null;
 };
@@ -178,6 +179,26 @@ export function ClinicInfoForm({ clinic }: { clinic: Clinic }) {
             className={inputClass}
             placeholder="https://…"
           />
+        </div>
+
+        <div>
+          <label htmlFor="upi_id" className={labelClass}>
+            UPI ID
+          </label>
+          <input
+            id="upi_id"
+            name="upi_id"
+            defaultValue={clinic.upi_id ?? ""}
+            className={inputClass}
+            placeholder="clinicname@okhdfcbank"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <p className="mt-1.5 text-sm text-text-secondary">
+            Used to send patients a UPI payment link on WhatsApp from Payments.
+            Leave blank to hide the &quot;Request via UPI&quot; button.
+          </p>
         </div>
 
         {/* Clinic location — the single source of truth for Map Rank scans. */}

@@ -31,7 +31,7 @@ export default async function GeneratePage() {
     : primary.data;
 
   const [{ data: clinic }, suggestions, cards] = await Promise.all([
-    supabase.from("clinics").select("monthly_credits, credits_used").single(),
+    supabase.from("clinics").select("content_credits_balance").single(),
     // RLS returns curated (clinic_id NULL) + this clinic's own suggestions.
     supabase
       .from("topic_suggestions")
@@ -48,8 +48,7 @@ export default async function GeneratePage() {
   ]);
 
   const postTypes = (types as unknown as PostType[]) ?? [];
-  const remaining =
-    (clinic?.monthly_credits ?? 0) - (clinic?.credits_used ?? 0);
+  const remaining = clinic?.content_credits_balance ?? 0;
 
   // Group suggestion labels by bank (in sort_order) for the client dropdown.
   const topicBanks: Record<string, string[]> = {};

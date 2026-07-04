@@ -1,236 +1,299 @@
 # HANDOFF — GrowthOS
 
 Read `CLAUDE.md` first (permanent rules), then this, then `TESTING.md` (manual
-checklists per feature) and `SECURITY-AND-REDESIGN-HANDOFF.md` (the full security
-audit that this session worked through).
+checklists per feature).
 
-Last updated: **04 Jul 2026**. Branch: **`growth-features-serp`** (not pushed, not
-merged to `main`). Working tree is **clean — everything below is committed.**
+Last updated: **04 Jul 2026** (subscriptions + admin-panel session). Branch:
+**`growth-features-serp`**.
 
-> **Top of mind next session:** two Supabase **dashboard** toggles for the SEC-016
-> batch are still the user's to flip (leaked-password protection + disable public
-> email signup — see §4). And the **`place_id` hardening** for Map-Rank matching
-> was diagnosed + offered but not built (§6). Everything else is landed.
+> ⚠️ **CRITICAL STATE — nothing this session is committed.** The entire working
+> tree below is **uncommitted** (see `git status`). Last commit is still
+> `11ba012`. Migrations **016, 017, 018, 019 have all been APPLIED to the DB by
+> the user**, but the app code that uses them is only on disk. Decide a commit
+> plan early (see §8).
+>
+> The prior session's handoff (security hardening / Serper) is preserved in git
+> history at commit `11ba012`; its still-open items are carried forward in §6.
 
 ---
 
 ## 0. TL;DR — what this session shipped
 
-All committed, `tsc --noEmit` + `next lint` clean, boots clean. Branch not pushed.
-The theme was **closing the security audit** (migrations 014 + 015 + an app-only
-hardening batch), then two features and a Serper debugging pass.
+Five workstreams, all `tsc --noEmit` + `next lint` clean, dev server boots:
 
-**Migrations 014 and 015 have been APPLIED by the user** to the database.
+1. **Post-visit survey system** (migration 016) — public star survey + routing.
+2. **Campaigns** (`/campaigns`, no migration) — segmented WhatsApp retention.
+3. **UPI Payment Links** (migration 017) — `upi://pay` deep links on billing.
+4. **Subscriptions & credit metering** (migration 019) — **SCHEMA ONLY, not
+   wired into app logic yet.** This is the biggest open thread (§4, §5).
+5. **Admin panel foundation** (`/admin`, migration 018) — platform-owner only.
 
----
-
-## 1. Commit map (this session, newest first)
-
-| Commit | What |
-|---|---|
-| `db79d37` | Serper **match** debug instrumentation (SERP_DEBUG) — no logic change |
-| `454045a` | Serper **request** debug instrumentation (SERP_DEBUG) — no logic change |
-| `bd71627` | **Clinic location set once** in Settings; drop per-keyword coordinates |
-| `791b851` | Fix swallowed **"Could not start the scan"** error |
-| `9714016` | **Pipeline List / Board** view toggle (Kanban + drag-and-drop) |
-| `0d1de63` | **Security 016** — input & boundary hardening (app-only) |
-| `4dd8248` | **Security 015** — atomic credit + SERP reservations (TOCTOU fix) |
-| `9b5a38d` | **Security 014** — profile privilege-escalation lockdown |
-
-(Everything at `09c8e96` and earlier = prior sessions.)
+The only **runtime-verified** thing is the admin 404 gate (§5). Everything else
+is type/lint-verified but **not click-tested** (no logged-in session in this env).
 
 ---
 
-## 2. Migration 014 — profile privilege-escalation lockdown  ✅ APPLIED
+## 1. Migration state
 
-File `supabase/migrations/014_profile_escalation_lockdown.sql`. Fixes:
-- **SEC-C1** — `profiles` had table-level UPDATE for `authenticated`, so a user
-  could self-promote (`role`) or jump clinics (`home_clinic_id`). Now: `REVOKE
-  UPDATE` + a **column-scoped grant** of only `full_name`,
-  `unread_notification_count`. Security columns can't be written by the client.
-- **SEC-C2** — `handle_new_user` now reads `role`/`home_clinic_id` **only from
-  `raw_app_meta_data`** (service-role-only), never `raw_user_meta_data`. Paired
-  app change: `signup/actions.ts` + `settings/staff-actions.ts` pass those via
-  `app_metadata` instead of `user_metadata`. (Ship-together coupling — done.)
-- **SEC-L4** — `notifications_insert` now also requires `target_user_id` to be
-  in the same clinic.
+| # | File | Applied? | Adds |
+|---|---|---|---|
+| 016 | `016_post_visit_survey.sql` | ✅ | survey_responses.appointment_id + notification_id; `get_survey_page_by_token`; `submit_survey_response` now raises the urgent low-score notification; `mark_survey_handled` |
+| 017 | `017_clinic_upi_id.sql` | ✅ | `clinics.upi_id` |
+| 018 | `018_admin_panel.sql` | ✅ | `is_super_admin` col+fn (idempotent, also in 019); `clinics.vertical` + `feature_flags`; `admin_audit`; `admin_clinics_overview()` (service-role only) |
+| 019 | `019_subscriptions_credits.sql` | ✅ | `plans`, `credit_packs`, subscription cols on `clinics`, `credit_ledger`, `billing_events`; **clinics UPDATE column-lock**; seeds |
 
-`is_super_admin` does **not** exist in this schema (only `is_agency`, migration
-007) — it was in the audit prose but there's no such column.
+`015`'s `credit_transactions` (reserve/refund ledger) is **untouched** — see §3.
 
 ---
 
-## 3. Migration 015 — atomic credit + SERP reservations  ✅ APPLIED
+## 2. What shipped, by feature
 
-File `supabase/migrations/015_atomic_reservations.sql`. Replaces every
-"read → check → paid call → write" TOCTOU race with **reserve-before-call +
-refund-on-failure** (mirrors the existing `record_payment` pattern).
+### A — Post-visit survey (migration 016)
 
-- **`reserve_credits` / `refund_credits`** (SEC-H1, SEC-L1). Credits are a
-  counter model (`clinics.credits_used` vs `monthly_credits`), NOT a balance —
-  the atomic guard is `UPDATE … WHERE credits_used + cost <= monthly_credits`.
-  New **`credit_transactions`** ledger (RLS read-only; written only by the RPCs).
-  **Refund is tied to a per-op `reference_id` + `kind`** so it can't be replayed
-  to mint free credits. App wiring: `api/generate/route.ts`,
-  `reviews/actions.ts`, `generate/landing-actions.ts`.
-- **`reserve_rank_scan` / `reserve_prospect_audit`** (SEC-M1). SERP cap is a
-  monthly **row count**, so these use a per-clinic/user `pg_advisory_xact_lock` +
-  count + insert a `'reserved'` row up front; total failure deletes it. `status`
-  column added to `rank_scans` / `prospect_audits`; UI lists filter to
-  `status='complete'`. App wiring: `rank/actions.ts`, `prospect/actions.ts`.
-- NOTE: the SERP cap here is **monthly** (`SERP_MONTHLY_SCAN_CAP=15`,
-  `AGENCY_MONTHLY_AUDIT_CAP=30`), not daily. There is **no "map credits"** column
-  in this codebase — that concept from the audit prose doesn't exist.
+**Flow:** completed visit → staff taps **Send Survey** on `/reviews` → wa.me link
+to `{APP_URL}/s/{token}` → patient rates 1–5 → 4–5 routes to a Google review CTA;
+1–3 opens a private comment box + fires an **urgent** notification to staff.
 
----
+- **Public page** (anon, no login): `app/s/[token]/page.tsx`,
+  `survey-form.tsx`, `actions.ts`. `/s/` added to middleware public paths.
+- **Trigger + management** (`/reviews`): `post-visit-actions.tsx` (Send Survey +
+  Request Review, anti-dup), `survey-actions.ts` (`sendSurvey`,
+  `markSurveyHandled`), `survey-row-actions.tsx`, `reviews-tabs.tsx` (now 3 tabs:
+  Post-Visit · Survey Responses · Insights), `reviews/page.tsx` (rewritten).
+- **Dashboard** `dashboard/page.tsx` — "Patient Satisfaction" card (avg this
+  month + count, red when an unhandled 1–3 exists).
+- `.env.local.example` documents `NEXT_PUBLIC_APP_URL`.
+- **Note:** low-score submit is one atomic RPC (score+comment+notification). No
+  `interactions` row for surveys (enum has no survey type) → not in Recent Activity.
 
-## 4. Security 016 — input & boundary hardening (app-only, no migration)
+### B — Campaigns (`/campaigns`, NO migration)
 
-Commit `0d1de63`. All in application code:
-- **SEC-H2** — `api/generate/route.ts` caps `topic` (500) / `context` (4000) /
-  each extra (500), and accepts extras **only** for keys declared in the post
-  type's `extra_fields.inputs`. Client mirrors with `maxLength`.
-- **SEC-M3** — extras merged **first**, built-in clinic vars **last**; reserved
-  keys rejected. User input can't override clinic identity or the YMYL block.
-- **SEC-M2** — `AbortSignal.timeout(10s)` on serper/serpapi fetches; the two
-  Anthropic generation clients use `timeout: 60s, maxRetries: 1`.
-- **SEC-M5** — `isAdminRole` guard added to `saveContent`, `markPublished`,
-  `deleteContent`, `addKeyword`, `runScan` (RLS still scopes tenancy).
-- **SEC-H3** — HTML-escape clinic/doctor names in the welcome email; in-memory
-  IP+email rate limit on signup (`lib/rate-limit.ts` — best-effort, per-instance;
-  see note there for a shared-store upgrade).
-- **SEC-L3** — auth-callback `next` validated as a same-site path (`^/(?!/)`).
-- **SEC-L5** — password minimum raised 6 → 8 (signup, staff, reset — server +
-  client).
+Tables (`campaigns`, `campaign_sends`) + enums already existed in 001.
 
-### ⚠️ STILL TO DO — two Supabase dashboard toggles (user, not code)
-1. **Leaked-password protection** → Authentication → Policies / Attack Protection
-   → enable "Leaked password protection" (HaveIBeenPwned).
-2. **Disable public email sign-ups** → Authentication → Providers → Email → turn
-   OFF "Enable Sign-ups". Safe: the admin API (onboarding) bypasses it, and login
-   still works. Confirmed the service-role signup is the ONLY path that mints a
-   credited clinic.
+- Sidebar 📣 **Campaigns** under "Get Paid & Keep Them" (`icons.tsx`
+  `CampaignsIcon`, `app-shell.tsx`).
+- `app/(app)/campaigns/`: `segments.ts` (5 segments + `fillCampaignTemplate`),
+  `actions.ts` (`previewSegment`, `createCampaign`, `draftCampaignMessage` = AI, 1
+  credit via the atomic reserve/refund pattern, `sendCampaignMessage`,
+  `markCampaignDone`), `new-campaign.tsx` (live preview + AI draft), `page.tsx`
+  (list), `[id]/page.tsx` (detail: progress bar + recipient list), `[id]/
+  campaign-controls.tsx`.
+- **Deliberately one-tap-per-patient** (no bulk send — wa.me can't, and it keeps
+  the clinic number ban-safe). Recipients **snapshotted** into
+  `segment_filter.patient_ids` at save. 14-day "recently messaged" guardrail.
+- AI draft is **admin-only** (matches `/api/generate` credit-spend gate); button
+  hidden for receptionists. `sent_count` recomputed from the ledger on each send.
+- Partially delivers the old "bulk WhatsApp campaigns" backlog item.
 
----
+### C — UPI Payment Links (migration 017)
 
-## 5. Features shipped
+- `lib/upi.ts` — `isValidUpiId`, `upiMessage` (the exact Hinglish message + the
+  `upi://pay?pa=…&pn=…&am=…&cu=INR&tn=DentalBill` deep link).
+- **Settings** — UPI ID field (`clinic-info-form.tsx`, `settings/page.tsx` select,
+  `settings/actions.ts` loose validation + save).
+- **Billing** — `page.tsx` builds per-row `upiUrl`; `billing-actions.tsx` shows
+  **Request via UPI** on each row **and** in the Record Payment popup. It
+  **reuses `remindPayment`**, so it shares the 7-day anti-dup (`payment_reminder_
+  sent_at`) + logs a `payment_reminder` interaction — Remind and UPI collapse to
+  "✓ Reminded" together.
+- **Treatment plan presenter** — `patients/[id]/page.tsx` passes `upiId`;
+  `treatment-plans.tsx` adds a per-plan editable ₹ amount + Request via UPI for
+  advance collection (open-WhatsApp only; no DB write, pre-outstanding).
+- Confirmation is **MANUAL** — no webhook / reconciliation (by design).
 
-### Pipeline List / Board toggle (`9714016`)
-- `/pipeline` now has a **List | Board** toggle (remembered per browser).
-- Board = Kanban: columns Identified · Presented · Thinking · Accepted ·
-  Scheduled (header = count + total ₹); Completed/Rejected in a footer row.
-  Cards show patient, treatment, ₹, follow-up (red if past).
-- **Native HTML5 drag-and-drop** does the SAME transitions + side-effects as the
-  List buttons (Thinking→date popup, Rejected→reason popup, Accepted→notification
-  + recovery win, Accepted→Scheduled→Book Appointment popup). Invalid moves snap
-  back with an explaining toast. Mobile = horizontally swipeable columns.
-- Files: `pipeline-board.tsx`, `pipeline-tabs.tsx`, `page.tsx`.
-- **Caveat:** native DnD is desktop/mouse only — on Android Chrome the Board is
-  swipe-to-view and moves are done from the List view (fully functional). Offered
-  a pointer-events layer for touch drag; not built.
+### D — Subscriptions & credit metering (migration 019) — ⚠️ SCHEMA ONLY
 
-### Clinic location set once (`bd71627`)
-- Root problem: receptionists were typing lat/lng per keyword, and
-  `clinics.default_lat/lng` (migration 007) were orphaned (never populated).
-- Now: `clinics.default_lat/lng` set **once in Settings** (no migration — columns
-  existed). New shared `components/location-picker.tsx` + `lib/geo.ts`: "Use my
-  current location" (GPS), paste a Google Maps link / "lat,lng" (parsed), or edit
-  manually. No maps library.
-- Rank: Add Keyword no longer asks for coordinates; `addKeyword` derives centre
-  from the clinic and **`runScan` centres on the clinic's CURRENT location**
-  (single source of truth). If unset, `/rank` shows a "set your location" prompt
-  and blocks add/scan with a clear message.
-- Prospect audit reuses the same picker for its **per-audit** (other-business)
-  location, which correctly stays independent of the clinic.
+**No app code was written for this — the migration is applied and seeded, and
+the admin panel *reads* the new columns, but NOTHING writes/decrements them yet.**
+See §4 for the wiring work. Migration contents:
 
----
+- **`plans`** + **`credit_packs`** (global catalogs; read = any authenticated,
+  write = super-admin only). Seeded: `Free Trial`, `Growth Monthly`; four
+  top-up packs. **Prices seeded at 0 — user sets them in the admin panel later.**
+- **`profiles.is_super_admin`** + `is_super_admin()`.
+- **`clinics`** new cols: `subscription_status` (trial/active/past_due/
+  deactivated/cancelled), `plan_id`, `trial_started_at/ends_at`,
+  `current_period_end`, `content_credits_balance` (default 50),
+  `map_credits_balance` (default 4), `billing_provider`, `provider_customer_id`,
+  `provider_subscription_id`, `last_payment_at`, `deactivated_at`.
+- Existing clinics **grandfathered**: `content_credits_balance = max(monthly_
+  credits - credits_used, 0)`, `map = 4`, status `active`. (One-time snapshot —
+  now frozen; nothing updates it yet.)
+- **`credit_ledger`** (clinic-scoped, read-only to clinic) — the per-balance-
+  change ledger. **Renamed from the spec's `credit_transactions`** (see §3).
+- **`billing_events`** (super-admin readable) — audit of billing lifecycle.
+- **clinics UPDATE column-lock** (§3) — closes a real hole.
 
-## 6. Serper debugging pass (instrumentation only)
+### E — Admin panel foundation (`/admin`, migration 018)
 
-Two commits add **debug-gated** logging (`SERP_DEBUG=1`), **no logic change**:
-- `454045a` — `lib/serp/serper.ts`: logs the full outgoing request (endpoint
-  `/maps`, params `q/ll/gl/hl`, node lat/lng) and which array is parsed.
-- `db79d37` — `lib/serp/match.ts`: per node, logs target + each top-10
-  candidate's placeId/name/match-rule + a diagnostic token-overlap + resolved
-  rank. The decision lives verbatim in `resolveRank()`; `matchTarget` only wraps.
+Platform-owner-only, cross-tenant. Gated on `is_super_admin`.
 
-**Findings (verified with live 3-node probes against the real Serper API):**
-- Request path is **correct**: `/maps` engine, distinct `ll` per grid node
-  (results genuinely shift by location), reads the **`places` map pack** (there is
-  no `organic` array on `/maps`). We send **no** `location`/`num`/`device` — for
-  `/maps`, `ll` is the geo origin, which is right.
-- Match step is **healthy**: probed real clinic "ABCD" / target "Surana Dental
-  Clinic" / keyword "root canal treatment in vijay nagar". Centre + SE node →
-  exact match, rank 1; NW corner → genuinely absent from the pack → null
-  (→ `NOT_FOUND_RANK=21` for averaging, by design). No identity or aggregation bug.
-
-**Latent risk (diagnosed, NOT fixed — offered):** matching is substring
-containment with **no similarity threshold**, and this keyword has
-`target_place_id = null`. It works only because the stored `target_business_name`
-exactly equals the Google listing. If a listing name drifts, matching would fail
-at every node. **Recommended next step:** capture + store the Google `place_id`
-when a keyword is added (the matcher already prefers `place_id`). Not built yet.
+- **Access** `lib/admin/auth.ts` — `isSuperAdmin`, `requireSuperAdmin` (→
+  `notFound()`), `requireAdminContext()` → `{ adminId, db }` where `db` is the
+  service-role client handed out ONLY after re-verifying super-admin; `writeAudit`.
+- **Middleware** `lib/supabase/middleware.ts` gates `/admin` + `/api/admin` →
+  **404, never 403** (pages via rewrite to unmatched, API via JSON 404).
+- **CLAUDE.md** — new **`## Admin panel rules`** section (service-key invariant,
+  404-not-403, defense-in-depth, indigo accent).
+- **Shell** `app/admin/layout.tsx` + `admin-nav.tsx` — distinct **indigo** dark
+  bar, "ADMIN" pill, nav Clinics · Subscriptions · Usage & Costs · System, Exit ↩.
+- **Clinics** `clinics/page.tsx` (cross-tenant list via `admin_clinics_overview()`
+  + a service-role enrich for `subscription_status`) → `clinics/[id]/page.tsx`
+  (key stats, users, editable feature-flag toggles), `clinics/[id]/feature-flags.
+  tsx`, `clinics/actions.ts` (`setClinicFeatureFlag` → writes `admin_audit`).
+- `lib/admin/feature-flags.ts` — registry of 6 flags. **Stored + toggled but NOT
+  enforced anywhere in the app** (future).
+- Stubs: `subscriptions/`, `usage/`, `system/` (nav-only placeholders).
+- **NO destructive actions** in this step (by spec).
 
 ---
 
-## 7. "Could not start the scan" bug (`791b851`)
+## 3. Key decisions & gotchas (read before continuing)
 
-- Symptom: scans failed instantly with a vague message.
-- Root cause: `runScan`/`runAudit` call the migration-015 reserve RPCs; when 015
-  wasn't applied, PostgREST returned **PGRST202** ("function not in schema
-  cache"), which the catch swallowed into the generic string.
-- Fix (code): log the full reserve error and return a **specific** reason
-  (cap reached / missing-function → "run migration 015" / other DB error). On
-  total provider failure, surface the real provider error (e.g. "Serper request
-  failed (429)"). Same treatment on the audit path.
-- **Now moot at runtime** because migration 015 has been applied — but the better
-  error handling stays.
+1. **`credit_transactions` name collision → new ledger is `credit_ledger`.**
+   Migration 015 owns `credit_transactions` with an incompatible shape
+   (`amount` / `kind IN ('reserve','refund')` / `reference_id`) driving the live
+   reserve/refund system. The spec's balance-change ledger is therefore named
+   **`credit_ledger`**. Don't confuse the two.
 
----
+2. **TWO credit models coexist — this is the #1 thing to resolve next.**
+   - **OLD (live):** `clinics.monthly_credits` / `credits_used` counter +
+     `reserve_credits`/`refund_credits` (015) writing `credit_transactions`. This
+     STILL drives every paid path: `api/generate`, reviews insight, generate
+     landing, rank scans, prospect audits.
+   - **NEW (schema only):** `content_credits_balance` / `map_credits_balance` +
+     `credit_ledger`. **Nothing writes or decrements these yet.** The admin panel
+     shows them but they're frozen at the grandfather snapshot.
+   - Next session must wire the new model in and bridge/retire the old one (§4).
 
-## 8. Verification status
+3. **Admin gate = `is_super_admin`, not `platform_admins`.** An earlier unrun
+   `018_platform_admin.sql` (platform_admins table) was **deleted**; 018 is now
+   `018_admin_panel.sql` on `is_super_admin` (019's billing RLS already depends on
+   it). Don't reintroduce `platform_admins`.
 
-- ✅ `tsc --noEmit` + `next lint` clean after every commit; dev server boots.
-- ✅ Serper request + match paths verified with **live probes** (real API + real
-  DB row via service role).
-- ✅ Pipeline board + LocationPicker verified by rendering on a throwaway public
-  route (the app is auth-gated in this environment) — layout, drag structure,
-  GPS/paste parse, red past-due date all confirmed. Temp routes + middleware
-  tweak reverted.
-- ❌ **No full auth-gated click-through** of the new flows (no login session in
-  this environment): the credit/scan reserve+refund end-to-end, a real in-app
-  scan, the pipeline drag→DB transition, Settings location save → scan. All are in
-  `TESTING.md` for a logged-in pass.
+4. **clinics UPDATE column-lock (019 §6).** Blanket UPDATE was revoked from
+   `authenticated` and re-granted to exactly 13 columns:
+   `business_name, doctor_name, phone, address, city, area, google_review_url,
+   instagram_handle, website_url, upi_id, default_lat, default_lng, booking_slug`.
+   This closes the "a clinic PATCHes its own `content_credits_balance`" hole.
+   **If you add a new user-editable clinic column, add it to that grant** or the
+   settings/landing save will fail.
 
----
+5. **Feature flags are stored, not enforced.** Toggling writes `clinics.feature_
+   flags`; no code reads them to gate features yet.
 
-## 9. Open threads / offered, not built
-
-- **SEC-016 dashboard toggles** (§4) — leaked-password protection + disable public
-  signup. User action.
-- **`place_id` capture** for robust Map-Rank matching (§6) — the one real latent
-  risk found in the Serper pass.
-- **Touch drag** on the pipeline Board for Android (pointer-events layer).
-- **Rate limiter** upgrade to a shared store (Upstash) for a hard cross-instance
-  cap (currently best-effort in-memory).
-- Prior deferred: CSV export, duplicate-patient merge, bulk WhatsApp campaigns,
-  self-booking portal, churn-risk insights; approve/reject review layer for
-  `/history`; enrich the help KB past ~4,096 tokens to activate Haiku caching.
-- **Branch `growth-features-serp` is not pushed / not merged.** Undecided whether
-  to push origin / fast-forward `main`.
+6. **Verticals:** single `'dental'` default. `admin_clinics_overview()`
+   intentionally references only base columns (not 019's), so it's order-safe.
 
 ---
 
-## 10. Gotchas / operational notes
+## 4. What's NEXT (the build prompts you'll give)
+
+Roughly prioritized:
+
+### Wire the new credit model (biggest, do first)
+- SECURITY DEFINER functions to spend/grant `content_credits_balance` /
+  `map_credits_balance` atomically, each writing a `credit_ledger` row
+  (`reason` = generation/map_scan/topup/admin_adjust/monthly_reset/trial_grant,
+  `balance_after`, `related_id`). Mirror the 015 reserve/refund safety.
+- Repoint paid paths onto it: content generation + insight + landing →
+  `content_credits`; rank scans + prospect audits → `map_credits`. Decide whether
+  to retire `monthly_credits`/`credits_used` + 015's `credit_transactions` or run
+  a bridge. Update every place that reads `monthly_credits - credits_used`.
+- `clinics.is_active` sync: trial/active/past_due → true; deactivated/cancelled →
+  false (keep `subscription_status` the source of truth).
+
+### Trial + subscription lifecycle
+- On clinic onboarding: set `subscription_status='trial'`, `trial_started_at/
+  ends_at`, grant trial credits (ledger `trial_grant`). Monthly reset job
+  (`monthly_reset`). Transitions active/past_due/deactivated + `billing_events`.
+
+### Admin A2 — Subscriptions page
+- Set plan + credit-pack **prices** (super-admin write RLS already allows).
+- Per-clinic: change plan, apply top-ups (writes balances + ledger + billing_
+  events), change status. These ARE mutating admin actions → audit each.
+
+### Admin A3 — Usage & Costs, System
+- Usage: credit consumption from `credit_ledger`, provider spend.
+- System: `admin_audit` **viewer** (table already super-admin readable), health,
+  migration status.
+
+### Feature-flag enforcement
+- Read `clinics.feature_flags` to gate nav items + routes + actions per clinic.
+
+### Later / external
+- Billing provider integration (razorpay/cashfree/paypal) + webhooks.
+
+---
+
+## 5. Verification status
+
+- ✅ `tsc --noEmit` + `next lint` clean across all five workstreams.
+- ✅ **Admin 404 gate verified at runtime** (dev server, unauthenticated):
+  `/admin`, `/admin/clinics`, `/admin/subscriptions` → **404**; `/dashboard` →
+  307; `/` → 200. No server errors.
+- ❌ **No logged-in click-through** (no session in this env). Needs a real pass:
+  survey submit + notification + Mark Handled; campaign create/AI-draft/send/
+  guardrail; UPI request from billing + presenter; admin panel as super-admin
+  (see panel, toggle flags, audit row) AND as a normal clinic user (must 404).
+  All in `TESTING.md`.
+
+---
+
+## 6. Carried forward from prior sessions (still open)
+
+- ⚠️ **Two Supabase dashboard toggles** (user action, from the security session):
+  enable **leaked-password protection**; **disable public email sign-ups**
+  (Authentication → Providers → Email). Admin API onboarding bypasses the latter.
+- **`place_id` capture** for robust Map-Rank matching (the one latent Serper risk).
+- **Touch drag** on the pipeline Board (Android).
+- **Rate limiter** → shared store (Upstash) for a hard cross-instance cap.
+- Deferred backlog: CSV export, duplicate-patient merge, self-booking portal,
+  churn-risk insights, approve/reject review layer for `/history`, enrich help KB
+  past ~4,096 tokens for Haiku caching. (Bulk WhatsApp = partially done via
+  Campaigns.)
+
+---
+
+## 7. Operational notes
 
 - **One dev server per repo** — two `next dev` on the same `.next/` clobber each
-  other. If the app looks wrong, suspect a second server first.
-- **`SERP_DEBUG=1`** turns on the Serper request + match debug logs (off by
-  default). `SERP_PROVIDER=serper` with a real `SERPER_API_KEY` is live in
-  `.env.local`; `mock` is the safe default elsewhere.
-- **Windows/Git Bash:** quote paths containing `(app)`. Heredocs mangle `\\` in
-  regexes — write test scripts with the Write tool, not `cat <<`.
-- Chatbot is free; generation / insight / publish / scan still cost credits (now
-  reserved atomically).
-- `TESTING.md` has per-feature checklists including the new Security 014/015/016,
-  pipeline board, clinic-location, and scan-error sections.
+  other. `.claude/launch.json` has a `dev` config (port 3000); use the preview
+  tools, not raw `next dev`.
+- **Windows / Git Bash:** quote paths containing `(app)` and `[id]`.
+- **`SERP_DEBUG=1`** enables Serper request/match logs. `SERP_PROVIDER=serper`
+  live in `.env.local`; `mock` is the safe default.
+- Chatbot is free; generation/insight/publish/scan cost credits (old model).
+- Migrations run **manually in the Supabase SQL Editor**, in order. All are
+  idempotent.
+
+---
+
+## 8. Commit plan (suggested)
+
+Nothing is committed. Suggested split on `growth-features-serp` (one commit each,
+in dependency order), or squash per feature:
+
+1. Post-visit survey (016 + `/s` + reviews + dashboard card).
+2. Campaigns (`/campaigns` + sidebar).
+3. UPI payment links (017 + settings + billing + presenter).
+4. Subscriptions/credits **schema** (019) — mark clearly "schema only, not wired".
+5. Admin panel foundation (018 + `/admin` + middleware + CLAUDE.md rules).
+
+Branch is **not pushed / not merged to `main`**. Decide push vs keep-local.
+
+### Uncommitted file map (this session)
+
+**New migrations:** `016_post_visit_survey.sql`, `017_clinic_upi_id.sql`,
+`018_admin_panel.sql`, `019_subscriptions_credits.sql`.
+
+**New app dirs/files:** `app/s/`, `app/(app)/campaigns/`, `app/admin/`,
+`app/(app)/reviews/{post-visit-actions,survey-actions,survey-row-actions}`,
+`lib/admin/`, `lib/upi.ts`.
+
+**Modified:** `.env.local.example`, `CLAUDE.md`, `TESTING.md`,
+`components/{app-shell,icons}.tsx`, `lib/supabase/middleware.ts`,
+`app/(app)/billing/{page,billing-actions}.tsx`, `app/(app)/dashboard/page.tsx`,
+`app/(app)/patients/[id]/{page,treatment-plans}.tsx`,
+`app/(app)/reviews/{page,reviews-tabs}.tsx`,
+`app/(app)/settings/{actions,clinic-info-form,page}.tsx`.

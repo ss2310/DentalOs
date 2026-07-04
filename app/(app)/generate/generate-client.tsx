@@ -93,6 +93,7 @@ export function GenerateClient({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savePending, startSave] = useTransition();
   // Client-tracked credits balance (updated from each generation's response).
@@ -221,6 +222,7 @@ export function GenerateClient({
     if (!selected) return;
     setLoading(true);
     setError(null);
+    setNeedsUpgrade(false);
     // Geo Landing's template consumes {{target_area}} + {{context}} but not
     // {{topic}}, so fold the chosen focus treatment into the context it sees —
     // otherwise the service picker would have no effect on the output.
@@ -244,6 +246,7 @@ export function GenerateClient({
       const data = await res.json();
       if (!res.ok) {
         setError(data?.error ?? "Something went wrong. Please try again.");
+        setNeedsUpgrade(data?.upgrade === true);
         return;
       }
       setResult({
@@ -583,9 +586,17 @@ export function GenerateClient({
             </p>
           ) : null}
           {error ? (
-            <p className="mt-2 rounded-button border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
-              {error}
-            </p>
+            <div className="mt-2 rounded-button border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+              <p>{error}</p>
+              {needsUpgrade ? (
+                <Link
+                  href="/upgrade"
+                  className="mt-2 inline-flex h-9 items-center rounded-button bg-primary px-3 text-sm font-medium text-white hover:bg-primary/90"
+                >
+                  ⬆ Upgrade
+                </Link>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : postTypes.length > 0 ? (

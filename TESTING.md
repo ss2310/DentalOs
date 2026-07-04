@@ -1371,3 +1371,291 @@ generate / scan / publish will error until the migration is applied.
 ### Parser (lib/geo.ts) — verified
 - [ ] "lat, lng", "lat lng", /@lat,lng, !3d..!4d.., and ?q=lat,lng all parse;
       "0,0", out-of-range, and non-coordinates return nothing. (9/9 unit cases.)
+
+## Post-visit survey (migration 016)
+
+> Requires **migration 016_post_visit_survey.sql** applied (adds
+> `survey_responses.appointment_id` + `.notification_id`, the branded
+> `get_survey_page_by_token` read, the notification-raising
+> `submit_survey_response`, and `mark_survey_handled`). Without it the Reviews
+> and Dashboard survey queries error and no survey can be sent.
+
+### Trigger — Send Survey on a completed visit (/reviews → Post-Visit tab)
+- [ ] Each completed visit (last 30 days) shows a teal **Send Survey** (primary)
+      and a white **Request Review** (secondary) button; a visit with no
+      WhatsApp number shows "No WhatsApp number" instead.
+- [ ] Clicking **Send Survey** opens a wa.me tab in Hinglish:
+      "Hi {name} ji, aapka visit kaisa raha? 30 second mein batayein: 🙏"
+      followed by `{APP_URL}/s/{token}`.
+- [ ] After sending, the button becomes **✓ Survey Sent** and stays so on
+      refresh (anti-duplicate); a second attempt on the same visit is refused
+      ("A survey was already sent for this visit.").
+- [ ] **Request Review** still works independently and becomes **✓ Review Sent**.
+- [ ] "Awaiting Survey" and "Surveys Sent This Month" stat cards reflect reality.
+
+### Public page — /s/{token} (logged out, mobile)
+- [ ] Open the survey link with no session (incognito): shows
+      "How was your visit to {clinic}?" with 5 large tappable stars, clinic
+      branded. No app chrome, no login redirect.
+- [ ] A bad/blank token shows "This survey link isn't valid" (not a crash / not
+      a login redirect / no clinic data leaked).
+- [ ] Tapping **4 or 5**: saves immediately → thank-you with a big
+      **"Leave us a Google Review 🙏"** button linking to the clinic's
+      `google_review_url` (button hidden if the clinic has no review URL).
+- [ ] Tapping **1–3**: shows a comment box "Humein batayein kya behtar ho sakta
+      tha"; on **Bhejein** → thank-you "Dr. {name} personally will look into
+      this". Submitting with an empty comment is allowed.
+- [ ] Re-opening an answered link shows "Thank you, already recorded." and can't
+      be re-submitted (token single-use).
+
+### Low score → urgent notification
+- [ ] After a 1–3 submit, staff get an **urgent** notification:
+      "⚠ {patient} rated {score}/5: '{comment}'. Call them before they post
+      publicly." with a link to /reviews and the unread badge bumped.
+- [ ] A 4–5 submit creates **no** notification.
+
+### Survey Responses tab (/reviews → Survey Responses)
+- [ ] Lists answered surveys newest-first: patient, colored score pill
+      (4–5 teal/green, 3 amber, 1–2 red), comment, responded date.
+- [ ] "Average Rating" + "Responses" stat cards match the list.
+- [ ] Low-score rows show **WhatsApp** (opens a Hinglish follow-up) and
+      **Mark Handled**; high-score rows show neither.
+- [ ] **Mark Handled** flips the row to **✓ Handled**, closes the urgent
+      notification (status acted_on), and decrements the unread badge. It's
+      admin-only (receptionist attempt is refused server-side).
+- [ ] Receptionists see Post-Visit + Survey Responses tabs but NOT Insights.
+
+### Dashboard — Patient Satisfaction card
+- [ ] Card shows this month's **average score** (e.g. "4.3 ★") and the response
+      count; links to /reviews.
+- [ ] When an unhandled 1–3 rating exists (last ~60 days) the card turns **red**
+      and reads "{n} unhappy — call now"; marking it handled clears the red.
+- [ ] With no responses this month it shows "—".
+
+### Tenancy / security
+- [ ] Clinic A's survey token cannot read or submit against Clinic B (each token
+      maps to exactly one row; RPCs expose only that row + the clinic's public
+      name/doctor/review URL — no patient PII, no other rows).
+- [ ] The public page works with the anon key only (no service-role, no session).
+
+## Campaigns (no migration — uses existing campaigns / campaign_sends)
+
+### Nav + list
+- [ ] Sidebar shows **📣 Campaigns** under "Get Paid & Keep Them" (visible to
+      receptionists and admins). Active item shows the teal megaphone icon.
+- [ ] /campaigns lists campaigns newest-first with name, segment label,
+      "{sent}/{total} sent", and a status pill (draft / active / done).
+- [ ] Empty state shows when there are no campaigns.
+
+### New Campaign — segments + live preview
+- [ ] "+ New Campaign" opens a modal: name, segment dropdown, message template.
+- [ ] The preview line updates as the segment changes:
+      "This will target {X} patients."
+      - Dormant 6 months = no visit in 180d (or null last_visit + created 180d+ ago)
+      - Dormant 12 months = no visit in 365d
+      - Outstanding balance = total_outstanding > 0
+      - Birthday this month = DOB month == current month
+- [ ] Selecting **Treatment follow-up** reveals a treatment dropdown (from active
+      rate cards); the preview says "pick a treatment" until one is chosen, then
+      counts patients whose **most recent** visit used that treatment.
+
+### AI draft (1 credit, admin only)
+- [ ] As owner/doctor, "✨ AI draft (1 credit)" fills the template with a Hinglish
+      message that KEEPS the literal {name} {clinic} {doctor} {phone} tokens; a
+      credit is deducted (and refunded if the AI call fails).
+- [ ] The AI draft button is **hidden** for receptionists; a crafted call is
+      refused server-side ("Only an owner or doctor…").
+- [ ] With no credits left, AI draft shows the "not enough credits" message and
+      deducts nothing.
+
+### Save + detail page
+- [ ] "Save as Draft" creates the campaign and navigates to its detail page. The
+      recipient list is snapshotted at save time (stable even if the segment
+      drifts later).
+- [ ] Each recipient row shows name, +91 number, and relevance
+      (last visit / balance / birthday) appropriate to the segment.
+- [ ] Progress bar reads "{sent} of {total} sent" + %, starting at 0.
+
+### Per-patient send (deliberately one-click-per-patient)
+- [ ] Tapping **Send** opens a wa.me tab with the template filled for THAT
+      patient ({name}=patient, {clinic}/{doctor}/{phone}=clinic), records a
+      campaign_send (sent_at, sent_by), turns the row green **✓ Sent**, and bumps
+      the progress bar + list "sent/total".
+- [ ] A re-send on the same patient does not double-count (idempotent).
+- [ ] A recipient with no WhatsApp/phone shows "No WhatsApp" (no send button).
+- [ ] There is NO bulk-send button — sends are per patient by design.
+
+### Guardrail + finish
+- [ ] A patient who received ANY campaign send in the last 14 days shows an amber
+      **"recently messaged"** pill on their (unsent) row; it does not block
+      sending.
+- [ ] "Mark Done" sets status = done, disables the send buttons, and the list
+      shows the done badge. Already-sent rows stay green.
+
+### Tenancy
+- [ ] Segment previews, recipient lists, and sends are all RLS-scoped — a
+      campaign only ever sees / messages its own clinic's patients.
+
+## UPI Payment Links (migration 017 — adds clinics.upi_id)
+
+> Requires **migration 017_clinic_upi_id.sql** applied
+> (`alter table clinics add column if not exists upi_id text`).
+
+### Settings → Clinic Info
+- [ ] There's a **UPI ID** field (placeholder `clinicname@okhdfcbank`). Saving a
+      valid VPA persists to `clinics.upi_id`; reopening Settings shows it.
+- [ ] A value with a space or missing `@` is rejected ("Enter a valid UPI ID…").
+      Leaving it blank is allowed and stores null.
+
+### /billing — outstanding rows + Record Payment popup
+- [ ] With **no** clinic UPI id set: no "Request via UPI" button appears anywhere
+      on /billing (row or popup). The plain "Remind" button still works.
+- [ ] With a UPI id set: each outstanding row (desktop table + mobile card) shows
+      a **Request via UPI** WhatsApp button, and the Record Payment popup shows
+      one too. It's hidden when the patient has no WhatsApp number.
+- [ ] Clicking **Request via UPI** opens a new WhatsApp tab with the Hinglish
+      message: greeting, "📱 UPI ID: {upi_id}", a tappable
+      `upi://pay?pa={upi_id}&pn={url-encoded clinic name}&am={nett_due}&cu=INR&tn=DentalBill`
+      line, and the screenshot ask. The whole message is URL-encoded via the
+      shared waLink helper.
+- [ ] The `am=` amount equals the balance due; `pn=` is the clinic name
+      url-encoded (spaces → %20) so the deep link isn't broken.
+- [ ] After clicking, `payment_reminder_sent_at` is set and a `payment_reminder`
+      / `whatsapp` interaction row is created (shows in dashboard Recent
+      Activity). Both **Remind** and **Request via UPI** collapse to
+      **✓ Reminded** (shared 7-day anti-duplicate window) — same as Remind.
+- [ ] In the popup, once reminded it shows "✓ Payment link already sent".
+- [ ] Recording a payment still works normally; confirmation is MANUAL — there is
+      no webhook / auto-reconciliation (the upi:// link only opens the patient's
+      UPI app with the amount prefilled).
+
+### Patient detail → Treatment Plan presenter (advance collection)
+- [ ] With a UPI id set, each saved plan shows an editable ₹ amount (defaulting
+      to the plan total) + a **Request via UPI** button.
+- [ ] Editing the amount and clicking opens WhatsApp with the same UPI message
+      for that amount. Hidden entirely when no clinic UPI id; button disabled
+      when the patient has no WhatsApp number.
+
+## Internal admin panel /admin (migrations 018 + 019)
+
+> Requires **018_admin_panel.sql** + **019_subscriptions_credits.sql** applied,
+> and `is_super_admin = true` set on the platform owner's profile.
+
+### Access — 404, never 403 (verified unauthenticated: /admin → 404, /dashboard → 307)
+- [ ] A **normal clinic user** (receptionist/owner, not super admin) navigating to
+      `/admin`, `/admin/clinics`, or any `/admin/*` gets a **404** page — NOT a 403,
+      NOT a redirect to login. The panel's existence is not advertised.
+- [ ] A logged-out visitor to `/admin/*` also gets **404** (not the login redirect
+      that `/dashboard` gets).
+- [ ] Any `/api/admin/*` path returns a **404** JSON for non-admins.
+- [ ] The **platform owner** (is_super_admin) sees the full panel.
+- [ ] Defense in depth: even if middleware were bypassed, each admin page/action
+      re-checks `is_super_admin()` independently (server-side).
+
+### Shell — visually distinct
+- [ ] `/admin` uses its own shell (dark bar + **indigo** accent + "ADMIN" pill +
+      indigo top strip), clearly different from the clinic app's teal/white.
+- [ ] Nav: Clinics · Subscriptions · Usage & Costs · System; active item is indigo.
+      "Exit ↩" returns to `/dashboard`. `/admin` redirects to `/admin/clinics`.
+
+### Clinics — cross-tenant list + detail
+- [ ] `/admin/clinics` lists **all clinics across tenants** (not RLS-scoped):
+      name, vertical, created date, user count, last activity (latest content
+      generation or scan), subscription-status badge.
+- [ ] Row click → clinic detail: key stats (users, patients, appointments,
+      content, scans, content/map credit balances), the users list (with roles +
+      super-admin marker), and the subscription-status badge.
+- [ ] These reads use the **service-role client** (bypasses RLS) obtained only
+      after the super-admin check — the service key never reaches the browser.
+
+### Feature flags (readable + editable)
+- [ ] Clinic detail shows per-clinic feature toggles reflecting
+      `clinics.feature_flags`; a flag is on only when present and true.
+- [ ] Toggling a flag persists to `clinics.feature_flags` and survives refresh;
+      a failed write reverts the switch and toasts.
+- [ ] There are **no destructive actions** anywhere in the panel (this step).
+
+### Audit
+- [ ] Every admin mutation (e.g. a feature-flag toggle) writes an `admin_audit`
+      row: admin user id, action (`feature_flag.set`), target (clinic + id),
+      details (flag + enabled), timestamp. (Viewer arrives in A3.)
+- [ ] `admin_audit` + `platform-only` tables have no client write access; a clinic
+      user cannot read `admin_audit` (RLS `is_super_admin()` only).
+
+---
+
+## Subscription & Credit Engine (migration 020)
+
+Requires **`020_credit_engine.sql`** applied (idempotent — safe to re-run). This
+rewires paid paths off the legacy counter (`monthly_credits`/`credits_used` +
+015 `reserve_credits`) onto the balance model (`content_credits_balance` /
+`map_credits_balance` + `credit_ledger`). The `credit_ledger` "new-model" table
+is 019's — NOT 015's `credit_transactions` (reserve/refund, left untouched).
+
+### Trial init on signup
+- [ ] A brand-new signup gets `subscription_status='trial'`, `plan_id`=Free Trial,
+      `trial_started_at`=now, `trial_ends_at`≈now+30d, `content_credits_balance=50`,
+      `map_credits_balance=4`, `billing_provider='manual'` on its clinic row.
+- [ ] Two `credit_ledger` rows exist: content `+50` / map `+4`, reason
+      `trial_grant`, `balance_after` 50 / 4.
+- [ ] One `billing_events` row `trial_started`; a welcome notification appears in
+      the bell (title "Welcome to GrowthOS 🎉", links to /dashboard).
+- [ ] Signup still succeeds even if the ledger/notification writes fail
+      (best-effort — the account is usable regardless).
+
+### Content credits (generation · landing publish · campaign draft · insight)
+- [ ] Generate content: `content_credits_balance` drops by the type's cost and a
+      `credit_ledger` `generation` row is written with the new `balance_after`.
+- [ ] Publishing a landing page, drafting a campaign message (AI), and the reviews
+      Insight report each spend content credits the same way.
+- [ ] At **0 (or < cost)** content credits, generation is blocked with an "Upgrade
+      to add more" message; the Generate screen shows an **⬆ Upgrade** button
+      (from the API `upgrade:true` flag). Nothing is charged when blocked.
+- [ ] If the Claude call fails after spending, a `refund` ledger row restores the
+      balance (spend-before + refund-on-failure).
+
+### Map credits (rank scan · prospect audit)
+- [ ] Running a grid scan spends exactly **1** map credit (regardless of how many
+      SERP requests the grid fires) with a `map_scan` ledger row, BEFORE the scan.
+- [ ] A prospect audit spends 1 map credit the same way (from the agency user's
+      clinic).
+- [ ] At **0** map credits the scan/audit is blocked with an upgrade prompt and
+      nothing runs.
+- [ ] If the scan can't start (cap reached / reserve error) or **every** grid
+      point fails, the map credit is refunded (`refund` ledger row).
+- [ ] The monthly SERP-row cap (015) still applies **in addition** to the credit.
+
+### Access gating (middleware)
+- [ ] `trial` and `active` clinics: full access, no banner.
+- [ ] An **expired trial** (status still `trial`, `trial_ends_at` in the past) is
+      treated as `past_due`: full access + a persistent amber banner "Your trial
+      has ended — upgrade to keep your account active" with an Upgrade button.
+- [ ] A `deactivated`/`cancelled` clinic is redirected to `/upgrade` from every
+      app route; ONLY `/upgrade` and `/settings` (+ logout) are reachable.
+- [ ] A deactivated clinic hitting `/api/*` gets a 403 JSON (`upgrade:true`).
+- [ ] The **⬆ Upgrade** header link is visible on every app page.
+
+### /upgrade page
+- [ ] Shows current plan, status pill, trial-days-left / renewal date, and both
+      balances (content as the hero StatCard).
+- [ ] Lists active plans (₹ price, credits, current-plan badge) and credit packs
+      (₹ price, credits) from the seeded catalogs.
+- [ ] Clicking Upgrade/Buy (manual provider) files a **pending** `billing_events`
+      row and shows "Payment pending — your account will be activated once
+      confirmed." No charge, no balance change yet.
+
+### Settings → Billing tab
+- [ ] New "Billing" tab: current plan, status, trial/renewal date, both balances,
+      a link to /upgrade, and a credit history list (date DD MMM YYYY, kind,
+      +/- amount, reason, balance after), newest first (latest ~50).
+
+### Admin confirm (/admin/subscriptions)
+- [ ] Lists pending payments (clinic, Plan/Top-up, item, amount, requested date).
+- [ ] **Confirm** a pending PLAN: clinic → `subscription_status='active'`,
+      `plan_id` set, `current_period_end`=now+period, `last_payment_at`=now,
+      `is_active=true`; plan credits added (ledger `topup` rows); event
+      `status='confirmed'`. An `admin_audit` `billing.confirm` row is written.
+- [ ] **Confirm** a pending PACK: only credits are added (ledger `topup`), no
+      status change; event confirmed + audited.
+- [ ] **Cancel** a pending order: `status='cancelled'`, nothing granted; audited.
+- [ ] Confirm/cancel re-verify super-admin (a non-admin still 404s the route).

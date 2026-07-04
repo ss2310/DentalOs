@@ -2,7 +2,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
-import { getScanBudget } from "@/lib/serp/budget";
 import { isLiveProvider } from "@/lib/serp";
 import { SampleDataBanner } from "./sample-banner";
 import {
@@ -32,7 +31,7 @@ export default async function RankPage() {
   await requireAdmin();
   const supabase = createClient();
 
-  const [{ data: kwData }, { data: scanData }, { data: clinic }, budget] =
+  const [{ data: kwData }, { data: scanData }, { data: clinic }] =
     await Promise.all([
       supabase
         .from("rank_tracking_keywords")
@@ -45,10 +44,11 @@ export default async function RankPage() {
         .order("scanned_at", { ascending: false }),
       supabase
         .from("clinics")
-        .select("business_name, default_lat, default_lng")
+        .select("business_name, default_lat, default_lng, map_credits_balance")
         .single(),
-      getScanBudget(supabase),
     ]);
+
+  const mapCredits = clinic?.map_credits_balance ?? 0;
 
   const keywords = (kwData as KeywordRow[]) ?? [];
   const scans = (scanData as ScanRow[]) ?? [];
@@ -86,8 +86,8 @@ export default async function RankPage() {
         hasLocation={hasLocation}
       />
       <p className="mt-1 text-sm text-text-secondary">
-        Track where you rank on Google Maps across a grid of nearby points ·
-        This month: {budget.used}/{budget.cap} scans used
+        Track where you rank on Google Maps across a grid of nearby points ·{" "}
+        {mapCredits} map credit{mapCredits === 1 ? "" : "s"} left
       </p>
 
       {!hasLocation ? (

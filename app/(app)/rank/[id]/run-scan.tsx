@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/modal";
 import { toast } from "@/components/toast";
@@ -9,19 +10,17 @@ import { runScan } from "../actions";
 export function RunScan({
   keywordId,
   pointCount,
-  remaining,
-  cap,
+  mapCredits,
 }: {
   keywordId: string;
   pointCount: number;
-  remaining: number;
-  cap: number;
+  mapCredits: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const overBudget = remaining < 1;
+  const overBudget = mapCredits < 1;
 
   function confirm() {
     startTransition(async () => {
@@ -50,15 +49,20 @@ export function RunScan({
         <div className="space-y-4">
           <p className="text-[15px] text-text-primary">
             This runs a {pointCount}-point scan and uses{" "}
-            <span className="font-semibold">1</span> of your {cap} monthly scans
-            ({remaining} left this month). Continue?
+            <span className="font-semibold">1 map credit</span> ({mapCredits}{" "}
+            left). Continue?
           </p>
 
           {overBudget ? (
-            <p className="rounded-button border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
-              You&apos;ve used all {cap} scans this month. Credit top-ups are
-              coming once payments go live.
-            </p>
+            <div className="rounded-button border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+              <p>You&apos;re out of map-scan credits.</p>
+              <Link
+                href="/upgrade"
+                className="mt-2 inline-flex h-9 items-center rounded-button bg-primary px-3 text-sm font-medium text-white hover:bg-primary/90"
+              >
+                ⬆ Upgrade
+              </Link>
+            </div>
           ) : null}
 
           <div className="flex gap-3 pt-1">

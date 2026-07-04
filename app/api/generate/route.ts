@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { spendCredits, refundCredit } from "@/lib/credits";
 import { isAdminRole, type UserRole } from "@/lib/roles";
 import { nowIST, formatDate } from "@/lib/format";
 import {
@@ -108,7 +109,7 @@ export async function POST(req: Request) {
       .single(),
     supabase
       .from("clinics")
-      .select("id, business_name, city, area, doctor_name, phone, website_url, monthly_credits, credits_used")
+      .select("id, business_name, city, area, doctor_name, phone, website_url, content_credits_balance")
       .single(),
   ]);
 
@@ -190,37 +191,27 @@ export async function POST(req: Request) {
     );
   }
 
-  // Reserve credits ATOMICALLY before the paid call (SEC-H1/L1). The RPC
-  // charges in one row-locked statement, so concurrent requests can't all
-  // slip through and get billed as one. NULL = not enough credits; we never
+  // Spend content credits ATOMICALLY before the paid call (SEC-H1/L1). The RPC
+  // charges in one row-locked statement, so concurrent requests can't all slip
+  // through and get billed as one. `insufficient` = not enough credits; we never
   // reach Claude. Refunded below if the generation then fails.
   const cost = post.credits_cost;
-  const reference = crypto.randomUUID();
-  const { data: reservedLeft, error: reserveError } = await supabase.rpc(
-    "reserve_credits",
-    { p_cost: cost, p_reason: "content_generation", p_reference: reference },
-  );
-  if (reserveError) {
-    console.error("Credit reserve failed:", reserveError);
-    return NextResponse.json(
-      { error: "Could not check your credits. Please try again." },
-      { status: 500 },
-    );
+  const spend = await spendCredits("content", cost, "generation");
+  if (!spend.ok) {
+    if ("insufficient" in spend) {
+      return NextResponse.json(
+        {
+          error: `Not enough content credits — this needs ${cost}, you have ${Math.max(clinic.content_credits_balance ?? 0, 0)} left. Upgrade to add more.`,
+          upgrade: true,
+        },
+        { status: 402 },
+      );
+    }
+    return NextResponse.json({ error: spend.error }, { status: 500 });
   }
-  if (reservedLeft === null) {
-    const remaining =
-      (clinic.monthly_credits ?? 0) - (clinic.credits_used ?? 0);
-    return NextResponse.json(
-      {
-        error: `Not enough credits — this needs ${cost}, you have ${Math.max(remaining, 0)} left this month.`,
-      },
-      { status: 402 },
-    );
-  }
-  const creditsLeft = reservedLeft as number;
+  const creditsLeft = spend.balanceAfter;
 
-  const refund = () =>
-    supabase.rpc("refund_credits", { p_reference: reference });
+  const refund = () => refundCredit(spend.ledgerId);
 
   try {
     // SEC-M2: cap wall-clock and retries so a hung/slow model can't run up

@@ -152,9 +152,14 @@ export function SignupForm() {
         </div>
       </div>
 
-      <SubmitButton pendingText="Creating account…" disabled={!emailOk || !phoneOk}>
-        Create account
+      <SubmitButton pendingText="Starting your trial…" disabled={!emailOk || !phoneOk}>
+        Start your 30-day free trial
       </SubmitButton>
+
+      <p className="text-center text-xs text-text-secondary">
+        Free for 30 days — 50 content credits &amp; 4 map scans included. No card
+        required.
+      </p>
 
       <p className="pt-1 text-center text-sm text-text-secondary">
         Already have an account?{" "}

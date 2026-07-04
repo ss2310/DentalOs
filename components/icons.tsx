@@ -56,6 +56,16 @@ export function SendIcon(p: IconProps) {
   );
 }
 
+// Megaphone / bullhorn for the Campaigns nav item.
+export function CampaignsIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M3.75 9.75v4.5a1.5 1.5 0 001.5 1.5h2.086a1.5 1.5 0 011.06.44l3.354 3.353c.63.63 1.71.184 1.71-.707V6.164c0-.89-1.08-1.337-1.71-.707L8.396 8.81a1.5 1.5 0 01-1.06.44H5.25a1.5 1.5 0 00-1.5 1.5z" />
+      <path d="M18 9a3 3 0 010 6" />
+    </Base>
+  );
+}
+
 // Chat/assistant bubble mark for the floating help button.
 export function ChatIcon(p: IconProps) {
   return (
@@ -182,6 +192,15 @@ export function ChevronDownIcon(p: IconProps) {
   return (
     <Base {...p}>
       <path d="M6 9l6 6 6-6" />
+    </Base>
+  );
+}
+
+// Upward arrow into a tray — the "Upgrade" header action + /upgrade CTA.
+export function UpgradeIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M12 20V8m0 0l-4 4m4-4l4 4M5 4h14" />
     </Base>
   );
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeIndianPhone } from "@/lib/validation";
+import { isValidUpiId } from "@/lib/upi";
 import { getUserRole, isAdminRole } from "@/lib/roles";
 
 export type SettingsState = { ok?: boolean; error?: string };
@@ -68,6 +69,13 @@ export async function updateClinic(
     return { error: "Set both latitude and longitude, or leave both blank." };
   }
 
+  // UPI ID — optional; loosely validated (something@something, no spaces).
+  const upiRaw = String(formData.get("upi_id") ?? "").trim();
+  if (upiRaw && !isValidUpiId(upiRaw)) {
+    return { error: "Enter a valid UPI ID, e.g. clinicname@okhdfcbank." };
+  }
+  const upi_id = upiRaw || null;
+
   const supabase = createClient();
   const id = await clinicId();
   if (!id) return { error: "No clinic found for user." };
@@ -84,6 +92,7 @@ export async function updateClinic(
       google_review_url: str("google_review_url"),
       instagram_handle: str("instagram_handle"),
       website_url: str("website_url"),
+      upi_id,
       default_lat,
       default_lng,
     })

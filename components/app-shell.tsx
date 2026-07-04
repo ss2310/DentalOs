@@ -15,6 +15,7 @@ import {
   RecoveryIcon,
   GenerateIcon,
   ReviewsIcon,
+  CampaignsIcon,
   SettingsIcon,
   BellIcon,
   LogoutIcon,
@@ -26,6 +27,7 @@ import {
   SearchIcon,
   ToothIcon,
   AiVisibilityIcon,
+  UpgradeIcon,
 } from "@/components/icons";
 import { Toaster } from "@/components/toast";
 import { HowItWorks } from "@/components/how-it-works";
@@ -65,6 +67,7 @@ const NAV: NavEntry[] = [
       { label: "Payments", href: "/billing", Icon: BillingIcon },
       { label: "Check-up Reminders", href: "/recalls", Icon: RecallsIcon },
       { label: "Reviews", href: "/reviews", Icon: ReviewsIcon },
+      { label: "Campaigns", href: "/campaigns", Icon: CampaignsIcon },
       { label: "Revenue Recovered", href: "/recovery", Icon: RecoveryIcon, adminOnly: true },
     ],
   },
@@ -103,12 +106,14 @@ export function AppShell({
   unreadCount = 0,
   isAgency = false,
   isAdmin = false,
+  pastDue = false,
   children,
 }: {
   clinicName: string;
   unreadCount?: number;
   isAgency?: boolean;
   isAdmin?: boolean;
+  pastDue?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -277,6 +282,13 @@ export function AppShell({
           </div>
 
           <div className="flex items-center gap-1">
+            <Link
+              href="/upgrade"
+              className="flex h-11 items-center gap-2 rounded-button px-3 text-sm font-medium text-primary hover:bg-primary/5"
+            >
+              <UpgradeIcon width={18} height={18} />
+              <span className="hidden sm:inline">Upgrade</span>
+            </Link>
             <HowItWorks />
             <Link
               href="/notifications"
@@ -306,6 +318,21 @@ export function AppShell({
             </form>
           </div>
         </header>
+
+        {pastDue ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-warning/30 bg-warning/10 px-4 py-3 sm:px-6">
+            <p className="text-sm font-medium text-warning">
+              Your trial has ended — upgrade to keep your account active.
+            </p>
+            <Link
+              href="/upgrade"
+              className="flex h-9 items-center gap-2 rounded-button bg-primary px-3 text-sm font-medium text-white hover:bg-primary/90"
+            >
+              <UpgradeIcon width={16} height={16} />
+              Upgrade
+            </Link>
+          </div>
+        ) : null}
 
         <main className="px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       </div>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatINR, formatDate } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
+import { upiMessage } from "@/lib/upi";
 import { AGE_BUCKET, type AgeBucket } from "@/lib/age-bucket";
 import {
   PageHeader,
@@ -30,16 +31,22 @@ type OutstandingRow = {
 export default async function BillingPage() {
   const supabase = createClient();
 
-  // RLS-scoped. Only open balances.
-  const { data } = await supabase
-    .from("outstandings")
-    .select(
-      "id, patient_id, total_amount, amount_paid, nett_due, age_bucket, payment_reminder_sent_at, patient:patient_id(full_name, whatsapp_number), visit:visit_log_id(visit_date, treatment_name_text)",
-    )
-    .gt("nett_due", 0)
-    .order("nett_due", { ascending: false });
+  // RLS-scoped. Only open balances. Clinic pulls the UPI id + name for the
+  // "Request via UPI" deep link.
+  const [{ data }, { data: clinic }] = await Promise.all([
+    supabase
+      .from("outstandings")
+      .select(
+        "id, patient_id, total_amount, amount_paid, nett_due, age_bucket, payment_reminder_sent_at, patient:patient_id(full_name, whatsapp_number), visit:visit_log_id(visit_date, treatment_name_text)",
+      )
+      .gt("nett_due", 0)
+      .order("nett_due", { ascending: false }),
+    supabase.from("clinics").select("upi_id, business_name").single(),
+  ]);
 
   const rows = (data as unknown as OutstandingRow[]) ?? [];
+  const upiId = clinic?.upi_id?.trim() || null;
+  const clinicName = clinic?.business_name ?? "";
 
   const totalOutstanding = rows.reduce((s, r) => s + Number(r.nett_due), 0);
   const overdue30 = rows.reduce(
@@ -63,7 +70,15 @@ export default async function BillingPage() {
           `Namaste ${name} ji, yeh ek gentle reminder hai ki aapka ${formatINR(nettDue)} balance pending hai. Apni convenience se payment kar sakte hain. 🙏`,
         )
       : null;
-    return { r, name, nettDue, remindedWithin7, remindUrl };
+    // Only when both a patient number and the clinic's UPI id are present.
+    const upiUrl =
+      number && upiId
+        ? waLink(
+            number,
+            upiMessage({ name, amount: nettDue, upiId, clinicName }),
+          )
+        : null;
+    return { r, name, nettDue, remindedWithin7, remindUrl, upiUrl };
   });
   type BillingView = (typeof view)[number];
 
@@ -87,6 +102,7 @@ export default async function BillingPage() {
     nettDue,
     remindedWithin7,
     remindUrl,
+    upiUrl,
   }: BillingView) => (
     <tr key={r.id} className="border-b border-border last:border-0">
       <td className="px-4 py-3">
@@ -119,6 +135,7 @@ export default async function BillingPage() {
             patientName: name,
             nettDue,
             remindUrl,
+            upiUrl,
             reminded: remindedWithin7,
           }}
         />
@@ -132,6 +149,7 @@ export default async function BillingPage() {
     nettDue,
     remindedWithin7,
     remindUrl,
+    upiUrl,
   }: BillingView) => (
     <div key={r.id} className="rounded-card border border-border bg-white p-4">
       <div className="flex items-start justify-between gap-3">
@@ -157,6 +175,7 @@ export default async function BillingPage() {
             patientName: name,
             nettDue,
             remindUrl,
+            upiUrl,
             reminded: remindedWithin7,
           }}
         />

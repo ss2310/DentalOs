@@ -135,6 +135,7 @@ export default async function DashboardPage() {
     activityRes,
     patientRes,
     rateCardRes,
+    satisfactionRes,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -221,6 +222,14 @@ export default async function DashboardPage() {
       .select("id, treatment_name")
       .eq("is_active", true)
       .order("treatment_name", { ascending: true }),
+    // Patient satisfaction: answered surveys over the last ~60 days. This month's
+    // rows drive the average + count; any unhandled 1–3 across the window is the
+    // red flag that a complaint still needs a call.
+    supabase
+      .from("survey_responses")
+      .select("score, responded_at, notification:notification_id(status)")
+      .not("responded_at", "is", null)
+      .gte("responded_at", `${addDays(today, -60)}T00:00:00`),
   ]);
 
   // Prefer the logged-in user's own name; fall back to the clinic's doctor
@@ -259,6 +268,28 @@ export default async function DashboardPage() {
   const thinkingRows = (thinkingRes.data as { plan_value: string }[]) ?? [];
   const followUps = thinkingRows.length;
   const followUpValue = thinkingRows.reduce((s, r) => s + Number(r.plan_value), 0);
+
+  // Patient satisfaction (last ~60 days of answered surveys).
+  const surveyRows =
+    (satisfactionRes.data as unknown as {
+      score: number | null;
+      responded_at: string | null;
+      notification: { status: string } | null;
+    }[]) ?? [];
+  const monthScores = surveyRows
+    .filter((r) => (r.responded_at ?? "").slice(0, 7) === today.slice(0, 7))
+    .map((r) => r.score)
+    .filter((n): n is number => n != null);
+  const avgSatisfaction =
+    monthScores.length > 0
+      ? (monthScores.reduce((a, b) => a + b, 0) / monthScores.length).toFixed(1)
+      : null;
+  const unhandledLow = surveyRows.filter(
+    (r) =>
+      r.score != null &&
+      r.score <= 3 &&
+      r.notification?.status !== "acted_on",
+  ).length;
 
   const actions: ActionRow[] = [
     {
@@ -352,6 +383,34 @@ export default async function DashboardPage() {
             tone="success"
           />
         ) : null}
+        <Link
+          href="/reviews"
+          className={`block rounded-card border bg-white p-5 shadow-card transition-colors hover:bg-subtle ${
+            unhandledLow > 0 ? "border-danger/40" : "border-border"
+          }`}
+        >
+          <p className="text-sm font-medium text-text-secondary">
+            Patient Satisfaction
+          </p>
+          <p
+            className={`mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.02em] ${
+              unhandledLow > 0 ? "text-danger" : "text-text-primary"
+            }`}
+          >
+            {avgSatisfaction ? `${avgSatisfaction} ★` : "—"}
+          </p>
+          <p
+            className={`mt-2 text-sm ${
+              unhandledLow > 0 ? "font-medium text-danger" : "text-text-secondary"
+            }`}
+          >
+            {unhandledLow > 0
+              ? `${unhandledLow} unhappy — call now`
+              : `${monthScores.length} response${
+                  monthScores.length === 1 ? "" : "s"
+                } this month`}
+          </p>
+        </Link>
       </StatGrid>
 
       {/* Actions needed */}

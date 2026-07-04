@@ -13,6 +13,7 @@ export type BillingRowActionData = {
   patientName: string;
   nettDue: number;
   remindUrl: string | null;
+  upiUrl: string | null; // wa.me UPI request; null when no number or no clinic UPI id
   reminded: boolean; // reminded within the last 7 days
 };
 
@@ -74,6 +75,22 @@ export function BillingRowActions({ row }: { row: BillingRowActionData }) {
     });
   }
 
+  // A UPI request IS a payment reminder — it shares the 7-day anti-duplicate
+  // flag, so sending one relabels both buttons to "✓ Reminded" (same as Remind).
+  function requestUpi() {
+    if (row.upiUrl) {
+      window.open(row.upiUrl, "_blank", "noopener,noreferrer");
+    }
+    startTransition(async () => {
+      const res = await remindPayment(row.id);
+      if (res.error) {
+        toast(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
@@ -89,17 +106,32 @@ export function BillingRowActions({ row }: { row: BillingRowActionData }) {
         <span className="inline-flex h-11 items-center rounded-button px-3 text-sm font-medium text-success">
           ✓ Reminded
         </span>
-      ) : row.remindUrl ? (
-        <button
-          type="button"
-          onClick={remind}
-          disabled={pending}
-          className={`${btnBase} gap-1.5 border border-success/30 bg-success/5 text-success hover:bg-success/10`}
-        >
-          <WhatsAppIcon width={16} height={16} />
-          Remind
-        </button>
-      ) : null}
+      ) : (
+        <>
+          {row.remindUrl ? (
+            <button
+              type="button"
+              onClick={remind}
+              disabled={pending}
+              className={`${btnBase} gap-1.5 border border-success/30 bg-success/5 text-success hover:bg-success/10`}
+            >
+              <WhatsAppIcon width={16} height={16} />
+              Remind
+            </button>
+          ) : null}
+          {row.upiUrl ? (
+            <button
+              type="button"
+              onClick={requestUpi}
+              disabled={pending}
+              className={`${btnBase} gap-1.5 border border-success/30 bg-success/5 text-success hover:bg-success/10`}
+            >
+              <WhatsAppIcon width={16} height={16} />
+              Request via UPI
+            </button>
+          ) : null}
+        </>
+      )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="Record Payment">
         <div className="space-y-4">
@@ -112,6 +144,25 @@ export function BillingRowActions({ row }: { row: BillingRowActionData }) {
               </span>
             </p>
           </div>
+
+          {/* Request payment via UPI — only when the clinic has set a UPI id. */}
+          {row.upiUrl ? (
+            row.reminded ? (
+              <p className="text-sm font-medium text-success">
+                ✓ Payment link already sent
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={requestUpi}
+                disabled={pending}
+                className={`${btnBase} w-full gap-1.5 border border-success/30 bg-success/5 text-success hover:bg-success/10`}
+              >
+                <WhatsAppIcon width={16} height={16} />
+                Request via UPI
+              </button>
+            )
+          ) : null}
 
           {error ? (
             <p className="rounded-button border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">

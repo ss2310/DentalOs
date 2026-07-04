@@ -113,7 +113,10 @@ export default async function PatientDetailPage({
       .select("id, treatment_name, base_price")
       .eq("is_active", true)
       .order("treatment_name", { ascending: true }),
-    supabase.from("clinics").select("business_name, doctor_name, phone").single(),
+    supabase
+      .from("clinics")
+      .select("business_name, doctor_name, phone, upi_id")
+      .single(),
   ]);
 
   const visits = (visitRows as VisitLog[]) ?? [];
@@ -218,6 +221,7 @@ export default async function PatientDetailPage({
           doctorName={clinicRow?.doctor_name ?? ""}
           clinicName={clinicRow?.business_name ?? ""}
           clinicPhone={clinicRow?.phone ?? ""}
+          upiId={clinicRow?.upi_id?.trim() || null}
           rateCards={rateCards}
           plans={plans}
         />

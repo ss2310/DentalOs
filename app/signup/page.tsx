@@ -20,10 +20,10 @@ export default async function SignupPage() {
             GrowthOS
           </span>
           <h1 className="mt-4 text-2xl font-semibold text-text-primary">
-            Set up your clinic
+            Start your 30-day free trial
           </h1>
           <p className="mt-1 text-[15px] text-text-secondary">
-            Create your account to get started
+            Set up your clinic — no credit card required
           </p>
         </div>
 

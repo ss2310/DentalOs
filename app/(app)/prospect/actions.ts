@@ -12,6 +12,7 @@ import {
 import type { LocalResult } from "@/lib/serp";
 import { buildAuditFindings } from "@/lib/serp/findings";
 import { monthlyAuditCap } from "@/lib/serp/budget";
+import { spendCredits, refundCredit } from "@/lib/credits";
 import {
   buildProspectSummary,
   type ProspectCheckResult,
@@ -22,6 +23,7 @@ export type AuditActionState = {
   error?: string;
   id?: string;
   token?: string;
+  upgrade?: boolean;
 };
 
 // Same bound as clinic scans — a 5×5 audit fires 25 requests, 5 at a time.
@@ -86,6 +88,20 @@ export async function runAudit(
   const points = generateGrid(lat, lng, gridSize, radiusKm);
   const n = points.length;
 
+  // Spend 1 map credit (from the agency user's clinic) before running — one map
+  // credit = one audit, regardless of grid size. Blocks with an upgrade prompt
+  // at 0. Refunded below if the audit can't start or every request fails.
+  const mapSpend = await spendCredits("map", 1, "map_scan");
+  if (!mapSpend.ok) {
+    if ("insufficient" in mapSpend) {
+      return {
+        error: "You're out of map-scan credits. Upgrade to run more audits.",
+        upgrade: true,
+      };
+    }
+    return { error: mapSpend.error };
+  }
+
   // Reserve an audit slot ATOMICALLY before the provider calls (SEC-M1): the
   // RPC serializes per agency user, so concurrent audits can't overrun the
   // monthly cap. It inserts a 'reserved' prospect_audits row now; we finalize
@@ -96,6 +112,8 @@ export async function runAudit(
     { p_cap: cap },
   );
   if (reserveError || !auditId) {
+    // The audit never started — give the map credit back.
+    await refundCredit(mapSpend.ledgerId);
     // Same anti-swallow treatment as runScan: log the real error, return a
     // specific reason (cap vs. missing DB function vs. other).
     if (reserveError) {
@@ -167,6 +185,7 @@ export async function runAudit(
   // real provider error instead of a vague message.
   if (failures === n) {
     await supabase.from("prospect_audits").delete().eq("id", auditId);
+    await refundCredit(mapSpend.ledgerId);
     console.error("All audit requests failed:", lastError);
     const reason = lastError instanceof Error ? lastError.message : "";
     return {

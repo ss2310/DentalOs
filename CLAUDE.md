@@ -118,3 +118,28 @@ consistent. Never write raw hex in components — use tokens.
 - **No component libraries beyond Tailwind.**
 - Prefer **server components**; use client components only where interaction
   demands it.
+
+## Admin panel rules
+
+The internal admin panel at **`/admin`** is for the **platform owner only** — it
+is cross-tenant and must be impossible for any clinic user to reach.
+
+- **Identity:** `profiles.is_super_admin`, checked server-side via the
+  `is_super_admin()` RPC. Use the helpers in `lib/admin/auth.ts`
+  (`isSuperAdmin`, `requireSuperAdmin`, `requireAdminContext`).
+- **Defense in depth:** the middleware gates all `/admin` + `/api/admin` routes,
+  **and** every admin page/action re-verifies independently. Never trust the
+  route guard alone.
+- **404, never 403:** a non-admin hitting any admin route/API gets a **404** so
+  the panel's existence is never advertised. Never return 403 or redirect to
+  login from an admin route.
+- **Service-role client is admin-only:** cross-tenant reads/writes use the
+  service-role client (`createAdminClient`, which BYPASSES RLS) **only inside
+  admin-verified handlers** — always obtain it via `requireAdminContext()`, which
+  re-checks super-admin first. **The service key must never reach the browser**
+  (`lib/supabase/admin.ts` is `import "server-only"`).
+- **Audit everything:** every admin mutation writes an `admin_audit` row
+  (`writeAudit`).
+- **Visually distinct:** the `/admin` shell uses its own layout and a **different
+  accent (indigo)** from the clinic app's teal, so it's always obvious which hat
+  you're wearing. This is the one place the "teal only" rule doesn't apply.

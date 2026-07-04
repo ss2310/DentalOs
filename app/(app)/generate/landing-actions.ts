@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { spendCredits, refundCredit } from "@/lib/credits";
 import { getUserRole, isAdminRole } from "@/lib/roles";
 import { landingPageLimit, planLabel } from "@/lib/plans";
 import {
@@ -62,7 +63,7 @@ export async function publishLandingPage(input: {
   const { data: clinic } = await supabase
     .from("clinics")
     .select(
-      "id, business_name, phone, address, city, area, booking_slug, monthly_credits, credits_used",
+      "id, business_name, phone, address, city, area, booking_slug, content_credits_balance",
     )
     .single();
   if (!clinic) return { error: "No clinic found for this account." };
@@ -146,26 +147,19 @@ export async function publishLandingPage(input: {
     },
   });
 
-  // Reserve the credit ATOMICALLY before publishing (SEC-H1/L1), so two
-  // concurrent publishes can't both slip through on a stale balance. NULL =
-  // not enough credits. Refunded if the insert then fails.
-  const reference = crypto.randomUUID();
-  const { data: reservedLeft, error: reserveError } = await supabase.rpc(
-    "reserve_credits",
-    { p_cost: PUBLISH_COST, p_reason: "landing_publish", p_reference: reference },
-  );
-  if (reserveError) {
-    console.error("Credit reserve failed:", reserveError);
-    return { error: "Could not check your credits. Please try again." };
+  // Spend a content credit ATOMICALLY before publishing (SEC-H1/L1), so two
+  // concurrent publishes can't both slip through on a stale balance.
+  // `insufficient` = not enough credits. Refunded if the insert then fails.
+  const spend = await spendCredits("content", PUBLISH_COST, "generation");
+  if (!spend.ok) {
+    if ("insufficient" in spend) {
+      return {
+        error: `Not enough content credits — publishing needs ${PUBLISH_COST}, you have ${Math.max(clinic.content_credits_balance ?? 0, 0)} left. Upgrade to add more.`,
+      };
+    }
+    return { error: spend.error };
   }
-  if (reservedLeft === null) {
-    const remaining =
-      (clinic.monthly_credits ?? 0) - (clinic.credits_used ?? 0);
-    return {
-      error: `Not enough credits — publishing needs ${PUBLISH_COST}, you have ${Math.max(remaining, 0)} left this month.`,
-    };
-  }
-  const creditsLeft = reservedLeft as number;
+  const creditsLeft = spend.balanceAfter;
 
   const { error: insertErr } = await supabase.from("landing_pages").insert({
     clinic_id: clinic.id,
@@ -179,7 +173,7 @@ export async function publishLandingPage(input: {
     published_at: new Date().toISOString(),
   });
   if (insertErr) {
-    await supabase.rpc("refund_credits", { p_reference: reference });
+    await refundCredit(spend.ledgerId);
     console.error("Failed to publish landing page:", insertErr);
     return { error: "Could not publish the page. Please try again." };
   }

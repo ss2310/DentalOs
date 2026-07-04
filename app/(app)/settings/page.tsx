@@ -5,6 +5,7 @@ import type { StaffMember } from "./staff-manager";
 import type { Clinic } from "./clinic-info-form";
 import type { RateCard } from "./rate-card-manager";
 import type { LandingPageRow } from "./landing-pages-manager";
+import type { BillingInfo, LedgerRow } from "./billing-tab";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +17,18 @@ export default async function SettingsPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ data: clinic }, { data: cards }, { data: pages }, { data: staffRows }] =
-    await Promise.all([
+  const [
+    { data: clinic },
+    { data: cards },
+    { data: pages },
+    { data: staffRows },
+    { data: sub },
+    { data: ledger },
+  ] = await Promise.all([
       supabase
         .from("clinics")
         .select(
-          "business_name, doctor_name, phone, address, city, area, google_review_url, instagram_handle, website_url, booking_slug, default_lat, default_lng",
+          "business_name, doctor_name, phone, address, city, area, google_review_url, instagram_handle, website_url, upi_id, booking_slug, default_lat, default_lng",
         )
         .single(),
       supabase
@@ -43,9 +50,41 @@ export default async function SettingsPage() {
         .select("id, full_name, role")
         .order("role", { ascending: true })
         .order("full_name", { ascending: true }),
+      supabase
+        .from("clinics")
+        .select(
+          "subscription_status, plan_id, trial_ends_at, current_period_end, content_credits_balance, map_credits_balance",
+        )
+        .single(),
+      supabase
+        .from("credit_ledger")
+        .select("id, created_at, kind, delta, reason, balance_after")
+        .order("created_at", { ascending: false })
+        .limit(50),
     ]);
 
   const clinicData = (clinic as (Clinic & { booking_slug: string | null }) | null) ?? null;
+
+  // Resolve the current plan's display name (may be the seeded Free Trial).
+  let planName: string | null = null;
+  if (sub?.plan_id) {
+    const { data: planRow } = await supabase
+      .from("plans")
+      .select("name")
+      .eq("id", sub.plan_id)
+      .maybeSingle();
+    planName = planRow?.name ?? null;
+  }
+
+  const billing: BillingInfo = {
+    subscriptionStatus: sub?.subscription_status ?? null,
+    planName,
+    trialEndsAt: sub?.trial_ends_at ?? null,
+    currentPeriodEnd: sub?.current_period_end ?? null,
+    contentBalance: sub?.content_credits_balance ?? 0,
+    mapBalance: sub?.map_credits_balance ?? 0,
+    ledger: (ledger as LedgerRow[] | null) ?? [],
+  };
 
   return (
     <div>
@@ -58,6 +97,7 @@ export default async function SettingsPage() {
           bookingSlug={clinicData?.booking_slug ?? null}
           staff={(staffRows as StaffMember[]) ?? []}
           currentUserId={user?.id ?? ""}
+          billing={billing}
         />
       </div>
     </div>

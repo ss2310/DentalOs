@@ -11,8 +11,9 @@ import {
 import type { LocalResult } from "@/lib/serp";
 import { monthlyScanCap } from "@/lib/serp/budget";
 import { getUserRole, isAdminRole } from "@/lib/roles";
+import { spendCredits, refundCredit } from "@/lib/credits";
 
-export type RankActionState = { ok?: boolean; error?: string };
+export type RankActionState = { ok?: boolean; error?: string; upgrade?: boolean };
 
 // How many grid points we scan in parallel. Keeps a full 7×7 (49) scan from
 // firing 49 requests at once while still finishing reasonably fast.
@@ -124,6 +125,20 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
   );
   const n = points.length;
 
+  // Spend 1 map credit before running (one map credit = one grid scan, no matter
+  // how many SERP requests the grid fires). Blocks with an upgrade prompt at 0.
+  // Refunded below if the scan can't start or every request fails.
+  const mapSpend = await spendCredits("map", 1, "map_scan", kwId);
+  if (!mapSpend.ok) {
+    if ("insufficient" in mapSpend) {
+      return {
+        error: "You're out of map-scan credits. Upgrade to run more scans.",
+        upgrade: true,
+      };
+    }
+    return { error: mapSpend.error };
+  }
+
   // Reserve a scan slot ATOMICALLY before hitting the provider (SEC-M1): the
   // RPC serializes per clinic, so concurrent scans can't overrun the monthly
   // cap. It inserts a 'reserved' rank_scans row now and returns its id; we
@@ -135,6 +150,8 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
     { p_keyword_id: kwId, p_cap: cap },
   );
   if (reserveError || !scanId) {
+    // The scan never started — give the map credit back.
+    await refundCredit(mapSpend.ledgerId);
     // Never swallow the real reason again: log the full error, and return a
     // SPECIFIC message so this failure class is diagnosable from the UI + logs.
     if (reserveError) {
@@ -212,6 +229,7 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
   // vague message.
   if (failures === n) {
     await supabase.from("rank_scans").delete().eq("id", scanId);
+    await refundCredit(mapSpend.ledgerId);
     console.error("All scan requests failed:", lastError);
     const reason = lastError instanceof Error ? lastError.message : "";
     return {

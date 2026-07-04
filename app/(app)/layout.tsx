@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminRole, type UserRole } from "@/lib/roles";
+import { effectiveStatus, isPastDueStatus } from "@/lib/subscription";
 import { AppShell } from "@/components/app-shell";
 
 export default async function AppLayout({
@@ -20,7 +21,10 @@ export default async function AppLayout({
 
   // RLS returns only the logged-in user's own clinic.
   const [{ data: clinic }, { data: profile }] = await Promise.all([
-    supabase.from("clinics").select("business_name").single(),
+    supabase
+      .from("clinics")
+      .select("business_name, subscription_status, trial_ends_at")
+      .single(),
     supabase
       .from("profiles")
       .select("unread_notification_count, is_agency, role")
@@ -28,12 +32,17 @@ export default async function AppLayout({
       .single(),
   ]);
 
+  const pastDue = isPastDueStatus(
+    effectiveStatus(clinic?.subscription_status, clinic?.trial_ends_at),
+  );
+
   return (
     <AppShell
       clinicName={clinic?.business_name ?? "GrowthOS"}
       unreadCount={profile?.unread_notification_count ?? 0}
       isAgency={profile?.is_agency ?? false}
       isAdmin={isAdminRole(profile?.role as UserRole | undefined)}
+      pastDue={pastDue}
     >
       {children}
     </AppShell>

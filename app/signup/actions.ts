@@ -74,6 +74,21 @@ export async function signUpAction(
 
   const admin = createAdminClient();
 
+  // Trial window: 30 days from signup. Balances start at the Free Trial grant
+  // (50 content / 4 map); the ledger rows below record that grant for history.
+  const now = new Date();
+  const trialEndsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const TRIAL_CONTENT = 50;
+  const TRIAL_MAP = 4;
+
+  // Look up the seeded Free Trial plan (migration 019). Degrade to a null plan_id
+  // if the catalog isn't seeded yet — the trial status + balances still apply.
+  const { data: freeTrial } = await admin
+    .from("plans")
+    .select("id")
+    .eq("name", "Free Trial")
+    .maybeSingle();
+
   // 1. Create the clinic (RLS blocks client inserts, so this uses the
   //    service role — the one legitimate cross-tenant write on signup).
   const { data: clinic, error: clinicError } = await admin
@@ -83,6 +98,13 @@ export async function signUpAction(
       doctor_name: doctorName,
       phone: normalizedPhone,
       city: city || null,
+      subscription_status: "trial",
+      plan_id: freeTrial?.id ?? null,
+      trial_started_at: now.toISOString(),
+      trial_ends_at: trialEndsAt.toISOString(),
+      content_credits_balance: TRIAL_CONTENT,
+      map_credits_balance: TRIAL_MAP,
+      billing_provider: "manual",
     })
     .select("id")
     .single();
@@ -106,7 +128,7 @@ export async function signUpAction(
   //    endpoint cannot. handle_new_user() (migration 014) trusts authz ONLY from
   //    there, so a self-serve signup can't forge an owner role or clinic link.
   //    full_name stays in user_metadata (cosmetic, no authz).
-  const { error: userError } = await admin.auth.admin.createUser({
+  const { data: created, error: userError } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
@@ -129,6 +151,53 @@ export async function signUpAction(
         : "Could not create your account. Please try again.",
     };
   }
+
+  const newUserId = created.user?.id ?? null;
+
+  // Record the trial grant + lifecycle + welcome, all best-effort (never block
+  // onboarding — the account is already usable). Balances are already set on the
+  // clinic row above, so the ledger rows only RECORD the grant, they don't re-add.
+  const { error: ledgerErr } = await admin.from("credit_ledger").insert([
+    {
+      clinic_id: clinic.id,
+      kind: "content",
+      delta: TRIAL_CONTENT,
+      reason: "trial_grant",
+      balance_after: TRIAL_CONTENT,
+      created_by: newUserId,
+    },
+    {
+      clinic_id: clinic.id,
+      kind: "map",
+      delta: TRIAL_MAP,
+      reason: "trial_grant",
+      balance_after: TRIAL_MAP,
+      created_by: newUserId,
+    },
+  ]);
+  if (ledgerErr) console.error("Trial ledger seed failed:", ledgerErr.message);
+
+  const { error: eventErr } = await admin.from("billing_events").insert({
+    clinic_id: clinic.id,
+    event_type: "trial_started",
+    provider: "manual",
+    note: "30-day free trial started",
+    actor: newUserId,
+  });
+  if (eventErr) console.error("Trial billing_event failed:", eventErr.message);
+
+  // Welcome notification. Under the service role auth.uid() is null, so
+  // create_notification's clinic-ownership guard is skipped (it only enforces
+  // when a user is present). Best-effort.
+  const { error: notifErr } = await admin.rpc("create_notification", {
+    p_clinic_id: clinic.id,
+    p_type: "system",
+    p_priority: "routine",
+    p_title: "Welcome to GrowthOS 🎉",
+    p_body: `Your 30-day free trial is live — ${TRIAL_CONTENT} content credits and ${TRIAL_MAP} map scans to start. Explore the dashboard to get going.`,
+    p_action_url: "/dashboard",
+  });
+  if (notifErr) console.error("Welcome notification failed:", notifErr.message);
 
   // 3. Seed the clinic's rate cards.
   const { error: rateCardError } = await admin.from("rate_cards").insert(
