@@ -131,10 +131,35 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
     { p_keyword_id: kwId, p_cap: cap },
   );
   if (reserveError || !scanId) {
-    const capReached = /cap reached/i.test(reserveError?.message ?? "");
+    // Never swallow the real reason again: log the full error, and return a
+    // SPECIFIC message so this failure class is diagnosable from the UI + logs.
+    if (reserveError) {
+      console.error("reserve_rank_scan failed:", {
+        code: reserveError.code,
+        message: reserveError.message,
+        details: reserveError.details,
+      });
+    }
+    const msg = reserveError?.message ?? "";
+    if (/cap reached/i.test(msg)) {
+      return {
+        error: `You've used all ${cap} scans for this month. Credit top-ups are coming once payments go live.`,
+      };
+    }
+    // PGRST202 = the reserve function isn't in the DB (migration 015 not run,
+    // or the PostgREST schema cache is stale). Point at the real fix.
+    if (
+      reserveError?.code === "PGRST202" ||
+      /schema cache|does not exist|find the function/i.test(msg)
+    ) {
+      return {
+        error:
+          "Scans aren't set up on the database yet — run migration 015 (reserve_rank_scan) in Supabase, then retry.",
+      };
+    }
     return {
-      error: capReached
-        ? `You've used all ${cap} scans for this month. Credit top-ups are coming once payments go live.`
+      error: reserveError?.code
+        ? `Could not start the scan (${reserveError.code}). Please try again.`
         : "Could not start the scan. Please try again.",
     };
   }
@@ -152,6 +177,7 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
   // Bounded-concurrency worker pool over the grid points.
   let next = 0;
   let failures = 0;
+  let lastError: unknown = null;
   async function worker() {
     while (next < n) {
       const i = next++;
@@ -165,8 +191,9 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
         });
         gridPoints[i].rank = res.rank;
         cellTops[i] = res.topResults;
-      } catch {
+      } catch (err) {
         failures++;
+        lastError = err; // keep the real provider error to surface below
         gridPoints[i].rank = null;
       }
     }
@@ -176,12 +203,17 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
   );
 
   // Every point failed → don't keep a misleading all-blank scan. Delete the
-  // reservation so it doesn't count against the monthly cap.
+  // reservation so it doesn't count against the monthly cap, and surface the
+  // real provider error (e.g. "Serper request failed (429)") instead of a
+  // vague message.
   if (failures === n) {
     await supabase.from("rank_scans").delete().eq("id", scanId);
+    console.error("All scan requests failed:", lastError);
+    const reason = lastError instanceof Error ? lastError.message : "";
     return {
-      error:
-        "Every scan request failed — check SERP_PROVIDER and the provider's API key.",
+      error: reason
+        ? `Every scan request failed (${reason}). Check SERP_PROVIDER and the provider's API key.`
+        : "Every scan request failed — check SERP_PROVIDER and the provider's API key.",
     };
   }
 

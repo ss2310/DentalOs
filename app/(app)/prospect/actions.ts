@@ -96,10 +96,33 @@ export async function runAudit(
     { p_cap: cap },
   );
   if (reserveError || !auditId) {
-    const capReached = /cap reached/i.test(reserveError?.message ?? "");
+    // Same anti-swallow treatment as runScan: log the real error, return a
+    // specific reason (cap vs. missing DB function vs. other).
+    if (reserveError) {
+      console.error("reserve_prospect_audit failed:", {
+        code: reserveError.code,
+        message: reserveError.message,
+        details: reserveError.details,
+      });
+    }
+    const msg = reserveError?.message ?? "";
+    if (/cap reached/i.test(msg)) {
+      return {
+        error: `You've used all ${cap} audits for this month. Credit top-ups are coming once payments go live.`,
+      };
+    }
+    if (
+      reserveError?.code === "PGRST202" ||
+      /schema cache|does not exist|find the function/i.test(msg)
+    ) {
+      return {
+        error:
+          "Audits aren't set up on the database yet — run migration 015 (reserve_prospect_audit) in Supabase, then retry.",
+      };
+    }
     return {
-      error: capReached
-        ? `You've used all ${cap} audits for this month. Credit top-ups are coming once payments go live.`
+      error: reserveError?.code
+        ? `Could not start the audit (${reserveError.code}). Please try again.`
         : "Could not start the audit. Please try again.",
     };
   }
@@ -114,6 +137,7 @@ export async function runAudit(
 
   let next = 0;
   let failures = 0;
+  let lastError: unknown = null;
   async function worker() {
     while (next < n) {
       const i = next++;
@@ -127,8 +151,9 @@ export async function runAudit(
         });
         gridPoints[i].rank = res.rank;
         cellTops[i] = res.topResults;
-      } catch {
+      } catch (err) {
         failures++;
+        lastError = err; // keep the real provider error to surface below
         gridPoints[i].rank = null;
       }
     }
@@ -138,12 +163,16 @@ export async function runAudit(
   );
 
   // Every point failed → don't keep a misleading all-blank audit. Delete the
-  // reservation so it doesn't count against the monthly cap.
+  // reservation so it doesn't count against the monthly cap, and surface the
+  // real provider error instead of a vague message.
   if (failures === n) {
     await supabase.from("prospect_audits").delete().eq("id", auditId);
+    console.error("All audit requests failed:", lastError);
+    const reason = lastError instanceof Error ? lastError.message : "";
     return {
-      error:
-        "Every request failed — check SERP_PROVIDER and the provider's API key.",
+      error: reason
+        ? `Every request failed (${reason}). Check SERP_PROVIDER and the provider's API key.`
+        : "Every request failed — check SERP_PROVIDER and the provider's API key.",
     };
   }
 

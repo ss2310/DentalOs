@@ -1302,3 +1302,36 @@ generate / scan / publish will error until the migration is applied.
       read the same server data; the action revalidates /pipeline).
 - [ ] Stat cards (Plan Value / Needs Follow-up / Ready to Book) update after a
       Board transition.
+
+## Bugfix — "Could not start the scan" was a swallowed error
+
+### Root cause (diagnosis)
+- Symptom: grid scan fails instantly with "Could not start the scan." Key was
+  valid, not a rate limit — it died at the very first step.
+- Real cause: `runScan` calls `supabase.rpc("reserve_rank_scan", …)` before
+  touching the provider. That function lives in **migration 015**, which had
+  not been applied to the DB, so PostgREST returned **PGRST202 "Could not find
+  the function … in the schema cache."** The old catch treated any non-"cap
+  reached" error as generic and returned "Could not start the scan," hiding it.
+- Confirmed from live logs: the sibling `reserve_credits` (same migration 015)
+  was logging the identical PGRST202 on the generation path.
+- NOT map credits (no such column/concept exists here), NOT a bad key, NOT a
+  missing input. It's a missing DB migration + a swallowed error.
+- Fix on the DB side (config, not code): run `015_atomic_reservations.sql` in
+  Supabase; if it was already run, reload the PostgREST schema cache
+  (`NOTIFY pgrst, 'reload schema';`). Verify with
+  `select proname from pg_proc where proname like 'reserve_%';`.
+
+### Code fix — errors are no longer swallowed
+- [ ] With migration 015 NOT applied, running a scan now shows: "Scans aren't
+      set up on the database yet — run migration 015 (reserve_rank_scan) in
+      Supabase, then retry." (not the vague old message), and the server logs
+      print the full PGRST202 error object.
+- [ ] After applying 015, a scan starts normally and completes.
+- [ ] Hitting the monthly cap still shows the "used all N scans" message.
+- [ ] If every provider request fails, the error now includes the real reason
+      (e.g. "Every scan request failed (Serper request failed (429)) …") and the
+      underlying error is logged.
+- [ ] Prospect audits get the identical treatment: specific reserve-error
+      messages (cap / missing-function / other) + real provider error on total
+      failure, both logged.
