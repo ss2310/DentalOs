@@ -103,7 +103,7 @@ export async function POST(req: Request) {
   const [{ data: post }, { data: clinic }] = await Promise.all([
     supabase
       .from("post_types")
-      .select("id, name, platform, credits_cost, prompt_template")
+      .select("id, name, platform, credits_cost, prompt_template, extra_fields")
       .eq("id", postTypeId)
       .single(),
     supabase
@@ -126,8 +126,38 @@ export async function POST(req: Request) {
   }
 
   const { date: istDate } = nowIST();
-  const extras = body.extras ?? {};
+
+  // SEC-H2: hard caps on free-text so a crafted request can't blow up the
+  // prompt (cost / DoS). Truncate rather than reject so normal input is unharmed.
+  const TOPIC_MAX = 500;
+  const CONTEXT_MAX = 4000;
+  const EXTRA_MAX = 500;
+
+  // SEC-M3: extras are accepted ONLY for keys this post type actually declares,
+  // and never for a reserved built-in variable name. Combined with the merge
+  // order below, user input can never rewrite {{clinic_name}} et al. or the
+  // YMYL brand-safety block.
+  const RESERVED_KEYS = new Set([
+    "clinic_name", "doctor_name", "city", "area", "today",
+    "clinic_phone", "website_url", "year", "tone", "topic", "context",
+  ]);
+  const allowedExtraKeys = new Set(
+    (post.extra_fields?.inputs ?? []).map((i: { name: string }) => i.name),
+  );
+  const rawExtras = body.extras ?? {};
+  const safeExtras: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawExtras)) {
+    if (!allowedExtraKeys.has(k) || RESERVED_KEYS.has(k)) continue; // drop unknown/reserved
+    safeExtras[k] = String(v ?? "").trim().slice(0, EXTRA_MAX);
+  }
+
+  const topic = String(body.topic ?? "").trim().slice(0, TOPIC_MAX);
+  const context = String(body.context ?? "").trim().slice(0, CONTEXT_MAX);
+
+  // Extras FIRST, built-ins LAST: the built-in clinic vars always win, so no
+  // user-supplied extra can override the clinic identity or safety context.
   const vars: Record<string, string> = {
+    ...safeExtras,
     clinic_name: clinic.business_name ?? "our clinic",
     city: clinic.city ?? "",
     area: clinic.area ?? "",
@@ -135,15 +165,12 @@ export async function POST(req: Request) {
     clinic_phone: clinic.phone ?? "",
     website_url: clinic.website_url ?? "",
     tone: String(body.tone ?? "Professional"),
-    topic: String(body.topic ?? "").trim(),
-    context: String(body.context ?? "").trim(),
+    topic,
+    context,
     // Available to every template + the citable block.
     today: formatDate(istDate), // DD MMM YYYY, IST
     year: istDate.slice(0, 4),
   };
-  for (const [k, v] of Object.entries(extras)) {
-    vars[k] = String(v ?? "").trim();
-  }
 
   // AI-Citable Mode applies only to web-crawlable (Website) pages; ignore the
   // flag for GBP / Instagram / WhatsApp / review types even if it's sent.
@@ -196,7 +223,9 @@ export async function POST(req: Request) {
     supabase.rpc("refund_credits", { p_reference: reference });
 
   try {
-    const client = new Anthropic({ apiKey });
+    // SEC-M2: cap wall-clock and retries so a hung/slow model can't run up
+    // billed duration on a serverless invocation.
+    const client = new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
     // Sonnet 4.6, single-shot generation. No thinking config so the full
     // token budget goes to the content itself.
     const message = await client.messages.create({

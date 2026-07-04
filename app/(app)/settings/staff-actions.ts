@@ -64,8 +64,8 @@ export async function addStaff(input: AddStaffInput): Promise<StaffState> {
 
   if (!full_name) return { error: "Name is required." };
   if (!isValidEmail(email)) return { error: "Enter a valid email address." };
-  if (password.length < 6) {
-    return { error: "Password must be at least 6 characters." };
+  if (password.length < 8) {
+    return { error: "Password must be at least 8 characters." };
   }
 
   const admin = createAdminClient();

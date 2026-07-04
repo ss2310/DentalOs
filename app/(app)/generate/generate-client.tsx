@@ -154,6 +154,7 @@ export function GenerateClient({
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder="Type your own…"
+              maxLength={500}
               className={inputClass}
             />
             <button
@@ -410,6 +411,7 @@ export function GenerateClient({
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
                   placeholder={topicCfg.placeholder ?? ""}
+                  maxLength={500}
                   className={inputClass}
                 />
               </div>
@@ -465,6 +467,7 @@ export function GenerateClient({
                         setExtras((x) => ({ ...x, [i.name]: e.target.value }))
                       }
                       placeholder={i.placeholder ?? ""}
+                      maxLength={500}
                       className={areaClass}
                     />
                   ) : (
@@ -475,6 +478,7 @@ export function GenerateClient({
                         setExtras((x) => ({ ...x, [i.name]: e.target.value }))
                       }
                       placeholder={i.placeholder ?? ""}
+                      maxLength={500}
                       className={inputClass}
                     />
                   )}
@@ -539,6 +543,7 @@ export function GenerateClient({
                 value={context}
                 onChange={(e) => setContext(e.target.value)}
                 placeholder="Anything specific to mention — an offer, a doctor's name, timings…"
+                maxLength={4000}
                 className={areaClass}
               />
             </div>

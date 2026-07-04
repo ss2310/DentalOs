@@ -1201,3 +1201,54 @@ generate / scan / publish will error until the migration is applied.
       (`select * from credit_transactions` returns only own-clinic rows).
 - [ ] A reserve/refund only ever moves the CURRENT user's clinic credits
       (the RPC re-derives clinic from `current_clinic_id()`; no clinic_id param).
+
+## Security 016 — input & boundary hardening (app-only, no migration)
+
+### SEC-H2 — input caps on generation
+- [ ] In Generate, the Topic box stops at 500 chars, Extra-context at 4000, and
+      each extra field at 500 (browser won't type past the cap).
+- [ ] Bypass the UI: POST /api/generate with a 50 KB `context` → the server
+      truncates to 4000 before calling Claude (generation still succeeds; no
+      huge bill). Same for an oversized `topic` / extra value.
+- [ ] POST with an `extras` key NOT declared in the post type's
+      `extra_fields.inputs` (e.g. `{"evil":"x"}`) → the key is ignored (not
+      interpolated); generation proceeds normally.
+
+### SEC-M3 — extras can't override system vars
+- [ ] POST with `extras: { "clinic_name": "HACKED", "today": "x" }` → the output
+      still uses the real clinic name / date; the injected values are dropped
+      (reserved keys rejected, and built-ins are merged last).
+- [ ] The YMYL/brand-safety block still appears for a citable Website page even
+      when extras try to supply those variable names.
+
+### SEC-M2 — provider timeouts
+- [ ] A rank scan against a hung provider aborts after ~10s per cell instead of
+      hanging (simulate by pointing SERPER_API_KEY at a black-hole host); the
+      scan returns the "every request failed" path, no indefinite stall.
+- [ ] Generation uses an Anthropic client with `timeout: 60s, maxRetries: 1`
+      (code review — a hung model can't run unbounded billed duration).
+
+### SEC-M5 — server-action role guards
+- [ ] As a **receptionist**, call each action directly (e.g. via devtools /
+      crafted request): `saveContent`, `markPublished`, `deleteContent`,
+      `addKeyword`, `runScan` → each returns "requires an owner or doctor
+      account"; nothing is written. As owner/doctor they still work.
+
+### SEC-H3 — signup abuse + email escaping
+- [ ] Submit the signup form 6+ times quickly from one browser → after the limit
+      you get "Too many signup attempts…"; a normal single signup is unaffected.
+- [ ] Sign up with a clinic name like `<img src=x onerror=alert(1)>` → the
+      welcome email renders it as literal text (escaped), not live markup.
+- [ ] Confirm onboarding is unchanged: a real signup still creates the clinic,
+      owner profile, and seeded rate cards (service-role path).
+
+### SEC-L3 — auth callback open-redirect
+- [ ] Hit `/auth/callback?next=//evil.com` (and `?next=https://evil.com`) → you
+      land on `/dashboard`, never an external host. A normal `?next=/reset-password`
+      still works.
+
+### SEC-L5 — password minimum
+- [ ] Signup / add-staff / reset-password reject passwords under 8 chars (client
+      hint + server rejection). 8+ is accepted.
+- [ ] DASHBOARD: enable leaked-password protection (see handoff note) and confirm
+      a known-breached password (e.g. "password") is rejected on signup.

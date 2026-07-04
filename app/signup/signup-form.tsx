@@ -111,9 +111,9 @@ export function SignupForm() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={6}
+          minLength={8}
           className={inputClass(false)}
-          placeholder="At least 6 characters"
+          placeholder="At least 8 characters"
         />
       </div>
 

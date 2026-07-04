@@ -11,6 +11,7 @@ import {
 } from "@/lib/serp";
 import type { LocalResult } from "@/lib/serp";
 import { monthlyScanCap } from "@/lib/serp/budget";
+import { getUserRole, isAdminRole } from "@/lib/roles";
 
 export type RankActionState = { ok?: boolean; error?: string };
 
@@ -40,6 +41,11 @@ export async function addKeyword(input: {
   grid_size: string;
   radius_km: string;
 }): Promise<RankActionState> {
+  // SEC-M5: rank tracking is an owner/doctor feature; guard the action too.
+  if (!isAdminRole(await getUserRole())) {
+    return { error: "This action requires an owner or doctor account." };
+  }
+
   const keyword = input.keyword.trim();
   const target = input.target_business_name.trim();
   if (!keyword) return { error: "Keyword is required." };
@@ -83,6 +89,10 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
+  // SEC-M5: scans cost the clinic's SERP budget — owner/doctor only.
+  if (!isAdminRole(await getUserRole())) {
+    return { error: "This action requires an owner or doctor account." };
+  }
 
   // RLS scopes this read to the caller's clinic.
   const { data: kw } = await supabase

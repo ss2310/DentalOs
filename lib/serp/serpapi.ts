@@ -39,7 +39,11 @@ export function createSerpApiProvider(): SerpProvider {
       url.searchParams.set("hl", "en");
       url.searchParams.set("api_key", key);
 
-      const res = await fetch(url, { cache: "no-store" });
+      // SEC-M2: bound the call so a hung provider can't stall the scan.
+      const res = await fetch(url, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      });
       if (!res.ok) {
         throw new Error(`SerpApi request failed (${res.status})`);
       }

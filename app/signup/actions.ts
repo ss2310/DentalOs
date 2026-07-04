@@ -1,10 +1,12 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isValidEmail, normalizeIndianPhone } from "@/lib/validation";
 import { sendWelcomeEmail } from "@/lib/email";
+import { rateLimit } from "@/lib/rate-limit";
 
 export type SignupState = { error?: string };
 
@@ -42,8 +44,26 @@ export async function signUpAction(
   if (!isValidEmail(email)) {
     return { error: "Enter a valid email address." };
   }
-  if (password.length < 6) {
-    return { error: "Password must be at least 6 characters." };
+  if (password.length < 8) {
+    return { error: "Password must be at least 8 characters." };
+  }
+
+  // SEC-H3: throttle signup so a script can't mass-mint clinics. Keyed on both
+  // client IP and email (best-effort in-memory; see lib/rate-limit.ts). This is
+  // the only path that creates a credited clinic (service-role onboarding), so
+  // it's the one to protect.
+  const hdrs = headers();
+  const ip =
+    (hdrs.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
+    hdrs.get("x-real-ip") ||
+    "unknown";
+  const HOUR = 60 * 60 * 1000;
+  const ipOk = rateLimit(`signup:ip:${ip}`, 5, HOUR).ok;
+  const emailOk = rateLimit(`signup:email:${email.toLowerCase()}`, 3, HOUR).ok;
+  if (!ipOk || !emailOk) {
+    return {
+      error: "Too many signup attempts. Please wait a while and try again.",
+    };
   }
 
   // Store the normalized 10-digit number (see CLAUDE.md locale rules).

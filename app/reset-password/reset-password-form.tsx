@@ -15,9 +15,9 @@ export function ResetPasswordForm() {
   const [status, setStatus] = useState<"idle" | "saving">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  const tooShort = password.length > 0 && password.length < 6;
+  const tooShort = password.length > 0 && password.length < 8;
   const mismatch = confirm.length > 0 && confirm !== password;
-  const canSubmit = password.length >= 6 && confirm === password;
+  const canSubmit = password.length >= 8 && confirm === password;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -59,11 +59,11 @@ export function ResetPasswordForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className={inputClass}
-          placeholder="At least 6 characters"
+          placeholder="At least 8 characters"
         />
         {tooShort ? (
           <p className="mt-1 text-sm text-danger">
-            Password must be at least 6 characters.
+            Password must be at least 8 characters.
           </p>
         ) : null}
       </div>

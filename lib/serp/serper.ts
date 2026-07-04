@@ -41,6 +41,9 @@ export function createSerperProvider(): SerpProvider {
           hl: "en",
         }),
         cache: "no-store",
+        // SEC-M2: bound the call so a hung provider can't stall the scan (and
+        // run up billed duration). 49 cells × a hang would otherwise pile up.
+        signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) {
         throw new Error(`Serper request failed (${res.status})`);

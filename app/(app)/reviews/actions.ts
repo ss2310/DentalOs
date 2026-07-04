@@ -237,7 +237,8 @@ export async function generateInsightReport(): Promise<InsightState> {
 
   let content: string;
   try {
-    const anthropic = new Anthropic({ apiKey });
+    // SEC-M2: cap wall-clock and retries so a hung model can't run up duration.
+    const anthropic = new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,

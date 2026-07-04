@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getUserRole, isAdminRole } from "@/lib/roles";
 
 export type SaveState = { ok?: boolean; error?: string };
 
@@ -22,6 +23,12 @@ export async function saveContent(input: {
   const content = input.content.trim();
   if (!input.postTypeId || !content) {
     return { error: "Nothing to save." };
+  }
+
+  // SEC-M5: content generation is owner/doctor only. The page hides it from
+  // receptionists; guard the action too so a crafted request can't slip past.
+  if (!isAdminRole(await getUserRole())) {
+    return { error: "This action requires an owner or doctor account." };
   }
 
   const supabase = createClient();
