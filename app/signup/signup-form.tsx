@@ -195,6 +195,12 @@ export function SignupForm({
           Sign in
         </Link>
       </p>
+
+      <p className="text-center text-sm text-text-secondary">
+        <Link href="/tour" className="font-medium text-primary hover:underline">
+          See how it works →
+        </Link>
+      </p>
     </form>
   );
 }

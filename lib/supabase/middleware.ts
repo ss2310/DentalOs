@@ -69,7 +69,13 @@ export async function updateSession(request: NextRequest) {
   // Public routes usable without auth. Everything else requires a session.
   // /auth/callback exchanges the password-reset code (user has no session yet),
   // and /forgot-password is reached while logged out.
-  const publicPaths = ["/", "/signup", "/forgot-password", "/auth/callback"];
+  const publicPaths = [
+    "/",
+    "/signup",
+    "/tour",
+    "/forgot-password",
+    "/auth/callback",
+  ];
   // /audit/<token> is a public prospect report (anon, token-scoped read).
   // /p/<booking_slug>/<slug> is a public hosted landing page (anon read via the
   // get_published_landing_page RPC).
