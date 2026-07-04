@@ -1106,3 +1106,42 @@ AI Overview is a flagged TODO, not built.
 - [ ] A > 5 MB file or > 5000 rows is rejected / capped.
 - [ ] "Exit" (mid-flow) and "Close"/"Import another" (after) reset the wizard.
 - [ ] Multi-tenancy: imported rows appear only for THIS clinic.
+
+## Security 014 — profile privilege-escalation lockdown (migration 014)
+
+Run migration `014_profile_escalation_lockdown.sql` in the SQL Editor first, and
+deploy the paired app change (signup/staff `createUser` now pass role +
+home_clinic_id via `app_metadata`). Ship both together, or new signups become
+receptionists with no clinic.
+
+### SEC-C1 — self-promotion / cross-tenant takeover blocked
+- [ ] Logged in as a **receptionist**, in the browser console run
+      `supabase.from('profiles').update({ role: 'clinic_owner' }).eq('id', '<self>')`
+      → permission denied / 0 rows; `select current_user_role()` still
+      `receptionist`.
+- [ ] Same with `{ home_clinic_id: '<another clinic uuid>' }` → denied;
+      `current_clinic_id()` unchanged (no cross-tenant pivot).
+- [ ] Same with `{ is_agency: true }` → denied.
+- [ ] Positive: `{ full_name: 'New Name' }` on your **own** row succeeds; on
+      someone else's id → 0 rows (blocked by the id = auth.uid() row filter).
+
+### SEC-C2 — signup can't forge authz
+- [ ] Public `supabase.auth.signUp({ email, password, options: { data: { role:
+      'clinic_owner', home_clinic_id: '<victim>' } } })` → the new profile lands
+      as **role receptionist, home_clinic_id NULL** (user_metadata ignored).
+- [ ] Real owner signup through the app → profile is **clinic_owner**, linked to
+      the newly-created clinic (proves the app_metadata path works).
+- [ ] Settings → Staff → add a "doctor" and a "receptionist" → each profile gets
+      that role in the caller's clinic (staff app_metadata path works).
+
+### SEC-L4 — cross-clinic notification blocked
+- [ ] Authenticated direct
+      `supabase.from('notifications').insert({ clinic_id: '<own>', target_user_id:
+      '<user in another clinic>', ... })` → denied; own-clinic target or
+      `target_user_id: null` → allowed.
+- [ ] In-app notifications (bell) still fire, increment, and mark-read normally
+      (RPC path, unaffected by the tightened insert policy).
+
+### Regression
+- [ ] `tsc --noEmit` and `next lint` clean after the app edits.
+- [ ] Notification counter increments/decrements; mark-read & mark-all-read work.

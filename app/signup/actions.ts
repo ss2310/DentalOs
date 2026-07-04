@@ -81,12 +81,19 @@ export async function signUpAction(
   //    launch, remove this flag (and switch to a client signUp flow that
   //    sends the verification email); flipping the dashboard toggle alone is
   //    not enough for admin-created users.
+  //    SECURITY: role + clinic linkage go in app_metadata (raw_app_meta_data),
+  //    which only the service-role admin API can set — the public GoTrue signup
+  //    endpoint cannot. handle_new_user() (migration 014) trusts authz ONLY from
+  //    there, so a self-serve signup can't forge an owner role or clinic link.
+  //    full_name stays in user_metadata (cosmetic, no authz).
   const { error: userError } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
     user_metadata: {
       full_name: doctorName,
+    },
+    app_metadata: {
       role: "clinic_owner",
       home_clinic_id: clinic.id,
     },

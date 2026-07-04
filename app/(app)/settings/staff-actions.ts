@@ -69,12 +69,17 @@ export async function addStaff(input: AddStaffInput): Promise<StaffState> {
   }
 
   const admin = createAdminClient();
+  // SECURITY: role + clinic linkage go in app_metadata, which only the
+  // service-role admin API can set. handle_new_user() (migration 014) reads
+  // authz from there, never from user_metadata — so these can't be forged.
   const { error } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
     user_metadata: {
       full_name,
+    },
+    app_metadata: {
       role,
       home_clinic_id: ctx.clinicId,
     },
