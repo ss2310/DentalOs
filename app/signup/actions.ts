@@ -75,6 +75,22 @@ export async function signUpAction(
 
   const admin = createAdminClient();
 
+  // Data integrity: one clinic per phone number. Reject a number already on file
+  // (checked with the service role since clinics is RLS-locked). This is the
+  // friendly-error guard; the unique index in migration 029 is the hard backstop
+  // against a race.
+  const { data: phoneTaken } = await admin
+    .from("clinics")
+    .select("id")
+    .eq("phone", normalizedPhone)
+    .limit(1);
+  if (phoneTaken && phoneTaken.length > 0) {
+    return {
+      error:
+        "This mobile number is already registered to a clinic. Use a different number, or sign in to your existing account.",
+    };
+  }
+
   // Vertical: honored ONLY when the multi-vertical flag is on AND the submitted
   // slug is a real, active vertical — otherwise omitted so the clinic takes the
   // DB default 'dental'. This is the one place a NEW clinic's vertical is set
@@ -174,6 +190,37 @@ export async function signUpAction(
   }
 
   const newUserId = created.user?.id ?? null;
+
+  // Deterministically set the owner's role + clinic link. The handle_new_user
+  // trigger (migration 014) normally reads these from app_metadata, but GoTrue
+  // can persist custom app_metadata in a step AFTER the auth-row insert the
+  // trigger fires on — intermittently leaving the owner as the default
+  // 'receptionist' with no clinic. Setting it explicitly here (service role
+  // bypasses the profiles column-lock) makes onboarding deterministic. Idempotent:
+  // when the trigger already got it right, this writes the same values.
+  if (newUserId) {
+    const { error: profErr } = await admin
+      .from("profiles")
+      .upsert(
+        {
+          id: newUserId,
+          full_name: doctorName,
+          role: "clinic_owner",
+          home_clinic_id: clinic.id,
+        },
+        { onConflict: "id" },
+      );
+    if (profErr) {
+      // Without the owner role + clinic link the account is unusable — roll back
+      // the half-created user + clinic rather than strand a broken login.
+      await admin.auth.admin.deleteUser(newUserId);
+      await admin.from("clinics").delete().eq("id", clinic.id);
+      console.error("Owner profile setup failed:", profErr.message);
+      return {
+        error: "Could not finish setting up your account. Please try again.",
+      };
+    }
+  }
 
   // Record the trial grant + lifecycle + welcome, all best-effort (never block
   // onboarding — the account is already usable). Balances are already set on the
