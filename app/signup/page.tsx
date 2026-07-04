@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { multiVerticalEnabled } from "@/lib/multi-vertical-access";
 import { SignupForm } from "./signup-form";
 
 export default async function SignupPage() {
@@ -10,6 +12,20 @@ export default async function SignupPage() {
 
   if (user) {
     redirect("/dashboard");
+  }
+
+  // Multi-vertical onboarding: only when the flag is on do we offer a vertical
+  // picker. The visitor is unauthenticated, and `verticals` is RLS-readable only
+  // to authenticated users, so we read the (non-sensitive) active list with the
+  // service-role client. Off ⇒ null ⇒ no dropdown, new clinics default to dental.
+  let verticals: { id: string; display_name: string }[] | null = null;
+  if (multiVerticalEnabled()) {
+    const { data } = await createAdminClient()
+      .from("verticals")
+      .select("id, display_name")
+      .eq("is_active", true)
+      .order("display_name", { ascending: true });
+    verticals = data ?? [];
   }
 
   return (
@@ -28,7 +44,7 @@ export default async function SignupPage() {
         </div>
 
         <div className="rounded-card border border-border bg-white p-6 sm:p-8">
-          <SignupForm />
+          <SignupForm verticals={verticals} />
         </div>
       </div>
     </main>

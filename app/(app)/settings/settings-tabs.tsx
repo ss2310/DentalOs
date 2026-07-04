@@ -10,8 +10,29 @@ import {
 import { StaffManager, type StaffMember } from "./staff-manager";
 import { DataMigration } from "./data-migration";
 import { BillingTab, type BillingInfo } from "./billing-tab";
+import { VoiceNotesSettings } from "./voice-notes-settings";
+import { VerticalSelector } from "./vertical-selector";
 
-type Tab = "clinic" | "rates" | "landing" | "staff" | "billing" | "migration";
+export type VerticalSettingsInfo = {
+  enabled: boolean;
+  current: string;
+  options: { id: string; display_name: string }[];
+};
+
+type Tab =
+  | "clinic"
+  | "rates"
+  | "landing"
+  | "staff"
+  | "billing"
+  | "migration"
+  | "voice";
+
+export type VoiceNotesSettingsInfo = {
+  enabled: boolean;
+  globalEnabled: boolean;
+  dailyCap: number;
+};
 
 export function SettingsTabs({
   clinic,
@@ -21,6 +42,8 @@ export function SettingsTabs({
   staff,
   currentUserId,
   billing,
+  voiceNotes,
+  vertical,
 }: {
   clinic: Clinic;
   rateCards: RateCard[];
@@ -29,6 +52,8 @@ export function SettingsTabs({
   staff: StaffMember[];
   currentUserId: string;
   billing: BillingInfo;
+  voiceNotes: VoiceNotesSettingsInfo;
+  vertical: VerticalSettingsInfo;
 }) {
   const [tab, setTab] = useState<Tab>("clinic");
 
@@ -60,11 +85,22 @@ export function SettingsTabs({
         <button type="button" className={tabClass("migration")} onClick={() => setTab("migration")}>
           Data Migration
         </button>
+        <button type="button" className={tabClass("voice")} onClick={() => setTab("voice")}>
+          Voice Notes
+        </button>
       </div>
 
       <div className="mt-6">
         {tab === "clinic" ? (
-          <ClinicInfoForm clinic={clinic} />
+          <>
+            {vertical.enabled ? (
+              <VerticalSelector
+                current={vertical.current}
+                options={vertical.options}
+              />
+            ) : null}
+            <ClinicInfoForm clinic={clinic} />
+          </>
         ) : tab === "rates" ? (
           <RateCardManager rateCards={rateCards} />
         ) : tab === "landing" ? (
@@ -73,8 +109,14 @@ export function SettingsTabs({
           <StaffManager staff={staff} currentUserId={currentUserId} />
         ) : tab === "billing" ? (
           <BillingTab info={billing} />
-        ) : (
+        ) : tab === "migration" ? (
           <DataMigration />
+        ) : (
+          <VoiceNotesSettings
+            enabled={voiceNotes.enabled}
+            globalEnabled={voiceNotes.globalEnabled}
+            dailyCap={voiceNotes.dailyCap}
+          />
         )}
       </div>
     </div>

@@ -28,14 +28,25 @@ import {
   ToothIcon,
   AiVisibilityIcon,
   UpgradeIcon,
+  ShieldIcon,
+  MicIcon,
 } from "@/components/icons";
 import { Toaster } from "@/components/toast";
 import { HowItWorks } from "@/components/how-it-works";
 import { HelpChat } from "@/components/help-chat";
+import { VoiceNoteButton } from "@/components/voice-note-button";
 import { signOutAction } from "@/app/actions";
 
 type IconType = (props: SVGProps<SVGSVGElement>) => JSX.Element;
-type NavLeaf = { label: string; href: string; Icon: IconType; adminOnly?: boolean };
+// `flag` gates a leaf behind a per-clinic feature flag (currently only voice
+// notes). When set, the item shows only if the matching prop is true.
+type NavLeaf = {
+  label: string;
+  href: string;
+  Icon: IconType;
+  adminOnly?: boolean;
+  flag?: "voiceNotes";
+};
 type NavGroup = { label: string; items: NavLeaf[]; adminOnly?: boolean };
 type NavEntry = NavLeaf | NavGroup;
 
@@ -59,6 +70,7 @@ const NAV: NavEntry[] = [
     items: [
       { label: "Appointments", href: "/appointments", Icon: CalendarIcon },
       { label: "Patients", href: "/patients", Icon: PatientsIcon },
+      { label: "Notes", href: "/notes", Icon: MicIcon, flag: "voiceNotes" },
     ],
   },
   {
@@ -106,14 +118,18 @@ export function AppShell({
   unreadCount = 0,
   isAgency = false,
   isAdmin = false,
+  isSuperAdmin = false,
   pastDue = false,
+  voiceNotes = false,
   children,
 }: {
   clinicName: string;
   unreadCount?: number;
   isAgency?: boolean;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
   pastDue?: boolean;
+  voiceNotes?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -129,18 +145,31 @@ export function AppShell({
       ]
     : NAV;
 
+  // A leaf gated by a feature flag shows only when that flag is on for the clinic.
+  const flagAllows = (leaf: NavLeaf) =>
+    !leaf.flag || (leaf.flag === "voiceNotes" && voiceNotes);
+
   // Receptionists get the front-desk subset; owner/doctor (isAdmin) see all.
-  // Drop admin-only leaves, and any group that's admin-only or left empty.
+  // Drop admin-only leaves, flag-gated leaves that are off, and any group that's
+  // admin-only or left empty.
   const visibleNav: NavEntry[] = nav
     .map((entry) => {
       if (isGroup(entry)) {
         if (entry.adminOnly && !isAdmin) return null;
-        const items = entry.items.filter((i) => isAdmin || !i.adminOnly);
+        const items = entry.items.filter(
+          (i) => (isAdmin || !i.adminOnly) && flagAllows(i),
+        );
         return items.length ? { ...entry, items } : null;
       }
-      return isAdmin || !entry.adminOnly ? entry : null;
+      return (isAdmin || !entry.adminOnly) && flagAllows(entry) ? entry : null;
     })
     .filter((e): e is NavEntry => e !== null);
+  // The platform-owner entry — a flat, pinned item shown ONLY to super admins
+  // (gated by is_super_admin, not by clinic role). Absolute /admin href so it
+  // never resolves relative to the current page.
+  const finalNav: NavEntry[] = isSuperAdmin
+    ? [...visibleNav, { label: "Admin", href: "/admin", Icon: ShieldIcon }]
+    : visibleNav;
   // Explicit expand/collapse overrides, keyed by group label. When a group has
   // no entry here it defaults to open iff it contains the current page.
   const [openState, setOpenState] = useState<Record<string, boolean>>({});
@@ -152,7 +181,7 @@ export function AppShell({
 
   const navContent = (onNavigate: () => void) => (
     <nav className="flex flex-col gap-1">
-      {visibleNav.map((entry) => {
+      {finalNav.map((entry) => {
         if (!isGroup(entry)) {
           const active = isActive(entry.href);
           return (
@@ -282,6 +311,9 @@ export function AppShell({
           </div>
 
           <div className="flex items-center gap-1">
+            {voiceNotes ? (
+              <VoiceNoteButton patientId={null} variant="icon" reviewInline />
+            ) : null}
             <Link
               href="/upgrade"
               className="flex h-11 items-center gap-2 rounded-button px-3 text-sm font-medium text-primary hover:bg-primary/5"

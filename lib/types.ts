@@ -77,6 +77,59 @@ export type PatientOption = {
   phone: string | null;
 };
 
+// ---- Voice notes (migration 023) + extraction agent (migration 024) ----
+export type ClinicNoteStatus =
+  | "processing"
+  | "pending_review"
+  | "confirmed"
+  | "failed";
+
+// Mirrors the recall_type enum in 001_init.sql.
+export const RECALL_TYPES = [
+  "general_checkup",
+  "cleaning",
+  "follow_up",
+  "ortho_adjustment",
+] as const;
+export type RecallType = (typeof RECALL_TYPES)[number];
+
+// The staged, human-editable proposal the extraction agent produces. Held on
+// clinic_notes.extraction until Confirm materializes it into followup_tasks /
+// recalls. Client-safe (no server-only imports) so the note card can render it.
+export type NoteExtraction = {
+  cleaned_note: string;
+  tags: string[];
+  followups: { description: string; due_date: string | null }[];
+  recall: { recall_type: RecallType; due_date: string } | null;
+  // A proposed appointment booking. date = YYYY-MM-DD, time = HH:MM (24h).
+  appointment: { date: string; time: string; reason: string | null } | null;
+  review_requested: boolean;
+};
+
+export type ClinicNote = {
+  id: string;
+  patient_id: string | null;
+  raw_transcript: string | null;
+  note_text: string | null;
+  tags: string[];
+  status: ClinicNoteStatus;
+  extraction: NoteExtraction | null;
+  audio_path: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type FollowupTask = {
+  id: string;
+  note_id: string | null;
+  patient_id: string | null;
+  description: string;
+  due_date: string | null;
+  status: "open" | "done";
+  created_at: string;
+};
+
 // numeric columns arrive from Supabase as strings.
 export type RankKeyword = {
   id: string;

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isValidEmail, normalizeIndianPhone } from "@/lib/validation";
 import { sendWelcomeEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
+import { multiVerticalEnabled } from "@/lib/multi-vertical-access";
 
 export type SignupState = { error?: string };
 
@@ -74,6 +75,24 @@ export async function signUpAction(
 
   const admin = createAdminClient();
 
+  // Vertical: honored ONLY when the multi-vertical flag is on AND the submitted
+  // slug is a real, active vertical — otherwise omitted so the clinic takes the
+  // DB default 'dental'. This is the one place a NEW clinic's vertical is set
+  // (service role bypasses the clinics column-lock).
+  let vertical: string | null = null;
+  if (multiVerticalEnabled()) {
+    const raw = String(formData.get("vertical") ?? "").trim();
+    if (raw) {
+      const { data: v } = await admin
+        .from("verticals")
+        .select("id")
+        .eq("id", raw)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (v) vertical = v.id;
+    }
+  }
+
   // Trial window: 30 days from signup. Balances start at the Free Trial grant
   // (50 content / 4 map); the ledger rows below record that grant for history.
   const now = new Date();
@@ -105,6 +124,8 @@ export async function signUpAction(
       content_credits_balance: TRIAL_CONTENT,
       map_credits_balance: TRIAL_MAP,
       billing_provider: "manual",
+      // Omitted when null → DB default 'dental' (today's behavior).
+      ...(vertical ? { vertical } : {}),
     })
     .select("id")
     .single();

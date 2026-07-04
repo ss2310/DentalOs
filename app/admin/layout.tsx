@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireSuperAdmin } from "@/lib/admin/auth";
+import { multiVerticalEnabled } from "@/lib/multi-vertical-access";
 import { AdminNav } from "./admin-nav";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export default async function AdminLayout({
           </span>
         </Link>
         <div className="flex flex-wrap items-center gap-3">
-          <AdminNav />
+          <AdminNav showVerticals={multiVerticalEnabled()} />
           <Link
             href="/dashboard"
             className="text-sm text-white/60 hover:text-white"

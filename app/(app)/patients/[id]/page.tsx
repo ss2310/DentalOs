@@ -10,7 +10,9 @@ import {
   humanizeRecallType,
   type RecallStatus,
 } from "@/lib/recall-status";
-import type { Patient, VisitLog, Recall } from "@/lib/types";
+import type { Patient, VisitLog, Recall, ClinicNote } from "@/lib/types";
+import { voiceNotesEnabledForClinic } from "@/lib/voice-notes-access";
+import { VoiceNotesPanel } from "@/components/voice-notes-panel";
 import { EditPatientButton } from "./edit-patient-button";
 import { TreatmentPlans, type SavedPlan } from "./treatment-plans";
 
@@ -77,6 +79,8 @@ export default async function PatientDetailPage({
     { data: planRows },
     { data: rateCardRows },
     { data: clinicRow },
+    { data: noteRows },
+    { data: followupRows },
   ] = await Promise.all([
     supabase
       .from("visit_logs")
@@ -115,8 +119,21 @@ export default async function PatientDetailPage({
       .order("treatment_name", { ascending: true }),
     supabase
       .from("clinics")
-      .select("business_name, doctor_name, phone, upi_id")
+      .select("business_name, doctor_name, phone, upi_id, feature_flags")
       .single(),
+    supabase
+      .from("clinic_notes")
+      .select(
+        "id, patient_id, raw_transcript, note_text, tags, status, extraction, created_at, updated_at",
+      )
+      .eq("patient_id", params.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("followup_tasks")
+      .select("id, description, due_date, status, created_at")
+      .eq("patient_id", params.id)
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false }),
   ]);
 
   const visits = (visitRows as VisitLog[]) ?? [];
@@ -127,6 +144,18 @@ export default async function PatientDetailPage({
   const rateCards =
     (rateCardRows as { id: string; treatment_name: string; base_price: string }[]) ??
     [];
+  const voiceEnabled = voiceNotesEnabledForClinic(
+    (clinicRow as { feature_flags?: Record<string, unknown> } | null)?.feature_flags,
+  );
+  const notes = (noteRows as unknown as ClinicNote[]) ?? [];
+  const followups =
+    (followupRows as {
+      id: string;
+      description: string;
+      due_date: string | null;
+      status: string;
+      created_at: string;
+    }[]) ?? [];
 
   const age = calcAge(patient.date_of_birth);
   const whatsapp = patient.whatsapp_number ?? patient.phone;
@@ -211,6 +240,50 @@ export default async function PatientDetailPage({
           </p>
         </div>
       </div>
+
+      {/* Voice Notes */}
+      {voiceEnabled ? (
+        <div className="mt-8">
+          <VoiceNotesPanel patientId={patient.id} initialNotes={notes} />
+        </div>
+      ) : null}
+
+      {/* Follow-ups (from confirmed voice notes) */}
+      {voiceEnabled ? (
+        <div className="mt-8">
+          <SectionHeader>Follow-ups</SectionHeader>
+          {followups.length === 0 ? (
+            <EmptyCard text="No follow-up tasks yet. Confirm a voice note to create one." />
+          ) : (
+            <div className="space-y-3">
+              {followups.map((f) => (
+                <div
+                  key={f.id}
+                  className="flex items-center justify-between gap-3 rounded-card border border-border bg-white p-4"
+                >
+                  <div>
+                    <p className="font-medium text-text-primary">{f.description}</p>
+                    {f.due_date ? (
+                      <p className="mt-0.5 text-sm text-text-secondary">
+                        Due: {formatDate(f.due_date)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span
+                    className={`rounded-pill px-2.5 py-1 text-xs font-medium ${
+                      f.status === "done"
+                        ? "bg-success/10 text-success"
+                        : "bg-warning/10 text-warning"
+                    }`}
+                  >
+                    {f.status === "done" ? "Done" : "Open"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* Treatment Plan */}
       <div className="mt-8">

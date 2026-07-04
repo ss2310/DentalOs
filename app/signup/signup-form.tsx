@@ -17,7 +17,13 @@ const errInputClass = "border-danger focus:border-danger focus:ring-danger/20";
 const labelClass = "mb-1.5 block text-sm font-medium text-text-primary";
 const fieldErrClass = "mt-1 text-sm text-danger";
 
-export function SignupForm() {
+export function SignupForm({
+  verticals = null,
+}: {
+  // Non-null only when ENABLE_MULTI_VERTICAL is on (the page decides). Null ⇒ no
+  // vertical dropdown, exactly as production looks today.
+  verticals?: { id: string; display_name: string }[] | null;
+}) {
   const [state, formAction] = useFormState(signUpAction, initialState);
 
   const [email, setEmail] = useState("");
@@ -80,6 +86,28 @@ export function SignupForm() {
           placeholder="Dr. Priya Sharma"
         />
       </div>
+
+      {verticals && verticals.length > 0 ? (
+        <div>
+          <label htmlFor="vertical" className={labelClass}>
+            Clinic type
+          </label>
+          <select
+            id="vertical"
+            name="vertical"
+            defaultValue={
+              verticals.some((v) => v.id === "dental") ? "dental" : verticals[0].id
+            }
+            className={`${baseInputClass} ${okInputClass} bg-white`}
+          >
+            {verticals.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.display_name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       <div>
         <label htmlFor="email" className={labelClass}>

@@ -104,6 +104,14 @@ type ActivityRow = {
   patient: { full_name: string } | null;
 };
 
+type FollowupRow = {
+  id: string;
+  description: string;
+  due_date: string | null;
+  patient_id: string | null;
+  patient: { full_name: string } | null;
+};
+
 export default async function DashboardPage() {
   const supabase = createClient();
   const {
@@ -136,6 +144,7 @@ export default async function DashboardPage() {
     patientRes,
     rateCardRes,
     satisfactionRes,
+    followupRes,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -230,6 +239,18 @@ export default async function DashboardPage() {
       .select("score, responded_at, notification:notification_id(status)")
       .not("responded_at", "is", null)
       .gte("responded_at", `${addDays(today, -60)}T00:00:00`),
+    // Open follow-up tasks that are due (materialized from confirmed voice
+    // notes). Surfaced in the morning briefing so this is the ONE place staff
+    // act on them — there's no separate follow-ups page to duplicate.
+    supabase
+      .from("followup_tasks")
+      .select(
+        "id, description, due_date, patient_id, patient:patient_id(full_name)",
+      )
+      .eq("status", "open")
+      .or(`due_date.lte.${today},due_date.is.null`)
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .limit(50),
   ]);
 
   // Prefer the logged-in user's own name; fall back to the clinic's doctor
@@ -338,6 +359,18 @@ export default async function DashboardPage() {
     },
   ];
 
+  const followupTasks = (followupRes.data as unknown as FollowupRow[]) ?? [];
+  const followupsDue = followupTasks.length;
+  if (followupsDue > 0) {
+    actions.push({
+      emoji: "📝",
+      count: followupsDue,
+      text: `${followupsDue} follow-up${followupsDue === 1 ? "" : "s"} due`,
+      href: "/dashboard#followups",
+      color: "#0D9488",
+    });
+  }
+
   const schedule = (scheduleRes.data as unknown as ScheduleRow[]) ?? [];
   const activity = (activityRes.data as unknown as ActivityRow[]) ?? [];
 
@@ -420,6 +453,54 @@ export default async function DashboardPage() {
       <div className="mt-3">
         <ActionsNeeded rows={actions} />
       </div>
+
+      {/* Follow-ups due — materialized from confirmed voice notes. Only shown
+          when there's something to act on, so non-voice clinics see nothing. */}
+      {followupsDue > 0 ? (
+        <div id="followups" className="mt-8 scroll-mt-20">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
+              Follow-ups Due
+            </h2>
+            <Link
+              href="/notes"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              All notes →
+            </Link>
+          </div>
+          <div className="mt-3 rounded-card border border-border bg-white">
+            {followupTasks.slice(0, 6).map((f, i) => {
+              const overdue = Boolean(f.due_date && f.due_date < today);
+              return (
+                <Link
+                  key={f.id}
+                  href={f.patient_id ? `/patients/${f.patient_id}` : "/notes"}
+                  className={`flex items-center gap-3 px-4 py-3 hover:bg-subtle ${
+                    i > 0 ? "border-t border-border" : ""
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] text-text-primary">
+                      {f.description}
+                    </p>
+                    <p className="truncate text-sm text-text-secondary">
+                      {f.patient?.full_name ?? "General note"}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 text-sm ${
+                      overdue ? "font-medium text-danger" : "text-text-secondary"
+                    }`}
+                  >
+                    {f.due_date ? formatDate(f.due_date) : "No date"}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Mini schedule */}

@@ -205,6 +205,15 @@ export function UpgradeIcon(p: IconProps) {
   );
 }
 
+// Shield — the super-admin-only "Admin" sidebar entry.
+export function ShieldIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+    </Base>
+  );
+}
+
 export function MapPinIcon(p: IconProps) {
   return (
     <Base {...p}>
@@ -251,6 +260,16 @@ export function SwordsIcon(p: IconProps) {
       <path d="m13 19 6-6M16 16l4 4M19 21l2-2" />
       <path d="M14.5 6.5 18 3h3v3l-3.5 3.5" />
       <path d="m5 14 4 4M7 17l-3 3M3 19l2 2" />
+    </Base>
+  );
+}
+
+// Microphone — the Voice Notes recorder trigger.
+export function MicIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21M8.5 21h7" />
     </Base>
   );
 }

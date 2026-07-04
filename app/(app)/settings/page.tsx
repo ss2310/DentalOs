@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/roles";
+import { flagOn } from "@/lib/admin/feature-flags";
+import {
+  voiceNotesGloballyEnabled,
+  voiceNotesDailyCap,
+} from "@/lib/voice-notes-access";
+import { multiVerticalEnabled } from "@/lib/multi-vertical-access";
 import { SettingsTabs } from "./settings-tabs";
 import type { StaffMember } from "./staff-manager";
 import type { Clinic } from "./clinic-info-form";
@@ -28,7 +34,7 @@ export default async function SettingsPage() {
       supabase
         .from("clinics")
         .select(
-          "business_name, doctor_name, phone, address, city, area, google_review_url, instagram_handle, website_url, upi_id, booking_slug, default_lat, default_lng",
+          "business_name, doctor_name, phone, address, city, area, google_review_url, instagram_handle, website_url, upi_id, booking_slug, default_lat, default_lng, feature_flags",
         )
         .single(),
       supabase
@@ -65,6 +71,43 @@ export default async function SettingsPage() {
 
   const clinicData = (clinic as (Clinic & { booking_slug: string | null }) | null) ?? null;
 
+  const voiceNotesInfo = {
+    enabled: flagOn(
+      (clinic as { feature_flags?: Record<string, unknown> } | null)
+        ?.feature_flags,
+      "voice_notes",
+    ),
+    globalEnabled: voiceNotesGloballyEnabled(),
+    dailyCap: voiceNotesDailyCap(),
+  };
+
+  // Multi-vertical picker — only fetched/shown when the flag is on, so production
+  // (flag off) issues no extra queries and renders no vertical UI. Kept in a
+  // separate query from the main clinic select so it can never disturb the
+  // existing Clinic Info form.
+  let verticalInfo = {
+    enabled: false,
+    current: "dental",
+    options: [] as { id: string; display_name: string }[],
+  };
+  if (multiVerticalEnabled()) {
+    const [vRow, vOpts] = await Promise.all([
+      supabase.from("clinics").select("vertical").single(),
+      supabase
+        .from("verticals")
+        .select("id, display_name")
+        .eq("is_active", true)
+        .order("display_name", { ascending: true }),
+    ]);
+    verticalInfo = {
+      enabled: true,
+      current:
+        (vRow.data as { vertical?: string | null } | null)?.vertical ?? "dental",
+      options:
+        (vOpts.data as { id: string; display_name: string }[] | null) ?? [],
+    };
+  }
+
   // Resolve the current plan's display name (may be the seeded Free Trial).
   let planName: string | null = null;
   if (sub?.plan_id) {
@@ -98,6 +141,8 @@ export default async function SettingsPage() {
           staff={(staffRows as StaffMember[]) ?? []}
           currentUserId={user?.id ?? ""}
           billing={billing}
+          voiceNotes={voiceNotesInfo}
+          vertical={verticalInfo}
         />
       </div>
     </div>

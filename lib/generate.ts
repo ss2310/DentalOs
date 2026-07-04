@@ -33,6 +33,9 @@ export type PostType = {
   // Which topic_suggestions bank feeds this type's Topic dropdown (migration
   // 012). null / undefined = no suggestions (free-text topic only).
   topic_bank?: string | null;
+  // Vertical this type is scoped to (migration 026). null/undefined = applies to
+  // all verticals. Resolved via lib/vertical → resolveForVertical.
+  vertical?: string | null;
 };
 
 export const TONES = ["Professional", "Friendly", "Warm"] as const;

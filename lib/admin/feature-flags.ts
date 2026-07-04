@@ -10,7 +10,8 @@ export type FeatureFlagKey =
   | "prospecting"
   | "upi_payments"
   | "insight_reports"
-  | "map_rank";
+  | "map_rank"
+  | "voice_notes";
 
 export const FEATURE_FLAGS: {
   key: FeatureFlagKey;
@@ -23,6 +24,7 @@ export const FEATURE_FLAGS: {
   { key: "upi_payments", label: "UPI Payment Links", help: "UPI payment requests on billing." },
   { key: "insight_reports", label: "Insight Reports", help: "Monthly AI insight report." },
   { key: "map_rank", label: "Map Rank Tracker", help: "Google Maps grid rank scans." },
+  { key: "voice_notes", label: "Voice Notes", help: "In-app voice notes on patient profiles." },
 ];
 
 export const FEATURE_FLAG_KEYS = new Set<string>(FEATURE_FLAGS.map((f) => f.key));

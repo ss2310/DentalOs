@@ -11,6 +11,11 @@ import {
   extractWhatsAppMessage,
   SCHEMA_TYPES,
 } from "@/lib/generate";
+import {
+  resolveForVertical,
+  verticalDirective,
+  DEFAULT_VERTICAL,
+} from "@/lib/vertical";
 
 // The Anthropic SDK requires the Node runtime (not Edge). The API key is read
 // from ANTHROPIC_API_KEY on the server and is NEVER exposed to the client.
@@ -34,7 +39,7 @@ Hard rules for ALL content:
 - Never use fear-mongering or fake urgency.
 - Never reveal or imply any individual patient's medical information.
 - Prices only appear if explicitly provided in the context.
-- Output ONLY the requested content. No preamble ("Here's your post..."), no explanation, no markdown code fences unless asked for schema.`;
+- Output ONLY the requested content. No preamble ("Here's your post..."), no explanation, no markdown code fences unless asked for schema.{{vertical_directive}}`;
 
 // Injected into the system prompt ONLY for web-crawlable (Website) generations
 // when AI-Citable Mode is on. Structures the page so AI search engines can quote
@@ -101,17 +106,22 @@ export async function POST(req: Request) {
   }
 
   // RLS: post_types is a global read-only catalog; clinics returns own clinic.
-  const [{ data: post }, { data: clinic }] = await Promise.all([
-    supabase
-      .from("post_types")
-      .select("id, name, platform, credits_cost, prompt_template, extra_fields")
-      .eq("id", postTypeId)
-      .single(),
-    supabase
-      .from("clinics")
-      .select("id, business_name, city, area, doctor_name, phone, website_url, content_credits_balance")
-      .single(),
+  // The `vertical` column arrives with migration 026; if it isn't applied yet,
+  // re-query without it so generation keeps working and behaves exactly as it
+  // does pre-migration (vertical then reads as absent → treated as 'dental').
+  const POST_COLS = "id, name, platform, credits_cost, prompt_template, extra_fields";
+  const CLINIC_COLS =
+    "id, business_name, city, area, doctor_name, phone, website_url, content_credits_balance";
+  const [postRes, clinicRes] = await Promise.all([
+    supabase.from("post_types").select(`${POST_COLS}, vertical`).eq("id", postTypeId).single(),
+    supabase.from("clinics").select(`${CLINIC_COLS}, vertical`).single(),
   ]);
+  const post = postRes.error
+    ? (await supabase.from("post_types").select(POST_COLS).eq("id", postTypeId).single()).data
+    : postRes.data;
+  const clinic = clinicRes.error
+    ? (await supabase.from("clinics").select(CLINIC_COLS).single()).data
+    : clinicRes.data;
 
   if (!post) {
     return NextResponse.json(
@@ -123,6 +133,43 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "No clinic found for this account." },
       { status: 400 },
+    );
+  }
+
+  // The clinic's vertical drives content resolution. Default 'dental' so existing
+  // clinics behave exactly as before.
+  const clinicVertical =
+    (clinic as { vertical?: string | null }).vertical ?? DEFAULT_VERTICAL;
+
+  // Guard: the chosen type must apply to this clinic's vertical — its own, or the
+  // shared (NULL) catalog. Never generate from another vertical's type. For a
+  // dental clinic today every type is NULL, so this always passes.
+  if (
+    resolveForVertical<{ name: string; vertical?: string | null }>(
+      [post],
+      clinicVertical,
+      (p) => p.name,
+    ).length === 0
+  ) {
+    return NextResponse.json(
+      { error: "That content type isn't available for your clinic." },
+      { status: 404 },
+    );
+  }
+
+  // The one templated prompt line. Empty for dental (byte-identical prompt);
+  // "You write for a <Display> clinic." for any other vertical. Only the
+  // non-default path needs the verticals lookup.
+  let vertical_directive = "";
+  if (clinicVertical !== DEFAULT_VERTICAL) {
+    const { data: v } = await supabase
+      .from("verticals")
+      .select("display_name")
+      .eq("id", clinicVertical)
+      .maybeSingle();
+    vertical_directive = verticalDirective(
+      clinicVertical,
+      v?.display_name ?? clinicVertical,
     );
   }
 
@@ -141,6 +188,7 @@ export async function POST(req: Request) {
   const RESERVED_KEYS = new Set([
     "clinic_name", "doctor_name", "city", "area", "today",
     "clinic_phone", "website_url", "year", "tone", "topic", "context",
+    "vertical_directive",
   ]);
   const allowedExtraKeys = new Set(
     (post.extra_fields?.inputs ?? []).map((i: { name: string }) => i.name),
@@ -171,6 +219,8 @@ export async function POST(req: Request) {
     // Available to every template + the citable block.
     today: formatDate(istDate), // DD MMM YYYY, IST
     year: istDate.slice(0, 4),
+    // Multi-vertical identity line (migration 026). Empty for dental.
+    vertical_directive,
   };
 
   // AI-Citable Mode applies only to web-crawlable (Website) pages; ignore the
