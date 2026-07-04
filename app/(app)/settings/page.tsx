@@ -21,7 +21,7 @@ export default async function SettingsPage() {
       supabase
         .from("clinics")
         .select(
-          "business_name, doctor_name, phone, address, city, area, google_review_url, instagram_handle, website_url, booking_slug",
+          "business_name, doctor_name, phone, address, city, area, google_review_url, instagram_handle, website_url, booking_slug, default_lat, default_lng",
         )
         .single(),
       supabase

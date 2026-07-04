@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/modal";
 import { toast } from "@/components/toast";
+import { LocationPicker } from "@/components/location-picker";
 import { runAudit } from "./actions";
 
 const field =
@@ -114,32 +115,18 @@ export function NewAudit({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={label}>Centre latitude</label>
-              <input
-                className={`mt-1 ${field}`}
-                value={f.center_lat}
-                onChange={set("center_lat")}
-                inputMode="decimal"
-                placeholder="22.7196"
-              />
-            </div>
-            <div>
-              <label className={label}>Centre longitude</label>
-              <input
-                className={`mt-1 ${field}`}
-                value={f.center_lng}
-                onChange={set("center_lng")}
-                inputMode="decimal"
-                placeholder="75.8577"
+          <div>
+            <label className={label}>Business location</label>
+            <div className="mt-1">
+              <LocationPicker
+                lat={f.center_lat}
+                lng={f.center_lng}
+                onChange={(a, b) =>
+                  setF((s) => ({ ...s, center_lat: a, center_lng: b }))
+                }
               />
             </div>
           </div>
-          <p className="-mt-1 text-xs text-text-secondary">
-            Right-click the business in Google Maps and click the lat/long to copy
-            them.
-          </p>
 
           <div className="grid grid-cols-2 gap-3">
             <div>

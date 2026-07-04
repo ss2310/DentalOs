@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFormState } from "react-dom";
 import { useRouter } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
 import { toast } from "@/components/toast";
+import { LocationPicker } from "@/components/location-picker";
 import { updateClinic, type SettingsState } from "./actions";
 
 export type Clinic = {
@@ -17,6 +18,8 @@ export type Clinic = {
   google_review_url: string | null;
   instagram_handle: string | null;
   website_url: string | null;
+  default_lat: number | null;
+  default_lng: number | null;
 };
 
 const inputClass =
@@ -28,6 +31,12 @@ const initialState: SettingsState = {};
 export function ClinicInfoForm({ clinic }: { clinic: Clinic }) {
   const [state, formAction] = useFormState(updateClinic, initialState);
   const router = useRouter();
+  const [lat, setLat] = useState(
+    clinic.default_lat != null ? String(clinic.default_lat) : "",
+  );
+  const [lng, setLng] = useState(
+    clinic.default_lng != null ? String(clinic.default_lng) : "",
+  );
 
   useEffect(() => {
     if (state.ok) {
@@ -169,6 +178,25 @@ export function ClinicInfoForm({ clinic }: { clinic: Clinic }) {
             className={inputClass}
             placeholder="https://…"
           />
+        </div>
+
+        {/* Clinic location — the single source of truth for Map Rank scans. */}
+        <div className="border-t border-border pt-4">
+          <label className={labelClass}>Clinic location</label>
+          <p className="mb-2 -mt-1 text-sm text-text-secondary">
+            Set this once — Map Rank scans centre on it, so you never enter
+            coordinates per keyword.
+          </p>
+          <LocationPicker
+            lat={lat}
+            lng={lng}
+            onChange={(a, b) => {
+              setLat(a);
+              setLng(b);
+            }}
+          />
+          <input type="hidden" name="default_lat" value={lat} />
+          <input type="hidden" name="default_lng" value={lng} />
         </div>
       </div>
 

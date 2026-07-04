@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/modal";
 import { toast } from "@/components/toast";
@@ -14,12 +15,12 @@ const labelClass = "mb-1.5 block text-sm font-medium text-text-primary";
 
 export function RankToolbar({
   defaultBusiness,
-  defaultLat,
-  defaultLng,
+  hasLocation,
 }: {
   defaultBusiness: string;
-  defaultLat: string;
-  defaultLng: string;
+  // The clinic's location is set once in Settings and used as the scan centre;
+  // without it we can't scan, so Add Keyword points the user there instead.
+  hasLocation: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -28,36 +29,20 @@ export function RankToolbar({
   const [keyword, setKeyword] = useState("");
   const [business, setBusiness] = useState(defaultBusiness);
   const [placeId, setPlaceId] = useState("");
-  const [lat, setLat] = useState(defaultLat);
-  const [lng, setLng] = useState(defaultLng);
   const [gridSize, setGridSize] = useState("5");
   const [radius, setRadius] = useState("3");
   const [error, setError] = useState<string | null>(null);
-
-  // Google Maps' "click to copy" puts "lat, lng" on the clipboard as one string.
-  // If that's pasted into the Latitude box, split it across both fields.
-  function handleLatInput(value: string) {
-    if (value.includes(",")) {
-      const [a, b] = value.split(",");
-      setLat(a.trim());
-      if (b !== undefined) setLng(b.trim());
-    } else {
-      setLat(value);
-    }
-  }
 
   useEffect(() => {
     if (open) {
       setKeyword("");
       setBusiness(defaultBusiness);
       setPlaceId("");
-      setLat(defaultLat);
-      setLng(defaultLng);
       setGridSize("5");
       setRadius("3");
       setError(null);
     }
-  }, [open, defaultBusiness, defaultLat, defaultLng]);
+  }, [open, defaultBusiness]);
 
   function save() {
     if (!keyword.trim()) {
@@ -74,8 +59,6 @@ export function RankToolbar({
         keyword,
         target_business_name: business,
         target_place_id: placeId,
-        center_lat: lat,
-        center_lng: lng,
         grid_size: gridSize,
         radius_km: radius,
       });
@@ -94,15 +77,24 @@ export function RankToolbar({
       <PageHeader
         title="Map Rank"
         action={
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="flex h-11 items-center gap-1.5 rounded-button bg-primary px-4 text-[15px] font-medium text-white hover:bg-primary/90"
-          >
-            <PlusIcon />
-            <span className="hidden sm:inline">Add Keyword</span>
-            <span className="sm:hidden">Add</span>
-          </button>
+          hasLocation ? (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="flex h-11 items-center gap-1.5 rounded-button bg-primary px-4 text-[15px] font-medium text-white hover:bg-primary/90"
+            >
+              <PlusIcon />
+              <span className="hidden sm:inline">Add Keyword</span>
+              <span className="sm:hidden">Add</span>
+            </button>
+          ) : (
+            <Link
+              href="/settings"
+              className="flex h-11 items-center gap-1.5 rounded-button border border-border px-4 text-[15px] font-medium text-text-primary hover:bg-subtle"
+            >
+              Set clinic location
+            </Link>
+          )
         }
       />
 
@@ -153,57 +145,10 @@ export function RankToolbar({
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="rk_lat" className={labelClass}>
-                Centre latitude <span className="text-danger">*</span>
-              </label>
-              <input
-                id="rk_lat"
-                value={lat}
-                onChange={(e) => handleLatInput(e.target.value)}
-                inputMode="decimal"
-                className={inputClass}
-                placeholder="28.6139"
-              />
-            </div>
-            <div>
-              <label htmlFor="rk_lng" className={labelClass}>
-                Centre longitude <span className="text-danger">*</span>
-              </label>
-              <input
-                id="rk_lng"
-                value={lng}
-                onChange={(e) => setLng(e.target.value)}
-                inputMode="decimal"
-                className={inputClass}
-                placeholder="77.2090"
-              />
-            </div>
-          </div>
-
           <div className="rounded-button border border-border bg-subtle p-3 text-sm text-text-secondary">
-            <p className="font-medium text-text-primary">
-              How to get your latitude &amp; longitude
-            </p>
-            <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-              <li>Open Google Maps and find your clinic&apos;s red pin.</li>
-              <li>
-                Right-click (or long-press on phone) exactly on the pin.
-              </li>
-              <li>
-                At the top of the menu you&apos;ll see two numbers like{" "}
-                <span className="font-medium text-text-primary">
-                  28.6139, 77.2090
-                </span>{" "}
-                — click them once to copy.
-              </li>
-              <li>
-                Paste into the <span className="font-medium">Latitude</span> box
-                above — we&apos;ll automatically split them into Latitude and
-                Longitude.
-              </li>
-            </ol>
+            Scans centre on your clinic&apos;s location (set in{" "}
+            <span className="font-medium text-text-primary">Settings</span>) — no
+            coordinates needed here.
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

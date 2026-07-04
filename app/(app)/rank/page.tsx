@@ -52,6 +52,8 @@ export default async function RankPage() {
 
   const keywords = (kwData as KeywordRow[]) ?? [];
   const scans = (scanData as ScanRow[]) ?? [];
+  const hasLocation =
+    clinic?.default_lat != null && clinic?.default_lng != null;
 
   // Latest scan per keyword (scans already sorted newest-first).
   const latest = new Map<string, ScanRow>();
@@ -81,13 +83,30 @@ export default async function RankPage() {
     <div>
       <RankToolbar
         defaultBusiness={clinic?.business_name ?? ""}
-        defaultLat={clinic?.default_lat != null ? String(clinic.default_lat) : ""}
-        defaultLng={clinic?.default_lng != null ? String(clinic.default_lng) : ""}
+        hasLocation={hasLocation}
       />
       <p className="mt-1 text-sm text-text-secondary">
         Track where you rank on Google Maps across a grid of nearby points ·
         This month: {budget.used}/{budget.cap} scans used
       </p>
+
+      {!hasLocation ? (
+        <div className="mt-4 rounded-card border border-warning/30 bg-warning/5 p-4">
+          <p className="text-[15px] font-medium text-text-primary">
+            Set your clinic location to start tracking
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Map Rank scans centre on your clinic’s location. Set it once in
+            Settings — you won’t need to enter coordinates again.
+          </p>
+          <Link
+            href="/settings"
+            className="mt-3 inline-flex h-10 items-center rounded-button bg-primary px-4 text-sm font-medium text-white hover:bg-primary/90"
+          >
+            Go to Settings
+          </Link>
+        </div>
+      ) : null}
 
       {!isLiveProvider() ? <SampleDataBanner /> : null}
 

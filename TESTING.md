@@ -1335,3 +1335,39 @@ generate / scan / publish will error until the migration is applied.
 - [ ] Prospect audits get the identical treatment: specific reserve-error
       messages (cap / missing-function / other) + real provider error on total
       failure, both logged.
+
+## Clinic location — set once, no per-scan coordinates
+
+### Settings → Clinic location
+- [ ] Settings shows a "Clinic location" section with "Use my current location",
+      a paste box, and editable Latitude/Longitude.
+- [ ] "Use my current location" (on a phone / when the browser allows it) fills
+      lat+lng from GPS; denying permission shows a helpful message.
+- [ ] Pasting a Google Maps link (e.g. .../@19.0760,72.8777,15z) or "19.076,
+      72.8777" fills both fields and shows "Location read from link ✓".
+      Rubbish text shows a "couldn't read coordinates" message.
+- [ ] Saving persists the location; reopening Settings shows it pre-filled.
+- [ ] Saving one of lat/lng blank and the other filled is rejected ("Set both …
+      or leave both blank"); out-of-range values are rejected.
+
+### Rank — no coordinate entry
+- [ ] With NO clinic location set: /rank shows a "Set your clinic location"
+      banner with a Settings link, and the header action is "Set clinic location"
+      (→ Settings) instead of "Add Keyword".
+- [ ] After setting the location: "Add Keyword" works and the form no longer
+      asks for latitude/longitude (only keyword, business, optional Place ID,
+      grid, radius).
+- [ ] Running a scan centres on the clinic's saved location; changing the
+      location in Settings and re-scanning re-centres the grid (single source of
+      truth — no stale per-keyword coordinates).
+- [ ] Adding a keyword or running a scan with the location unset returns a clear
+      "Set your clinic location in Settings" message (not a silent failure).
+
+### Prospect audit — same picker, per-audit location
+- [ ] New Prospect Audit uses the same location picker (current location / paste
+      Maps link / manual) for the business being audited; the audit still runs
+      against that per-audit location (NOT the clinic's).
+
+### Parser (lib/geo.ts) — verified
+- [ ] "lat, lng", "lat lng", /@lat,lng, !3d..!4d.., and ?q=lat,lng all parse;
+      "0,0", out-of-range, and non-coordinates return nothing. (9/9 unit cases.)

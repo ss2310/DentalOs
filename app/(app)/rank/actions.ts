@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getSerpProvider,
   generateGrid,
@@ -19,25 +18,10 @@ export type RankActionState = { ok?: boolean; error?: string };
 // firing 49 requests at once while still finishing reasonably fast.
 const SCAN_CONCURRENCY = 5;
 
-async function clinicId(supabase: SupabaseClient): Promise<string | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data } = await supabase
-    .from("profiles")
-    .select("home_clinic_id")
-    .eq("id", user.id)
-    .single();
-  return data?.home_clinic_id ?? null;
-}
-
 export async function addKeyword(input: {
   keyword: string;
   target_business_name: string;
   target_place_id: string;
-  center_lat: string;
-  center_lng: string;
   grid_size: string;
   radius_km: string;
 }): Promise<RankActionState> {
@@ -51,28 +35,32 @@ export async function addKeyword(input: {
   if (!keyword) return { error: "Keyword is required." };
   if (!target) return { error: "Target business name is required." };
 
-  const lat = Number(input.center_lat);
-  const lng = Number(input.center_lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
-    return { error: "Enter a valid centre latitude and longitude." };
-  }
-
   const gridSize = [3, 5, 7].includes(Number(input.grid_size))
     ? Number(input.grid_size)
     : 5;
   const radiusKm = Number(input.radius_km) > 0 ? Number(input.radius_km) : 3;
 
   const supabase = createClient();
-  const clinic = await clinicId(supabase);
+  // The scan centre is the clinic's saved location (set once in Settings) —
+  // no per-keyword coordinates. Stamp it onto the keyword so the row is valid.
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("id, default_lat, default_lng")
+    .single();
   if (!clinic) return { error: "No clinic found for user." };
+  if (clinic.default_lat == null || clinic.default_lng == null) {
+    return {
+      error: "Set your clinic location in Settings before adding keywords.",
+    };
+  }
 
   const { error } = await supabase.from("rank_tracking_keywords").insert({
-    clinic_id: clinic,
+    clinic_id: clinic.id,
     keyword,
     target_business_name: target,
     target_place_id: input.target_place_id.trim() || null,
-    center_lat: lat,
-    center_lng: lng,
+    center_lat: Number(clinic.default_lat),
+    center_lng: Number(clinic.default_lng),
     grid_size: gridSize,
     radius_km: radiusKm,
     is_active: true,
@@ -112,9 +100,25 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
     target_place_id: kwPlaceId,
   } = kw;
 
+  // Centre on the clinic's CURRENT saved location (single source of truth), so
+  // updating it in Settings moves every scan — not a stale per-keyword copy.
+  const { data: clinicLoc } = await supabase
+    .from("clinics")
+    .select("default_lat, default_lng")
+    .single();
+  if (
+    !clinicLoc ||
+    clinicLoc.default_lat == null ||
+    clinicLoc.default_lng == null
+  ) {
+    return {
+      error: "Set your clinic location in Settings before running a scan.",
+    };
+  }
+
   const points = generateGrid(
-    Number(kw.center_lat),
-    Number(kw.center_lng),
+    Number(clinicLoc.default_lat),
+    Number(clinicLoc.default_lng),
     kw.grid_size,
     Number(kw.radius_km),
   );

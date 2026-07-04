@@ -51,6 +51,23 @@ export async function updateClinic(
     return v || null;
   };
 
+  // Clinic location (map-scan centre). Set once here; blank = not set. Require
+  // both or neither so we never store a half-coordinate.
+  const coord = (k: string, lo: number, hi: number): number | null | "bad" => {
+    const raw = String(formData.get(k) ?? "").trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= lo && n <= hi ? n : "bad";
+  };
+  const default_lat = coord("default_lat", -90, 90);
+  const default_lng = coord("default_lng", -180, 180);
+  if (default_lat === "bad" || default_lng === "bad") {
+    return { error: "Enter a valid clinic location (latitude and longitude)." };
+  }
+  if ((default_lat === null) !== (default_lng === null)) {
+    return { error: "Set both latitude and longitude, or leave both blank." };
+  }
+
   const supabase = createClient();
   const id = await clinicId();
   if (!id) return { error: "No clinic found for user." };
@@ -67,6 +84,8 @@ export async function updateClinic(
       google_review_url: str("google_review_url"),
       instagram_handle: str("instagram_handle"),
       website_url: str("website_url"),
+      default_lat,
+      default_lng,
     })
     .eq("id", id);
 
