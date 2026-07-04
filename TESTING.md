@@ -1252,3 +1252,53 @@ generate / scan / publish will error until the migration is applied.
       hint + server rejection). 8+ is accepted.
 - [ ] DASHBOARD: enable leaked-password protection (see handoff note) and confirm
       a known-breached password (e.g. "password") is rejected on signup.
+
+## Pipeline — List / Board view toggle (feature)
+
+### View toggle
+- [ ] /pipeline shows a "List | Board" toggle (top-right). List is the default
+      and unchanged; the choice is remembered on reload (per browser).
+- [ ] Empty pipeline still shows the "No treatment cases yet" empty state (toggle
+      only appears once there are cases).
+
+### Board layout
+- [ ] Five columns in order: Identified, Presented, Thinking, Accepted,
+      Scheduled. Each header shows the case count and the total ₹ plan value of
+      that column.
+- [ ] Cards show patient name, treatment, ₹ plan value, and (if set) the
+      follow-up date — the date is RED when it's in the past.
+- [ ] Completed and Rejected appear in a footer row with count + total ₹ (not as
+      draggable columns).
+- [ ] Mobile: the columns are horizontally swipeable (scroll-snap); the footer
+      wraps below.
+
+### Drag transitions mirror the List buttons + side-effects
+- [ ] Identified → Presented: card moves; stage becomes presented (same as the
+      Present button).
+- [ ] Presented → Accepted (and Thinking → Accepted): fires the acceptance
+      notification and closes the recovery_event as accepted (revenue_recovered =
+      plan value) — identical to the Accepted button.
+- [ ] Presented → Thinking: prompts for a follow-up date (min = today); saving
+      sets stage thinking + follow_up_date. Cancelling leaves the card in place.
+- [ ] Presented → Rejected footer (and Thinking → Rejected): prompts for
+      reason + notes; confirming sets stage rejected and marks the recovery_event
+      lost. Cancelling leaves the card in place.
+- [ ] Accepted → Scheduled: opens the Book Appointment popup (patient
+      pre-filled); booking creates the appointment AND marks the case scheduled
+      (same as the Book button).
+
+### Invalid moves snap back with an explanation
+- [ ] Identified → Accepted/Thinking/Scheduled/Rejected → toast "Present this
+      case before moving it further."; card does not move.
+- [ ] Presented/Thinking → Scheduled → toast "Accept the case first, then Book…".
+- [ ] Any → Identified, or moving backwards (e.g. Accepted → Presented) → toast
+      explaining it can't move back; card stays.
+- [ ] Accepted → Rejected → toast "Only a presented or thinking case can be
+      rejected."; Scheduled → anything → "already booked — it can't move."
+- [ ] Dropping a card back on its own column does nothing (no toast, no change).
+
+### Consistency
+- [ ] After any Board change, switching to List reflects the same state (both
+      read the same server data; the action revalidates /pipeline).
+- [ ] Stat cards (Plan Value / Needs Follow-up / Ready to Book) update after a
+      Board transition.

@@ -12,6 +12,8 @@ import {
 } from "@/components/page";
 import { PipelineToolbar } from "./pipeline-toolbar";
 import { CaseActions } from "./case-actions";
+import { PipelineTabs } from "./pipeline-tabs";
+import { PipelineBoard, type BoardCase } from "./pipeline-board";
 import type { RateCard } from "./add-case";
 
 type CaseRow = {
@@ -82,6 +84,18 @@ export default async function PipelinePage() {
     stage,
     items: cases.filter((c) => c.stage === stage),
   })).filter((g) => g.items.length > 0);
+
+  // Flattened, serialisable shape for the Board view (client component).
+  const boardCases: BoardCase[] = cases.map((c) => ({
+    id: c.id,
+    patientId: c.patient_id,
+    patientName: c.patient?.full_name ?? "Unknown",
+    patientWhatsapp: c.patient?.whatsapp_number ?? null,
+    treatmentName: c.treatment?.treatment_name ?? "Treatment",
+    planValue: Number(c.plan_value),
+    stage: c.stage,
+    followUpDate: c.follow_up_date,
+  }));
 
   const renderCase = (c: CaseRow) => {
     const name = c.patient?.full_name ?? "Unknown";
@@ -187,16 +201,27 @@ export default async function PipelinePage() {
           <EmptyState>No treatment cases yet. Add your first case.</EmptyState>
         </>
       ) : (
-        grouped.map((g) => (
-          <div key={g.stage}>
-            <SectionHeader
-              hint={`${g.items.length} ${g.items.length === 1 ? "case" : "cases"}`}
-            >
-              {PIPELINE_STAGE[g.stage].label}
-            </SectionHeader>
-            <div className="space-y-3">{g.items.map(renderCase)}</div>
-          </div>
-        ))
+        <PipelineTabs
+          list={grouped.map((g) => (
+            <div key={g.stage}>
+              <SectionHeader
+                hint={`${g.items.length} ${g.items.length === 1 ? "case" : "cases"}`}
+              >
+                {PIPELINE_STAGE[g.stage].label}
+              </SectionHeader>
+              <div className="space-y-3">{g.items.map(renderCase)}</div>
+            </div>
+          ))}
+          board={
+            <PipelineBoard
+              cases={boardCases}
+              patients={patients}
+              rateCards={rateCards as RateCardOption[]}
+              doctorName={doctorName}
+              today={today}
+            />
+          }
+        />
       )}
     </div>
   );
