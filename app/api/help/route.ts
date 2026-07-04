@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { HELP_SYSTEM_PROMPT } from "@/lib/help-kb";
+import {
+  buildHelpSystemPrompt,
+  HELP_SECTIONS,
+  HELP_LANG_DIRECTIVE,
+  toHelpLang,
+} from "@/lib/help-kb";
+
+// Build the (large, identical-every-call) KB prompt once per server process, not
+// per request. Kept server-side only — never shipped to the client bundle.
+const HELP_SYSTEM_PROMPT = buildHelpSystemPrompt();
 
 // The Anthropic SDK requires the Node runtime. The API key is read from
 // ANTHROPIC_API_KEY on the server and is NEVER exposed to the client.
@@ -49,7 +58,7 @@ function sanitizeHistory(input: unknown): ChatMessage[] {
 }
 
 export async function POST(req: Request) {
-  let body: { messages?: unknown };
+  let body: { messages?: unknown; section?: unknown; lang?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -73,6 +82,17 @@ export async function POST(req: Request) {
     );
   }
 
+  // Page-aware context: the client sends the section key of the screen the user
+  // is on. Validate it against the known sections (never trust the raw string —
+  // it's echoed into the prompt) so it can't be used to inject instructions.
+  const section =
+    typeof body.section === "string"
+      ? HELP_SECTIONS.find((s) => s.key === body.section) ?? null
+      : null;
+
+  // Reply language the user picked for this chat (validated; defaults to en).
+  const lang = toHelpLang(body.lang);
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -84,20 +104,31 @@ export async function POST(req: Request) {
   try {
     const client = new Anthropic({ apiKey, timeout: 30_000, maxRetries: 1 });
     // Cache the (identical every call) knowledge base as a prompt-cache prefix.
-    // NOTE: Haiku's minimum cacheable prefix is ~4096 tokens; the current KB is
-    // ~1600 tokens, so this is DORMANT today (bills at full price, no error) and
-    // starts saving automatically once the KB grows past ~4096 tokens. The
-    // volatile per-user messages come after, so they never invalidate it.
+    // The cache breakpoint sits on the KB block; the small per-request "current
+    // screen" block comes AFTER it (uncached, tiny) so it never invalidates the
+    // cached KB, and the volatile user messages come after that.
+    const system: Anthropic.TextBlockParam[] = [
+      {
+        type: "text",
+        text: HELP_SYSTEM_PROMPT,
+        cache_control: { type: "ephemeral" },
+      },
+    ];
+    if (section) {
+      system.push({
+        type: "text",
+        text: `CURRENT SCREEN: The user is on the "${section.label}" screen (${section.summary}). If their question is general or clearly about this screen, focus your answer there; otherwise answer what they actually asked.`,
+      });
+    }
+    const langDirective = HELP_LANG_DIRECTIVE[lang];
+    if (langDirective) {
+      system.push({ type: "text", text: langDirective });
+    }
+
     const message = await client.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      system: [
-        {
-          type: "text",
-          text: HELP_SYSTEM_PROMPT,
-          cache_control: { type: "ephemeral" },
-        },
-      ],
+      system,
       messages,
     });
 
