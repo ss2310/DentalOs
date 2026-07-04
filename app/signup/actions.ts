@@ -8,23 +8,9 @@ import { isValidEmail, normalizeIndianPhone } from "@/lib/validation";
 import { sendWelcomeEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
 import { multiVerticalEnabled } from "@/lib/multi-vertical-access";
+import { resolveStarterRateCards } from "@/lib/starter-rate-cards";
 
 export type SignupState = { error?: string };
-
-// Seeded on signup for every new clinic. Prices in ₹; recall interval in days
-// (null = no recall). See CLAUDE.md for locale rules.
-const DEFAULT_RATE_CARDS = [
-  { treatment_name: "Consultation", category: "Diagnostic", base_price: 300, duration_mins: 15, recall_interval_days: 180 },
-  { treatment_name: "Scaling & Polishing", category: "Preventive", base_price: 1500, duration_mins: 45, recall_interval_days: 180 },
-  { treatment_name: "Tooth Extraction", category: "Surgical", base_price: 1000, duration_mins: 30, recall_interval_days: null },
-  { treatment_name: "RCT Single Sitting", category: "Endodontics", base_price: 4500, duration_mins: 60, recall_interval_days: 30 },
-  { treatment_name: "RCT Multi Sitting", category: "Endodontics", base_price: 6000, duration_mins: 60, recall_interval_days: 30 },
-  { treatment_name: "Composite Filling", category: "Restorative", base_price: 1200, duration_mins: 30, recall_interval_days: 365 },
-  { treatment_name: "Crown Metal-Ceramic", category: "Prosthodontics", base_price: 4000, duration_mins: 45, recall_interval_days: null },
-  { treatment_name: "Crown Zirconia", category: "Prosthodontics", base_price: 9000, duration_mins: 45, recall_interval_days: null },
-  { treatment_name: "Teeth Whitening", category: "Cosmetic", base_price: 8000, duration_mins: 60, recall_interval_days: 365 },
-  { treatment_name: "Dental Implant", category: "Implantology", base_price: 35000, duration_mins: 90, recall_interval_days: 90 },
-];
 
 export async function signUpAction(
   _prev: SignupState,
@@ -267,9 +253,9 @@ export async function signUpAction(
   });
   if (notifErr) console.error("Welcome notification failed:", notifErr.message);
 
-  // 3. Seed the clinic's rate cards.
+  // 3. Seed the clinic's starter rate cards for its vertical (dental fallback).
   const { error: rateCardError } = await admin.from("rate_cards").insert(
-    DEFAULT_RATE_CARDS.map((rc) => ({ ...rc, clinic_id: clinic.id })),
+    resolveStarterRateCards(vertical).map((rc) => ({ ...rc, clinic_id: clinic.id })),
   );
   if (rateCardError) {
     // Non-fatal: the account is usable and rate cards can be added in

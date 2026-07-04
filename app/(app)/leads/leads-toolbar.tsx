@@ -135,7 +135,7 @@ export function LeadsToolbar() {
               value={interest}
               onChange={(e) => setInterest(e.target.value)}
               className={inputClass}
-              placeholder="e.g. Braces, Implant"
+              placeholder="e.g. their main treatment of interest"
             />
           </div>
 

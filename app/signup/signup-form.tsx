@@ -69,7 +69,7 @@ export function SignupForm({
           type="text"
           required
           className={inputClass(false)}
-          placeholder="Smile Dental Care"
+          placeholder="Your clinic's name"
         />
       </div>
 

@@ -146,7 +146,7 @@ export function PublishHostedPage({
                     type="text"
                     value={slug}
                     onChange={(e) => setSlug(slugify(e.target.value))}
-                    placeholder="dentist-in-koramangala"
+                    placeholder="clinic-in-koramangala"
                     className={inputClass}
                   />
                 </div>

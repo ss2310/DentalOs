@@ -286,7 +286,7 @@ export function TreatmentPlans({
               className={inputClass}
               value={planName}
               onChange={(e) => setPlanName(e.target.value)}
-              placeholder="e.g. Full mouth rehabilitation"
+              placeholder="e.g. Treatment plan"
             />
           </div>
 
