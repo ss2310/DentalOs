@@ -7,6 +7,8 @@ import { getBillingProvider, type CheckoutKind } from "@/lib/billing/provider";
 export type CheckoutState = {
   message?: string;
   redirectUrl?: string;
+  sessionId?: string;
+  mode?: "sandbox" | "production";
   error?: string;
 };
 
@@ -40,6 +42,8 @@ export async function startCheckout(
   try {
     const result = await provider.startCheckout({ kind, id });
     if ("pending" in result) return { message: result.message };
+    if ("sessionId" in result)
+      return { sessionId: result.sessionId, mode: result.mode };
     return { redirectUrl: result.redirectUrl };
   } catch (e) {
     return {

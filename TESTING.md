@@ -2163,3 +2163,84 @@ feature_flag_defaults). Read-only except the feature-flag-default toggles.
       actor "system".
 - [ ] **Read-only**: nothing on the page except the feature-flag toggles issues
       a write; the audit viewer and migration/health sections never mutate.
+
+## Cashfree checkout — order creation (migration 032)
+
+Wires the Cashfree hosted checkout behind the billing-provider seam. The
+**webhook is NOT in this slice** — an order created here stays `pending_payments`
+= `created` and NOTHING is fulfilled (no credits, no activation) until the webhook
+lands. **Requires `032_cashfree_checkout.sql` applied**, `CASHFREE_APP_ID` /
+`CASHFREE_SECRET_KEY` / `CASHFREE_ENV=sandbox` set, `NEXT_PUBLIC_APP_URL` set, and
+`npm install` (adds `cashfree-pg` + `@cashfreepayments/cashfree-js`). Set a real
+price on a plan/pack in `/admin/plans` first (₹0 is refused — see the guard test).
+
+### Migration + routing
+- [ ] After applying 032: `select * from pending_payments;` exists (empty);
+      `\d pending_payments` shows the columns + the `status`/`item_type`/`source`
+      CHECKs; `applied_migrations` has a `('032','cashfree_checkout')` row.
+- [ ] `select billing_provider, count(*) from clinics group by 1;` → every existing
+      clinic is now **`cashfree`** (the `manual`→`cashfree` backfill), and the
+      column DEFAULT is `cashfree` (a fresh signup gets `cashfree`).
+
+### Happy path (sandbox)
+- [ ] On **/upgrade** as an owner/doctor, click **Upgrade** on a priced plan → the
+      button shows a busy state, then the Cashfree **hosted checkout** loads
+      (full-page, `redirectTarget:'_self'`). A `pending_payments` row was inserted
+      with `status='created'`, `amount_inr` = the DB price, `cf_order_id` set, and
+      `source='checkout'`.
+- [ ] Pay with a Cashfree **sandbox** test method → you're returned to
+      **/upgrade/result?order_id=<uuid>**. The page polls and shows
+      **"Payment received — activating your account"** once the row flips to
+      `paid` (the row only flips via the webhook — until that ships, it stays
+      `created`; see "Without the webhook" below).
+- [ ] A **credit pack** Buy button behaves the same (`item_type='pack'`).
+
+### Price-sanity guard (protects against unseeded prices)
+- [ ] Set a plan's price to **₹0** (save it inactive) and try to buy it (or call
+      `startCheckout` for it) → **no order is created**, no `pending_payments` row,
+      and the user sees a clear error ("price not configured…"). Same for a NULL
+      price. A priced plan works.
+
+### Amounts come from the DB, never the client
+- [ ] Intercept/replay the `startCheckout` server action with a tampered payload
+      (extra amount field) → the created order's `order_amount` still equals the
+      **DB** `price_inr` (the amount is read in `start_cashfree_checkout`, the
+      client only sends `kind`+`id`). No client-supplied `clinicId` is accepted —
+      the clinic is derived from the session.
+
+### Result page is display-only (never fulfills)
+- [ ] Manually set a `pending_payments` row to `paid` in the DB → /upgrade/result
+      for that `order_id` shows the "received — activating" state, but confirm the
+      page itself grants **no** credits and flips **no** subscription (fulfillment
+      is the webhook's job).
+- [ ] `order_id` for **another clinic's** row → the page shows "Payment failed or
+      cancelled" (RLS returns no row → `unknown`), never that clinic's status.
+- [ ] A missing/malformed `order_id` → "Payment failed or cancelled", no crash.
+- [ ] Leave a row at `created` and load the result page → after ~30s of polling it
+      switches to **"Payment is processing — your account will activate
+      automatically"** with a refresh hint (it stops polling, doesn't spin forever).
+
+### Failure paths
+- [ ] Break the Cashfree keys (bad `CASHFREE_SECRET_KEY`) and try to buy → the
+      order creation fails, the `pending_payments` row is marked `failed`, and the
+      user sees "Could not start the payment. Please try again." (no unhandled
+      crash, no session leak in logs).
+- [ ] Only a plan/pack that's `is_active` can be purchased (an inactive one →
+      "plan/pack not found").
+
+### Security / multi-tenancy
+- [ ] `pending_payments` has **no** client write policy — a normal client
+      INSERT/UPDATE/DELETE is rejected; rows are written only by
+      `start_cashfree_checkout` (definer) and the service role. A clinic can
+      **read** only its own rows (`select` policy keyed to `current_clinic_id()`).
+- [ ] Cashfree keys never reach the browser (server-only modules;
+      `lib/billing/cashfree.ts` is `import "server-only"`). Only the
+      `payment_session_id` + `mode` are sent to the client.
+- [ ] A **receptionist** can't start a checkout (`startCheckout` is owner/doctor
+      only — "Only an owner or doctor can manage billing.").
+
+### Without the webhook (current state — expected)
+- [ ] A successful sandbox payment leaves `pending_payments.status='created'` (the
+      webhook that flips it to `paid` + calls `confirm_billing_event` is the next
+      slice). The result page therefore lands on the "processing" state after its
+      poll window — this is expected until the webhook ships.

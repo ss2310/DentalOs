@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { load } from "@cashfreepayments/cashfree-js";
 import { toast } from "@/components/toast";
 import { SectionHeader } from "@/components/page";
 import { formatINR } from "@/lib/format";
@@ -48,11 +49,33 @@ export function UpgradeOptions({
     setNotice(null);
     startTransition(async () => {
       const res = await startCheckout(kind, id);
-      setBusyId(null);
       if (res.error) {
+        setBusyId(null);
         toast(res.error);
         return;
       }
+      // Cashfree: launch hosted checkout with the payment_session_id. The tab
+      // redirects to Cashfree and returns to /upgrade/result, so we keep the
+      // button busy until the SDK takes over (or errors).
+      if (res.sessionId) {
+        try {
+          const cashfree = await load({ mode: res.mode ?? "sandbox" });
+          const result = await cashfree.checkout({
+            paymentSessionId: res.sessionId,
+            redirectTarget: "_self",
+          });
+          if (result?.error) {
+            setBusyId(null);
+            toast(result.error.message ?? "Payment could not be started.");
+          }
+          // On success the page has navigated to Cashfree — nothing more to do.
+        } catch {
+          setBusyId(null);
+          toast("Could not open checkout. Please try again.");
+        }
+        return;
+      }
+      setBusyId(null);
       if (res.redirectUrl) {
         window.location.href = res.redirectUrl;
         return;

@@ -1,18 +1,22 @@
 import "server-only";
 
 import { manualProvider } from "./manual";
+import { cashfreeProvider } from "./cashfree";
 
-// Provider-agnostic checkout seam. One implementation is live today ('manual');
-// razorpay/cashfree adapters slot in behind this same interface later WITHOUT
-// touching the /upgrade page — it only ever talks to getBillingProvider().
+// Provider-agnostic checkout seam. Two implementations live today: 'cashfree'
+// (the customer-facing default) and 'manual' (admin hand-onboarding). Adapters
+// slot in behind this same interface WITHOUT touching the /upgrade page — it only
+// ever talks to getBillingProvider().
 
 export type CheckoutKind = "plan" | "pack";
 
-// Manual returns a pending message (an admin confirms out-of-band). Real
-// providers will return a hosted-checkout redirect URL instead.
+// Manual returns a pending message (an admin confirms out-of-band). Cashfree
+// returns a payment_session_id the browser SDK launches checkout with. (A
+// redirectUrl variant is kept for any redirect-style provider.)
 export type CheckoutResult =
   | { pending: true; message: string }
-  | { redirectUrl: string };
+  | { redirectUrl: string }
+  | { sessionId: string; mode: "sandbox" | "production" };
 
 export interface BillingProvider {
   readonly name: string;
@@ -21,16 +25,18 @@ export interface BillingProvider {
 
 /**
  * Resolve a clinic's billing provider by name (from clinics.billing_provider).
- * Falls back to 'manual' — the only implementation wired today — so an unknown
- * or not-yet-built provider degrades to hand-onboarding rather than crashing.
+ * Defaults to 'cashfree' — the customer-facing path — so an unset/unknown value
+ * routes to the live gateway. 'manual' stays an explicit admin-set escape hatch
+ * for hand-onboarding.
  */
 export function getBillingProvider(name: string | null | undefined): BillingProvider {
   switch (name) {
     case "manual":
       return manualProvider;
+    case "cashfree":
+      return cashfreeProvider;
     // TODO(razorpay): return razorpayProvider; (see ./razorpay.ts)
-    // TODO(cashfree): return cashfreeProvider; (see ./cashfree.ts)
     default:
-      return manualProvider;
+      return cashfreeProvider;
   }
 }
