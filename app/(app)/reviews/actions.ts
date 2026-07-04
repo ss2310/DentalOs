@@ -91,12 +91,6 @@ export async function generateInsightReport(): Promise<InsightState> {
   if (!clinic) return { error: "No clinic found for this account." };
 
   const cost = post.credits_cost ?? 2;
-  const remaining = (clinic.monthly_credits ?? 0) - (clinic.credits_used ?? 0);
-  if (remaining < cost) {
-    return {
-      error: `Not enough credits — this needs ${cost}, you have ${remaining} left this month.`,
-    };
-  }
 
   const { date: today } = nowIST();
   const windowStart = addDays(today, -WINDOW_DAYS); // 'YYYY-MM-DD'
@@ -218,6 +212,29 @@ export async function generateInsightReport(): Promise<InsightState> {
     2,
   )}`;
 
+  // Reserve credits ATOMICALLY before the paid call (SEC-H1/L1). NULL means
+  // not enough credits — we stop before spending anything. Refunded below if
+  // the generation fails after reserving.
+  const reference = crypto.randomUUID();
+  const { data: reservedLeft, error: reserveError } = await supabase.rpc(
+    "reserve_credits",
+    { p_cost: cost, p_reason: "insight_report", p_reference: reference },
+  );
+  if (reserveError) {
+    console.error("Credit reserve failed:", reserveError);
+    return { error: "Could not check your credits. Please try again." };
+  }
+  if (reservedLeft === null) {
+    const remaining =
+      (clinic.monthly_credits ?? 0) - (clinic.credits_used ?? 0);
+    return {
+      error: `Not enough credits — this needs ${cost}, you have ${Math.max(remaining, 0)} left this month.`,
+    };
+  }
+  const creditsLeft = reservedLeft as number;
+  const refund = () =>
+    supabase.rpc("refund_credits", { p_reference: reference });
+
   let content: string;
   try {
     const anthropic = new Anthropic({ apiKey });
@@ -233,6 +250,7 @@ export async function generateInsightReport(): Promise<InsightState> {
       .join("")
       .trim();
   } catch (err) {
+    await refund();
     console.error("Insight report generation failed:", err);
     return {
       error:
@@ -241,18 +259,9 @@ export async function generateInsightReport(): Promise<InsightState> {
   }
 
   if (!content) {
+    await refund();
     return { error: "The AI returned an empty report. Please try again." };
   }
-
-  // Deduct credits only after a successful generation (same pattern as the
-  // /api/generate route). RLS scopes the update to the caller's clinic.
-  const newUsed = (clinic.credits_used ?? 0) + cost;
-  const { error: creditError } = await supabase
-    .from("clinics")
-    .update({ credits_used: newUsed })
-    .eq("id", clinic.id);
-  if (creditError) console.error("Failed to deduct credits:", creditError);
-  const creditsLeft = (clinic.monthly_credits ?? 0) - newUsed;
 
   // Save to history. `${today}` gives a stable month label; drop-and-retry isn't
   // needed here because the row uses only base columns.

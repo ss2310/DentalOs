@@ -77,14 +77,6 @@ export async function publishLandingPage(input: {
     .maybeSingle();
   if (!planRes.error && planRes.data?.plan) plan = planRes.data.plan as string;
 
-  // Credits — block at 0 (same pattern as /api/generate).
-  const remaining = (clinic.monthly_credits ?? 0) - (clinic.credits_used ?? 0);
-  if (remaining < PUBLISH_COST) {
-    return {
-      error: `Not enough credits — publishing needs ${PUBLISH_COST}, you have ${remaining} left this month.`,
-    };
-  }
-
   // Plan cap — count this clinic's existing pages (RLS-scoped) before inserting.
   const { count } = await supabase
     .from("landing_pages")
@@ -154,6 +146,27 @@ export async function publishLandingPage(input: {
     },
   });
 
+  // Reserve the credit ATOMICALLY before publishing (SEC-H1/L1), so two
+  // concurrent publishes can't both slip through on a stale balance. NULL =
+  // not enough credits. Refunded if the insert then fails.
+  const reference = crypto.randomUUID();
+  const { data: reservedLeft, error: reserveError } = await supabase.rpc(
+    "reserve_credits",
+    { p_cost: PUBLISH_COST, p_reason: "landing_publish", p_reference: reference },
+  );
+  if (reserveError) {
+    console.error("Credit reserve failed:", reserveError);
+    return { error: "Could not check your credits. Please try again." };
+  }
+  if (reservedLeft === null) {
+    const remaining =
+      (clinic.monthly_credits ?? 0) - (clinic.credits_used ?? 0);
+    return {
+      error: `Not enough credits — publishing needs ${PUBLISH_COST}, you have ${Math.max(remaining, 0)} left this month.`,
+    };
+  }
+  const creditsLeft = reservedLeft as number;
+
   const { error: insertErr } = await supabase.from("landing_pages").insert({
     clinic_id: clinic.id,
     slug: pageSlug,
@@ -166,18 +179,10 @@ export async function publishLandingPage(input: {
     published_at: new Date().toISOString(),
   });
   if (insertErr) {
+    await supabase.rpc("refund_credits", { p_reference: reference });
     console.error("Failed to publish landing page:", insertErr);
     return { error: "Could not publish the page. Please try again." };
   }
-
-  // Charge the credit only after a successful publish.
-  const newUsed = (clinic.credits_used ?? 0) + PUBLISH_COST;
-  const { error: creditErr } = await supabase
-    .from("clinics")
-    .update({ credits_used: newUsed })
-    .eq("id", clinic.id);
-  if (creditErr) console.error("Failed to deduct credits:", creditErr);
-  const creditsLeft = (clinic.monthly_credits ?? 0) - newUsed;
 
   revalidatePath("/settings");
   return { path: `/p/${bookingSlug}/${pageSlug}`, creditsLeft };

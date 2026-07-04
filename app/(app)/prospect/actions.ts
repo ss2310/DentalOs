@@ -11,7 +11,7 @@ import {
 } from "@/lib/serp";
 import type { LocalResult } from "@/lib/serp";
 import { buildAuditFindings } from "@/lib/serp/findings";
-import { getAuditBudget } from "@/lib/serp/budget";
+import { monthlyAuditCap } from "@/lib/serp/budget";
 import {
   buildProspectSummary,
   type ProspectCheckResult,
@@ -86,11 +86,21 @@ export async function runAudit(
   const points = generateGrid(lat, lng, gridSize, radiusKm);
   const n = points.length;
 
-  // Cost guard: one audit uses one of this agency user's monthly allowance.
-  const { remaining, cap } = await getAuditBudget(supabase);
-  if (remaining < 1) {
+  // Reserve an audit slot ATOMICALLY before the provider calls (SEC-M1): the
+  // RPC serializes per agency user, so concurrent audits can't overrun the
+  // monthly cap. It inserts a 'reserved' prospect_audits row now; we finalize
+  // it after the audit, or delete it if every request fails.
+  const cap = monthlyAuditCap();
+  const { data: auditId, error: reserveError } = await supabase.rpc(
+    "reserve_prospect_audit",
+    { p_cap: cap },
+  );
+  if (reserveError || !auditId) {
+    const capReached = /cap reached/i.test(reserveError?.message ?? "");
     return {
-      error: `You've used all ${cap} audits for this month. Credit top-ups are coming once payments go live.`,
+      error: capReached
+        ? `You've used all ${cap} audits for this month. Credit top-ups are coming once payments go live.`
+        : "Could not start the audit. Please try again.",
     };
   }
 
@@ -127,8 +137,10 @@ export async function runAudit(
     Array.from({ length: Math.min(SCAN_CONCURRENCY, n) }, () => worker()),
   );
 
-  // Every point failed → don't save a misleading all-blank audit.
+  // Every point failed → don't keep a misleading all-blank audit. Delete the
+  // reservation so it doesn't count against the monthly cap.
   if (failures === n) {
+    await supabase.from("prospect_audits").delete().eq("id", auditId);
     return {
       error:
         "Every request failed — check SERP_PROVIDER and the provider's API key.",
@@ -159,10 +171,10 @@ export async function runAudit(
     pctInTop3,
   });
 
+  // Finalize the reserved row with the results (RLS scopes to this user).
   const { data, error } = await supabase
     .from("prospect_audits")
-    .insert({
-      created_by: user.id,
+    .update({
       business_name: business,
       area: area || null,
       city: city || null,
@@ -177,7 +189,9 @@ export async function runAudit(
       // ai_visibility_summary stays null — populated later by the R4 flow.
       provider: provider.name,
       requests_made: n,
+      status: "complete",
     })
+    .eq("id", auditId)
     .select("id, share_token")
     .single();
   if (error || !data) {

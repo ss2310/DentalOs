@@ -125,17 +125,6 @@ export async function POST(req: Request) {
     );
   }
 
-  const remaining =
-    (clinic.monthly_credits ?? 0) - (clinic.credits_used ?? 0);
-  if (remaining < post.credits_cost) {
-    return NextResponse.json(
-      {
-        error: `Not enough credits — this needs ${post.credits_cost}, you have ${remaining} left this month.`,
-      },
-      { status: 402 },
-    );
-  }
-
   const { date: istDate } = nowIST();
   const extras = body.extras ?? {};
   const vars: Record<string, string> = {
@@ -174,6 +163,38 @@ export async function POST(req: Request) {
     );
   }
 
+  // Reserve credits ATOMICALLY before the paid call (SEC-H1/L1). The RPC
+  // charges in one row-locked statement, so concurrent requests can't all
+  // slip through and get billed as one. NULL = not enough credits; we never
+  // reach Claude. Refunded below if the generation then fails.
+  const cost = post.credits_cost;
+  const reference = crypto.randomUUID();
+  const { data: reservedLeft, error: reserveError } = await supabase.rpc(
+    "reserve_credits",
+    { p_cost: cost, p_reason: "content_generation", p_reference: reference },
+  );
+  if (reserveError) {
+    console.error("Credit reserve failed:", reserveError);
+    return NextResponse.json(
+      { error: "Could not check your credits. Please try again." },
+      { status: 500 },
+    );
+  }
+  if (reservedLeft === null) {
+    const remaining =
+      (clinic.monthly_credits ?? 0) - (clinic.credits_used ?? 0);
+    return NextResponse.json(
+      {
+        error: `Not enough credits — this needs ${cost}, you have ${Math.max(remaining, 0)} left this month.`,
+      },
+      { status: 402 },
+    );
+  }
+  const creditsLeft = reservedLeft as number;
+
+  const refund = () =>
+    supabase.rpc("refund_credits", { p_reference: reference });
+
   try {
     const client = new Anthropic({ apiKey });
     // Sonnet 4.6, single-shot generation. No thinking config so the full
@@ -192,6 +213,7 @@ export async function POST(req: Request) {
       .trim();
 
     if (!raw) {
+      await refund();
       return NextResponse.json(
         { error: "The AI returned an empty result. Please try again." },
         { status: 502 },
@@ -219,19 +241,12 @@ export async function POST(req: Request) {
     const encoded =
       post.platform === "WhatsApp" ? encodeURIComponent(content) : null;
 
-    // Charge credits per generation — Generate and Regenerate both cost, since
-    // each is a real API call. Saving does not deduct again. Only reached after
-    // a successful generation. (RLS scopes the update to the caller's clinic.)
-    const newUsed = (clinic.credits_used ?? 0) + post.credits_cost;
-    const { error: creditError } = await supabase
-      .from("clinics")
-      .update({ credits_used: newUsed })
-      .eq("id", clinic.id);
-    if (creditError) console.error("Failed to deduct credits:", creditError);
-    const creditsLeft = (clinic.monthly_credits ?? 0) - newUsed;
-
+    // Credits were already reserved atomically before the call, so there is
+    // nothing to deduct here — just report the post-reserve balance.
     return NextResponse.json({ content, schema, encoded, creditsLeft, citable });
   } catch (err) {
+    // Generation failed after the reserve — refund so the clinic isn't charged.
+    await refund();
     // Friendly, retryable message. Log the real error server-side only.
     console.error("Claude generation failed:", err);
     const status =

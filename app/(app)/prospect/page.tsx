@@ -39,6 +39,7 @@ export default async function ProspectPage() {
     supabase
       .from("prospect_audits")
       .select("id, business_name, area, avg_rank, created_at, share_token")
+      .eq("status", "complete")
       .order("created_at", { ascending: false }),
     getAuditBudget(supabase),
   ]);

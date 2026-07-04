@@ -1145,3 +1145,59 @@ receptionists with no clinic.
 ### Regression
 - [ ] `tsc --noEmit` and `next lint` clean after the app edits.
 - [ ] Notification counter increments/decrements; mark-read & mark-all-read work.
+
+## Security 015 — atomic credit + SERP reservations (migration 015)
+
+Run `015_atomic_reservations.sql` in the SQL Editor first (creates the RPCs +
+`credit_transactions` ledger + `status` columns). The app calls these RPCs, so
+generate / scan / publish will error until the migration is applied.
+
+### Credits — normal behaviour (regression)
+- [ ] Generate content (owner/doctor) → succeeds; the credits pill drops by the
+      type's cost. Regenerate → drops again (each call is charged).
+- [ ] Generate an Insight Report (Reviews) → succeeds; credits drop by its cost.
+- [ ] Publish a landing page → succeeds; credits drop by 1.
+- [ ] In SQL, `select kind, amount, reason from credit_transactions order by
+      created_at desc limit 5;` → shows one `reserve` (negative) row per
+      successful op.
+
+### Credits — reserve blocks over-spend (SEC-H1, SEC-L1)
+- [ ] Set a clinic near its cap: `update clinics set credits_used = monthly_credits - 1
+      where id = '<clinic>';`. A 2-credit generation → returns "Not enough
+      credits …" and does NOT call Claude; `credits_used` unchanged.
+- [ ] Race check: with 1 credit left, fire several generations at once (click
+      Generate rapidly / open two tabs). Exactly **one** succeeds; the rest get
+      "Not enough credits". `credits_used` never exceeds `monthly_credits`.
+- [ ] A failed generation refunds: temporarily break the AI (unset
+      ANTHROPIC_API_KEY or force an error) → user sees an error AND
+      `credit_transactions` shows a matching `refund` row; `credits_used` returns
+      to its pre-attempt value.
+
+### Credits — refund can't be abused
+- [ ] As an authenticated user, call `select refund_credits('<random uuid>');`
+      → returns NULL and `credits_used` is unchanged (no reserve to refund).
+- [ ] Call `refund_credits` twice with a real past reference → the second call
+      returns NULL (no double credit). `credits_used` only rises, never mined
+      down to free credits.
+- [ ] Direct ledger tampering blocked: `insert into credit_transactions ...` as
+      authenticated → denied by RLS (no insert policy).
+
+### SERP scans / audits — reserve up front (SEC-M1)
+- [ ] Run a rank scan → succeeds and appears in the list; `rank_scans` row has
+      `status = 'complete'` and `requests_made > 0`.
+- [ ] With `SERP_MONTHLY_SCAN_CAP` set low (e.g. 2), run scans until the cap →
+      further scans return "You've used all N scans …" and NO extra provider
+      calls happen. Fire two scans concurrently at the boundary → only one is
+      admitted (count never exceeds the cap).
+- [ ] Force every grid request to fail → the scan returns an error AND leaves no
+      row (the reservation is deleted), so a failed scan doesn't burn quota.
+- [ ] In-flight rows are hidden: a `status = 'reserved'` row never shows on
+      /rank, /rank/[id], or /competitors.
+- [ ] Agency audit path mirrors the above with `AGENCY_MONTHLY_AUDIT_CAP` and
+      `prospect_audits`.
+
+### Multi-tenancy
+- [ ] `credit_transactions` are readable only for the caller's own clinic
+      (`select * from credit_transactions` returns only own-clinic rows).
+- [ ] A reserve/refund only ever moves the CURRENT user's clinic credits
+      (the RPC re-derives clinic from `current_clinic_id()`; no clinic_id param).

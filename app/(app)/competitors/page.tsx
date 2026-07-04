@@ -79,6 +79,7 @@ export default async function CompetitorsPage({
     .from("rank_scans")
     .select("id, scanned_at, competitors")
     .eq("keyword_id", selected.id)
+    .eq("status", "complete")
     .order("scanned_at", { ascending: false });
 
   // Only scans created since migration 008 carry the competitor aggregate.

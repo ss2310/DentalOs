@@ -36,6 +36,7 @@ export default async function KeywordDetailPage({
         "id, keyword_id, scanned_at, avg_rank, pct_in_top3, grid_points, provider, requests_made, created_at",
       )
       .eq("keyword_id", params.id)
+      .eq("status", "complete")
       .order("scanned_at", { ascending: false }),
     getScanBudget(supabase),
   ]);

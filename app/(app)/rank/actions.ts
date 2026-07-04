@@ -10,7 +10,7 @@ import {
   buildCompetitorSummary,
 } from "@/lib/serp";
 import type { LocalResult } from "@/lib/serp";
-import { getScanBudget } from "@/lib/serp/budget";
+import { monthlyScanCap } from "@/lib/serp/budget";
 
 export type RankActionState = { ok?: boolean; error?: string };
 
@@ -97,7 +97,6 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
   // Destructure into locals so narrowing survives inside the worker closure.
   const {
     id: kwId,
-    clinic_id: kwClinicId,
     keyword: kwKeyword,
     target_business_name: kwTarget,
     target_place_id: kwPlaceId,
@@ -111,11 +110,22 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
   );
   const n = points.length;
 
-  // Cost guard: one scan uses one of the clinic's monthly allowance.
-  const { remaining, cap } = await getScanBudget(supabase);
-  if (remaining < 1) {
+  // Reserve a scan slot ATOMICALLY before hitting the provider (SEC-M1): the
+  // RPC serializes per clinic, so concurrent scans can't overrun the monthly
+  // cap. It inserts a 'reserved' rank_scans row now and returns its id; we
+  // finalize it after the scan, or delete it if every request fails so a
+  // failed scan doesn't burn quota.
+  const cap = monthlyScanCap();
+  const { data: scanId, error: reserveError } = await supabase.rpc(
+    "reserve_rank_scan",
+    { p_keyword_id: kwId, p_cap: cap },
+  );
+  if (reserveError || !scanId) {
+    const capReached = /cap reached/i.test(reserveError?.message ?? "");
     return {
-      error: `You've used all ${cap} scans for this month. Credit top-ups are coming once payments go live.`,
+      error: capReached
+        ? `You've used all ${cap} scans for this month. Credit top-ups are coming once payments go live.`
+        : "Could not start the scan. Please try again.",
     };
   }
 
@@ -155,8 +165,10 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
     Array.from({ length: Math.min(SCAN_CONCURRENCY, n) }, () => worker()),
   );
 
-  // Every point failed → don't save a misleading all-blank scan.
+  // Every point failed → don't keep a misleading all-blank scan. Delete the
+  // reservation so it doesn't count against the monthly cap.
   if (failures === n) {
+    await supabase.from("rank_scans").delete().eq("id", scanId);
     return {
       error:
         "Every scan request failed — check SERP_PROVIDER and the provider's API key.",
@@ -181,17 +193,19 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
     kwTarget,
   );
 
-  const { error } = await supabase.from("rank_scans").insert({
-    clinic_id: kwClinicId,
-    keyword_id: kwId,
-    avg_rank: avgRank,
-    pct_in_top3: pctInTop3,
-    grid_points: gridPoints,
-    competitors,
-    provider: provider.name,
-    requests_made: n,
-    created_by: user.id,
-  });
+  // Finalize the reserved row with the results (RLS scopes to the clinic).
+  const { error } = await supabase
+    .from("rank_scans")
+    .update({
+      avg_rank: avgRank,
+      pct_in_top3: pctInTop3,
+      grid_points: gridPoints,
+      competitors,
+      provider: provider.name,
+      requests_made: n,
+      status: "complete",
+    })
+    .eq("id", scanId);
   if (error) return { error: "Scan finished but saving the result failed." };
 
   revalidatePath("/rank");

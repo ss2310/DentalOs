@@ -41,6 +41,7 @@ export default async function RankPage() {
       supabase
         .from("rank_scans")
         .select("keyword_id, avg_rank, pct_in_top3, scanned_at")
+        .eq("status", "complete")
         .order("scanned_at", { ascending: false }),
       supabase
         .from("clinics")
