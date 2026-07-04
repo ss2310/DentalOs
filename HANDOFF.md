@@ -1,193 +1,188 @@
 # HANDOFF — GrowthOS
 
-Snapshot so a new session can pick up without this chat. Read `CLAUDE.md` first
-(permanent rules), then this, then `TESTING.md` (manual checklists per feature).
-Last updated: **04 Jul 2026**.
+Read `CLAUDE.md` first (permanent rules — the design section was **rewritten**
+this session), then this, then `TESTING.md` (manual checklists per feature) and
+`SECURITY-AND-REDESIGN-HANDOFF.md` (the full security audit).
+Last updated: **04 Jul 2026**. Branch: **`growth-features-serp`** (not pushed, not
+merged to `main`). Working tree is **clean — everything below is committed.**
 
-> Next session: run migration **013** (§1), log in, and walk the TESTING.md
-> checklists for this session's work (§2–§5) — **none of it is click-tested live
-> yet**. All work is on branch **`growth-features-serp`** and is **uncommitted**
-> in the working tree (§6).
-
----
-
-## 0. TL;DR — where we are
-
-This session shipped **three big features** plus **three UX fixes**, all on top of
-the existing growth suite:
-
-1. **Journey-based navigation + "How it works" intro** — the flat 8-tab "Clinic
-   Operations" group became three plain-language stages; a first-run walkthrough
-   modal explains the product.
-2. **Role-based access (RBAC) + Staff management** — `profiles.role`
-   (owner/doctor/receptionist) now actually gates the app; owners can create
-   receptionist accounts in Settings → Staff.
-3. **AI Visibility Tracker** (`/ai-visibility`) — scorecard, manual check-session
-   flow, matrix, citation sources, trend, WhatsApp export, and a prospect tie-in.
-4. **UX fixes:** completed appointments collapse out of the day view; the
-   patient page surfaces "Last visit"; AI Visibility moved under **Marketing**.
-
-Everything is **type-checked, linted, and boots clean**. **None of it has been
-clicked through live end-to-end** — the auth gate blocks it without a login
-(see §7). That's the top job next session.
-
-Prior features (Monthly Insight Report, hosted landing pages, topic-suggestion
-dropdowns) are unchanged — see git history + their TESTING.md sections.
+> **Top priority next session:** fix **SEC-C1 / SEC-C2** (migration 014) — a
+> receptionist can promote themselves to owner *and* pivot into another clinic's
+> data. Worst-case bug. Details + full audit in
+> `SECURITY-AND-REDESIGN-HANDOFF.md`. Then do the **live click-through** (§5).
 
 ---
 
-## 1. RUN THIS MIGRATION FIRST (Supabase SQL Editor)
+## 0. TL;DR — what this session shipped
 
-| File | What it does | Verify |
-|---|---|---|
-| `013_roles_rbac.sql` | Adds `current_user_role()` + `is_clinic_admin()` helpers and tightens `clinics` / `rate_cards` **writes** to owner/doctor. **No new column** — `profiles.role` already exists. | `select current_user_role();` runs; a receptionist `update clinics …` is rejected by RLS |
+All on top of the previously-committed growth suite. Every item is committed,
+`tsc`/`lint` clean, and boots clean. **New AI/DB flows are NOT yet click-tested
+behind the auth gate** (§5).
 
-- **The app degrades gracefully without it** — nav/route/action guards (app-level)
-  still work; only the DB-level write backstop is inactive until it's run.
-- **AI Visibility needs NO migration** — its tables (`ai_visibility_queries`,
-  `ai_visibility_checks`) and `prospect_audits.ai_visibility_summary` all shipped
-  in **007** (already applied).
-- **Still pending from the prior session (if not yet run):** `010_insight_report`,
-  `011_landing_page_plans`, `012_topic_suggestions`. Verify with
-  `select name, topic_bank from post_types;` (three NULLs) and
-  `select plan from clinics;` (returns a value).
-
----
-
-## 2. Feature — Journey navigation + "How it works" intro
-
-- **Nav:** `components/app-shell.tsx` — one flat "Clinic Operations" group →
-  three journey groups: **Get Patients In** (Enquiries=Leads, Treatment
-  Plans=Pipeline), **Run the Clinic** (Appointments, Patients), **Get Paid & Keep
-  Them** (Payments=Billing, Check-up Reminders=Recalls, Reviews, Revenue
-  Recovered=Recovery). Page titles renamed to match.
-- **Intro:** `components/how-it-works.tsx` — auto-opens on first login
-  (`localStorage` flag `growthos:intro-seen:v1`), reopenable from a header **"How
-  it works"** button (`HelpIcon`). It's the screen to screen-share when demoing.
-- Icons added: `HelpIcon`, `AiVisibilityIcon` in `components/icons.tsx`.
-
-## 3. Feature — Role-based access (RBAC) + Staff
-
-- **Roles:** `clinic_owner` / `doctor` / `receptionist` (owner=doctor=full;
-  receptionist=front-desk subset). Signup already makes the creator a
-  `clinic_owner`, so **existing accounts see everything** (backward-compatible).
-- **Enforcement (4 layers):**
-  1. **Nav filter** — `AppShell` gets `isAdmin` from the layout; `adminOnly`
-     entries (Revenue Recovered, Marketing group, Settings) hidden from receptionists.
-  2. **Route guards** — `lib/roles.ts` `requireAdmin()` on `/settings`,
-     `/recovery`, `/generate`, `/rank` (+`[id]`), `/competitors`,
-     **`/ai-visibility`** (+`/session`).
-  3. **Action/API guards** — `assertAdmin`/inline checks on the generate API
-     (403), insight report, hosted-page publish, all settings + staff mutations,
-     and AI-Visibility actions.
-  4. **RLS (migration 013)** — `clinics` + `rate_cards` writes locked to owner/
-     doctor. (Reads stay open; revenue reads are NOT RLS-blocked to avoid breaking
-     the dashboard — the *pages* are hidden instead.)
-- **Staff:** Settings → **Staff** (`staff-manager.tsx` + `staff-actions.ts`) —
-  owner adds a teammate (name/email/temp password/role) via the service-role
-  admin API; lists members; Remove blocked for self + the Owner row.
-- **Also:** Dashboard hides money stat-cards (Plan Value, Recovered) for
-  receptionists; Reviews → Insights tab is owner/doctor-only.
-- **Key file:** `lib/roles.ts` (`getUserRole`, `isAdminRole`, `requireAdmin`,
-  `assertAdmin`, `ADMIN_ROLES`).
-
-## 4. Feature — AI Visibility Tracker (`/ai-visibility`)
-
-- **What:** tracks how often ChatGPT / Gemini / Perplexity / Google AI Overview
-  cite the clinic. **Manual** check recording (a human runs the queries); SERP
-  auto-fill for Google AI Overview is a flagged **TODO**, not built.
-- **Scorecard:** ring (red <20 / amber 20–60 / green >60) = % of (active query ×
-  4 engines) whose *latest* check is cited; per-engine sub-scores.
-- **Query set:** "Generate Query Set" seeds ~12 templated queries across 6 layers
-  from clinic name/area/city; editable + "+ Add Query".
-- **Check session** (`/ai-visibility/session`): stepper over query×engine combos,
-  three buttons (Cited/Mentioned/Absent), optional sources/excerpt/position,
-  auto-save + auto-advance.
-- **Results:** matrix (tap a cell for history), citation-sources aggregation
-  (the actionable "where AI cites others" list), per-session trend.
-- **Prospect tie-in** (agency-only): `/prospect/[id]/ai-visibility` runs the same
-  stepper *in-memory* (a prospect has no `clinic_id`) and writes
-  `prospect_audits.ai_visibility_summary` → the **public audit report's AI
-  section lights up** (matched its existing shape + added a findings list).
-- **Export:** "Copy Scorecard Summary" → WhatsApp/email text block.
-- **Files:** `lib/ai-visibility.ts` (templates + scoring + summary/export
-  builders), `app/(app)/ai-visibility/*`, `saveProspectAiSummary` in
-  `prospect/actions.ts`, R3 report + type extensions in `app/audit/[token]` and
-  `lib/types.ts`. **No migration.**
-
-## 5. UX fixes this session
-
-- **Completed appointments** (`appointments-list.tsx`): `completed` now collapses
-  into a "Show completed (n)" toggle (like cancelled/rescheduled) so the day view
-  stays focused on what still needs action. Empty-active state reads "All N …
-  are done ✓".
-- **Patient "Last visit"** (`patients/[id]/page.tsx`): a prominent last-visit line
-  in the header (date · treatment). NB: full **Visit History already existed** —
-  this just surfaces the most recent at a glance for the doctor.
-- **AI Visibility → Marketing** (`app-shell.tsx`): moved from a standalone
-  top-level item into the **Marketing** group. ⚠️ **Consequence:** Marketing is
-  owner/doctor-only, so AI Visibility is **no longer visible to receptionists**
-  (reverses the original "all roles" intent). Route/action guards were added to
-  match. If you want receptionists to keep it, move it back out of Marketing and
-  drop the `requireAdmin()` calls + the role check in `ai-visibility/actions.ts`.
+1. **Committed last session's uncommitted work** in 4 clean groups (RBAC + staff,
+   journey nav + intro, AI Visibility, UX fixes).
+2. **Security audit** — 4 parallel auditors. 2 critical, 3 high, 5 medium, 7 low.
+   Report only, nothing patched. Full ranked report + fix plan in
+   `SECURITY-AND-REDESIGN-HANDOFF.md`.
+3. **"Clinical Minimal" redesign** — Apple-style: neutral palette, teal as the
+   single accent, white sidebar, one Inter family, frosted-glass overlays.
+   Retinted via design tokens, so the whole app reskinned from ~10 files.
+4. **Modal overflow bug fixed** — the first-run intro popup no longer flows off
+   screen (dynamic viewport height + scrollable body).
+5. **FAQ help chatbot** — floating assistant on every page, all roles.
+6. **AI CSV data migration** — Settings → Data Migration; auto-detect + AI field
+   mapping + import.
 
 ---
 
-## 6. Branch, commits, and git state
+## 1. Commit map (this session, newest first)
 
-- **Branch:** `growth-features-serp`. **Not pushed, not merged to `main`.**
-- ⚠️ **This session's work is UNCOMMITTED** — everything above is in the working
-  tree only (no commits made this session). Prior features are committed (see
-  `git log`, newest `9888f68`). **Ask to commit** when ready; suggested grouping:
-  (1) journey nav + intro, (2) RBAC + staff, (3) AI Visibility, (4) UX fixes.
-- The repo convention is committing to `main`; we're on a branch per the
-  default-branch guardrail. **Still undecided:** fast-forward `main` / push origin.
+| Commit | What |
+|---|---|
+| `69e390c` | Help chatbot → Haiku 4.5 + prompt-cache breakpoint |
+| `65f2ab6` | TESTING.md checklists (redesign, modal, chatbot, migration) |
+| `0d6aca2` | AI-assisted CSV data migration |
+| `7d3dfc6` | In-app FAQ help chatbot |
+| `dd0d4b8` | Fix modal overflowing viewport |
+| `f50005d` | Security-audit + redesign handoff doc |
+| `5f1b57d` | "Clinical Minimal" redesign |
+| `69dda94` | UX fixes (completed appts collapse, patient last-visit) |
+| `f5bb376` | AI Visibility Tracker |
+| `44a0c2b` | Journey navigation + "How it works" intro |
+| `c871bf1` | RBAC + staff management |
 
----
-
-## 7. Verification status
-
-- ✅ `tsc --noEmit` and `next lint` clean; dev server boots + compiles with no
-  server/console errors.
-- ❌ **No live click-through** of any new flow. Blocker: everything is behind the
-  auth gate and there's no logged-in session available in this environment. tsc
-  type-checked every new page/action, which covers compile correctness.
-- **Next session:** run migration 013, log in as owner, then:
-  1. Walk the four new TESTING.md checklists (journey nav; RBAC — needs a
-     receptionist account added via Settings → Staff; AI Visibility incl. a real
-     check session; the UX fixes).
-  2. For the prospect tie-in, run an AI-visibility session from an audit and
-     confirm the public `/audit/<token>` report's AI section renders.
+(`9888f68` and earlier = prior sessions.)
 
 ---
 
-## 8. Gotchas / operational notes
+## 2. Feature — FAQ Help Chatbot
 
-- **Do NOT run `next build` while `next dev` is running** — they share `.next/`
-  and the build clobbers the dev server's chunks. Use `tsc`/`lint` alongside dev.
-- **Credits** still govern paid actions (generation, Insight Report=2, publish=1).
-  AI Visibility check recording is **free** (no AI call).
-- **RBAC fail-closed:** `AppShell` defaults `isAdmin=false` and `requireAdmin`
-  treats unknown roles as non-admin — a profile-fetch hiccup shows the
-  receptionist view, never an accidental admin view.
-- **AI Visibility engines = 4** (chatgpt/gemini/perplexity/google_ai_overview);
-  denominators assume all four. Prospect checks are NOT written to
-  `ai_visibility_checks` (no clinic_id) — only to the audit summary.
-- **Windows/Git Bash:** paths with `(app)` must be quoted in shell commands.
+- **What:** a teal floating bubble (bottom-right) on every authed page, for
+  **all roles**, that answers "how do I use GrowthOS" questions. Greeting +
+  suggestion chips + typing indicator + Enter-to-send + Esc/X to exit.
+- **Files:** `components/help-chat.tsx` (widget, mounted in `app-shell.tsx`),
+  `app/api/help/route.ts` (server Claude call), `lib/help-kb.ts` (hand-written
+  product knowledge base = the system prompt; **no** codebase or patient data).
+  Icons `ChatIcon`/`SendIcon` in `components/icons.tsx`.
+- **Model / cost:** **`claude-haiku-4-5`** (chosen for cost — ~3× cheaper than
+  Sonnet; marketing generation stays on Sonnet). **FREE** — does NOT touch the
+  in-app credit system. Hard-capped instead (history len, per-msg + total char
+  limits, 700 max_tokens, 30s timeout) to close the SEC-H2 cost-abuse pattern.
+- **Prompt caching:** a `cache_control` breakpoint is on the system prompt, but
+  it's **dormant** — the KB is ~1,600 tokens and Haiku's minimum cacheable
+  prefix is ~4,096. Verified live (`cache_creation_input_tokens: 0`, no error).
+  It **activates automatically** if the KB grows past ~4,096 tokens. Deliberately
+  not padding the KB to force it (bursty help traffic → cold 5-min TTL → a padded
+  cached prompt can cost *more* than the lean uncached one).
+- **Verified:** widget renders/opens/closes; a **live** Anthropic call with the
+  real KB returns a correct, GrowthOS-specific answer. **Not** verified through
+  the auth-gated Next route (needs a login).
+
+## 3. Feature — AI CSV Data Migration (Settings → Data Migration)
+
+- **What:** owner/doctor uploads a CSV from old practice-management software →
+  Claude **auto-detects** whether it's patients or treatments and maps its
+  columns to GrowthOS fields → user reviews/corrects mapping → previews validated
+  rows → imports (clinic-scoped insert). 4-step wizard (upload → map → preview →
+  import) with per-step how-to notes + an Exit control.
+- **Scope (v1):** `patients` + `rate_cards` (treatments) — the two standalone
+  entities. **Appointments/dues deferred** (need patient linkage first).
+- **Files:** `lib/data-migration.ts` (entity+field catalog, dependency-free CSV
+  parser, shared type coercion — Indian DD/MM/YYYY dates, +91 phones via
+  `normalizeIndianPhone`, ₹/comma numbers, gender), `migration-actions.ts`
+  (`detectMapping` Claude call + `importRecords`), `data-migration.tsx` (wizard),
+  wired into `settings-tabs.tsx`.
+- **Security baked in:** admin-gated at the **action** layer too (SEC-M5 lesson);
+  only headers + ≤8 truncated sample rows go to the AI, never the whole file
+  (SEC-H2); model JSON is parsed with a guard and sanitised against a known
+  entity/field allowlist; row/file-size caps.
+- **Verified:** 17 pure-logic assertions pass (CSV quoting/escaping/CRLF, date
+  formats, phone/number/gender coercion, required-field validation); wizard
+  renders. **Not** verified live: the Claude detect + the DB insert (auth-gated).
+- **No migration needed** — writes to existing `patients` / `rate_cards`.
+
+## 4. Design — "Clinical Minimal" (redesign)
+
+- Committed `5f1b57d`. **`CLAUDE.md` rule #2 is the permanent spec now** — read it
+  before styling anything.
+- Tokens (`tailwind.config.ts`): `ink`→`#1D1D1F` text, `border`→`#E8EAED`
+  hairline, `subtle`→`#F5F5F7`; **teal `#0D9488` is the single accent**; `mint`
+  is legacy — avoid. One Inter family (`font-display` now resolves to Inter;
+  Sora dropped).
+- Sidebar: **white rail + hairline** (not the old teal slab); active item = soft
+  fill + **teal icon**. Header/modals/toasts use frosted-glass (`backdrop-blur`).
+- Because everything styles through tokens, pages reskinned automatically.
+- **Bug fixed** (`dd0d4b8`): `components/modal.tsx` is now a flex column (pinned
+  header, scrollable body) capped with `dvh` — the intro popup no longer
+  overflows; the "Got it" button is always reachable on mobile. Verified at
+  desktop + mobile viewport sizes.
 
 ---
 
-## 9. Open threads / not yet built
+## 5. Verification status & the big next job
 
-- **Confirm the AI-Visibility-under-Marketing decision** — it's now owner/doctor
-  only (see §5). Revert if receptionists should record checks.
-- **SERP auto-fill for Google AI Overview** — flagged TODO in the check flow;
-  SerpApi/DataForSEO return AI Overview data (ties into the `lib/serp` layer).
-- **Approve/Reject review layer for `/history`** — designed, not built; reversible
-  `review_status` on `generated_content`. Would now be **migration 014** (013 is
-  RBAC).
-- **Publish from `/history`** — a saved page still can't be published without
-  regenerating. Offered, not built.
-- **Commit + branch fate** — commit this session's work; decide fast-forward
-  `main` / push origin (§6).
-- **Live testing pass** — the big one (§7).
+- ✅ `tsc --noEmit` + `next lint` clean; dev server boots; redesign confirmed
+  live on the login page; help chatbot answer verified via a direct API call.
+- ❌ **No auth-gated click-through** of: the chatbot through its Next route, the
+  CSV migration detect+import, or any of last session's RBAC / AI-Visibility
+  flows. Same standing blocker — no logged-in session in this environment.
+- **Next session:** run migration **014** (security fix, §6), log in as owner,
+  then walk the `TESTING.md` checklists — especially: add a receptionist via
+  Settings → Staff (RBAC), run a real AI-Visibility check session, import a CSV,
+  and ask the chatbot a few questions.
+
+---
+
+## 6. Security — MUST-FIX, unpatched (full detail in the security handoff)
+
+Report-only this session; nothing patched. Ranked list + exploit scenarios +
+fix code in `SECURITY-AND-REDESIGN-HANDOFF.md`. The headline items:
+
+- 🔴 **SEC-C1** — `profiles_update` RLS policy (`001_init.sql:753`) has no column
+  restriction → a user can `update profiles set role='clinic_owner'` (self-
+  promote) or `set home_clinic_id='<victim>'` (**full cross-tenant takeover**).
+- 🔴 **SEC-C2** — `handle_new_user` trigger trusts signup metadata `role` /
+  `home_clinic_id`; same escalation via public GoTrue signup.
+- 🟠 **H1/H2/H3** — non-atomic credit deduction (double-spend), unbounded prompt
+  input, unthrottled + unescaped-email signup.
+
+**Suggested batching:** migration **014** = C1 + C2 (+ L4) *first, alone*;
+migration **015** + app = atomic credit/SERP reservations; then an app-only
+hardening batch. C1/C2 are a **DB fix** — app code can't patch RLS.
+
+---
+
+## 7. Migrations to run (Supabase SQL Editor)
+
+- **Pending from before:** `010_insight_report`, `011_landing_page_plans`,
+  `012_topic_suggestions`, `013_roles_rbac`. Verify with
+  `select current_user_role();` and `select name, topic_bank from post_types;`.
+- **To be written:** `014` (SEC-C1/C2), `015` (atomic credit + SERP reserve).
+- The new **chatbot** and **CSV migration** features need **no migration**.
+
+---
+
+## 8. Branch & open threads
+
+- Branch `growth-features-serp`, **not pushed, not merged.** Repo convention is
+  committing to `main`; we're on a branch per the default-branch guardrail.
+  **Undecided:** fast-forward `main` / push origin.
+- **Open / offered, not built:**
+  - Security fixes (§6) — the priority.
+  - Live click-through (§5).
+  - Feature menu offered: CSV **export**, duplicate-patient merge, bulk WhatsApp
+    campaigns, patient self-booking portal, churn-risk insights.
+  - Enrich the help KB past ~4,096 tokens to both improve answers **and** activate
+    prompt caching on Haiku (offered; not done — see §2).
+  - Prior deferred: approve/reject review layer for `/history` (would be a new
+    migration), publish-from-`/history`, SERP auto-fill for Google AI Overview.
+
+## 9. Gotchas / operational notes
+
+- **One dev server per repo.** Two `next dev` against the same `.next/` clobber
+  each other's chunks → broken interactivity + stale CSS. This bit us twice this
+  session. If the app looks wrong, suspect a second server before the code.
+- **Do NOT run `next build` while `next dev` is running** (shared `.next/`).
+- **Windows/Git Bash:** quote paths containing `(app)`.
+- **Chatbot is free; generation/insight/publish still cost credits.**
+- **RBAC fail-closed** — but see SEC-C1: the DB backstop is undermined until 014.
