@@ -8,7 +8,6 @@
 // type-stripping (Node 22.18+/24) to import the .ts seed file directly.
 
 import { readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 
 const slug = (process.argv[2] ?? "").trim();
@@ -31,10 +30,11 @@ if (!url || !key) {
 }
 
 async function main() {
-  // Import the seed file (.ts, type-stripped by Node).
-  const fileUrl = pathToFileURL(
-    new URL(`../seeds/verticals/${slug}.ts`, import.meta.url).pathname,
-  );
+  // Import the seed file (.ts, type-stripped by Node). Pass the file:// URL from
+  // new URL() straight to import() — it already handles Windows drive letters and
+  // spaces (%20) correctly; going via .pathname + pathToFileURL double-encodes and
+  // breaks on paths with spaces.
+  const fileUrl = new URL(`../seeds/verticals/${slug}.ts`, import.meta.url);
   let seed;
   try {
     seed = (await import(fileUrl)).default;
@@ -70,6 +70,26 @@ async function main() {
   const compliance = seed.compliance_rules ?? [];
 
   console.log(`Seeding vertical "${slug}" (${seed.display_name})…`);
+
+  // Idempotency + safety: fully replace only THIS vertical's curated topics on
+  // every run. The delete is hard-locked to vertical = slug (never NULL / never
+  // 'dental') and to curated global rows, so a re-run removes only rows this same
+  // seed created — never a shared or dental row. Refuse 'dental' outright.
+  if (slug === "dental") {
+    console.error("Refusing to seed/replace the 'dental' shared pool.");
+    process.exit(1);
+  }
+  const { error: delErr, count: delCount } = await db
+    .from("topic_suggestions")
+    .delete({ count: "exact" })
+    .eq("vertical", slug)
+    .eq("source", "curated")
+    .is("clinic_id", null);
+  if (delErr) {
+    console.error(`  topics: clear failed — ${delErr.message}`);
+    process.exit(1);
+  }
+  console.log(`  topics: cleared ${delCount ?? 0} existing '${slug}' row(s).`);
 
   if (topics.length === 0) {
     console.log("  topics: 0 — template is empty, nothing to insert.");
