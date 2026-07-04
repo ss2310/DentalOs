@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Modal } from "@/components/modal";
 import { toast } from "@/components/toast";
 import { LocationPicker } from "@/components/location-picker";
+import { resolveVerticalSearch } from "@/lib/vertical-search";
 import { runAudit } from "./actions";
 
 const field =
@@ -14,9 +15,12 @@ const label = "text-sm font-medium text-text-primary";
 export function NewAudit({
   remaining,
   cap,
+  verticals = [],
 }: {
   remaining: number;
   cap: number;
+  // Active verticals for the (flag-gated) picker. Empty = flag off → dental only.
+  verticals?: { id: string; display_name: string }[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -31,7 +35,13 @@ export function NewAudit({
     grid_size: "5",
     radius_km: "3",
     place_id: "",
+    vertical: "dental",
   });
+
+  const showVerticalPicker = verticals.length > 0;
+  // Per-vertical keyword hint (drives competitor discovery). Dental → the
+  // familiar "dentist near me".
+  const keywordPlaceholder = resolveVerticalSearch(f.vertical).gridKeyword;
 
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
     setF((s) => ({ ...s, [k]: e.target.value }));
@@ -74,13 +84,30 @@ export function NewAudit({
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Prospect Audit">
         <div className="space-y-4">
+          {showVerticalPicker ? (
+            <div>
+              <label className={label}>Vertical</label>
+              <select
+                className={`mt-1 ${field}`}
+                value={f.vertical}
+                onChange={set("vertical")}
+              >
+                {verticals.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.display_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
           <div>
             <label className={label}>Business name</label>
             <input
               className={`mt-1 ${field}`}
               value={f.business_name}
               onChange={set("business_name")}
-              placeholder="e.g. Bright Smile Dental"
+              placeholder="e.g. the prospect's name on Google"
             />
           </div>
 
@@ -111,7 +138,7 @@ export function NewAudit({
               className={`mt-1 ${field}`}
               value={f.keyword}
               onChange={set("keyword")}
-              placeholder="e.g. dentist near me"
+              placeholder={`e.g. ${keywordPlaceholder}`}
             />
           </div>
 

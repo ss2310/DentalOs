@@ -25,7 +25,15 @@ const btnBase =
 const btnPrimary = `${btnBase} bg-primary text-white hover:bg-primary/90`;
 const btnOutline = `${btnBase} border border-border text-text-primary hover:bg-subtle`;
 
-export function QueryManager({ queries }: { queries: AiQueryRow[] }) {
+export function QueryManager({
+  queries,
+  samplePlaceholder,
+}: {
+  queries: AiQueryRow[];
+  // Vertical-aware example for the "add a query" input (e.g. a derma clinic sees
+  // "best dermatologist for acne …" instead of a dental example).
+  samplePlaceholder: string;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [modalOpen, setModalOpen] = useState(false);
@@ -211,7 +219,7 @@ export function QueryManager({ queries }: { queries: AiQueryRow[] }) {
               className={inputClass}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="e.g. best dentist for kids in Andheri"
+              placeholder={`e.g. ${samplePlaceholder}`}
             />
           </div>
           {!editing ? (

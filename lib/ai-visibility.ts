@@ -4,6 +4,7 @@
 // .ai_visibility_summary all ship in migration 007 — no new migration.
 
 import type { AiVisibilitySummary } from "@/lib/types";
+import { resolveVerticalSearch } from "@/lib/vertical-search";
 
 // ---- Engines (fixed set; keys match the schema + the public report) ----
 export const AI_ENGINES = [
@@ -56,34 +57,41 @@ export type AiCheckRow = {
 };
 
 // ---- Query set templates, filled with the clinic's data ----
-export function buildQueryTemplates(clinic: {
-  name?: string | null;
-  area?: string | null;
-  city?: string | null;
-}): { query_text: string; query_layer: QueryLayer }[] {
+// The query terms come from the per-vertical bank (lib/vertical-search) resolved
+// by the clinic's vertical, with the dental fallback. The 6-layer STRUCTURE is
+// identical for every vertical — only the terms change. For a dental clinic (or
+// an absent vertical) the output is byte-identical to the pre-vertical version.
+export function buildQueryTemplates(
+  clinic: {
+    name?: string | null;
+    area?: string | null;
+    city?: string | null;
+  },
+  vertical?: string | null,
+): { query_text: string; query_layer: QueryLayer }[] {
   const name = (clinic.name ?? "").trim() || "our clinic";
   const area = (clinic.area ?? "").trim() || (clinic.city ?? "").trim() || "your area";
   const city = (clinic.city ?? "").trim() || (clinic.area ?? "").trim() || "your city";
   const clean = (s: string) => s.replace(/\s+/g, " ").trim();
-  const t = (query_text: string, query_layer: QueryLayer) => ({
-    query_text: clean(query_text),
-    query_layer,
-  });
+  const fill = (template: string) =>
+    clean(
+      template
+        .replace(/\{name\}/g, name)
+        .replace(/\{area\}/g, area)
+        .replace(/\{city\}/g, city),
+    );
 
-  return [
-    t(`${name} reviews`, "direct_brand"),
-    t(`is ${name} good`, "direct_brand"),
-    t(`best dentist in ${area} ${city}`, "service_area"),
-    t(`RCT cost in ${city}`, "service_area"),
-    t(`dental implant cost in ${city}`, "service_area"),
-    t(`top dental clinics in ${city}`, "best_of"),
-    t(`best dental clinic in ${area}`, "best_of"),
-    t(`${name} vs other dentists in ${area}`, "comparison"),
-    t(`tooth pain which doctor should I see in ${city}`, "symptom"),
-    t(`bleeding gums treatment in ${city}`, "symptom"),
-    t(`dentist near me open now in ${area}`, "voice_style"),
-    t(`emergency dentist near me in ${area}`, "voice_style"),
+  const cfg = resolveVerticalSearch(vertical);
+  // Brand layer is name-only and shared across verticals; the rest come from the
+  // vertical bank in its fixed layer order.
+  const out: { query_text: string; query_layer: QueryLayer }[] = [
+    { query_text: fill("{name} reviews"), query_layer: "direct_brand" },
+    { query_text: fill("is {name} good"), query_layer: "direct_brand" },
   ];
+  for (const q of cfg.queries) {
+    out.push({ query_text: fill(q.text), query_layer: q.layer });
+  }
+  return out;
 }
 
 // ---- Scoring helpers ----

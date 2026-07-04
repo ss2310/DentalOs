@@ -12,6 +12,7 @@ import {
   type AiQueryRow,
   type AiCheckRow,
 } from "@/lib/ai-visibility";
+import { resolveVerticalSearch } from "@/lib/vertical-search";
 import { ScoreCard } from "./score-card";
 import { VisibilityMatrix, type MatrixRow } from "./visibility-matrix";
 import { QueryManager } from "./query-manager";
@@ -34,12 +35,15 @@ export default async function AiVisibilityPage() {
         "id, query_id, engine, checked_at, is_cited, is_mentioned, position_note, cited_sources, raw_excerpt",
       )
       .order("checked_at", { ascending: false }),
-    supabase.from("clinics").select("business_name").single(),
+    supabase.from("clinics").select("business_name, vertical").single(),
   ]);
 
   const queries = (queriesRes.data as AiQueryRow[]) ?? [];
   const checks = (checksRes.data as AiCheckRow[]) ?? [];
   const clinicName = clinicRes.data?.business_name ?? "Your clinic";
+  const sampleQuery = resolveVerticalSearch(
+    (clinicRes.data as { vertical?: string | null } | null)?.vertical,
+  ).sampleQuery;
 
   const active = queries.filter((q) => q.is_active);
   const scorecard = computeScorecard(active, checks);
@@ -153,7 +157,7 @@ export default async function AiVisibilityPage() {
       ) : null}
 
       <SectionHeader>Tracked Queries</SectionHeader>
-      <QueryManager queries={queries} />
+      <QueryManager queries={queries} samplePlaceholder={sampleQuery} />
     </div>
   );
 }

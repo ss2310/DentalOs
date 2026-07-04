@@ -57,6 +57,9 @@ export type RunAuditInput = {
   grid_size: string;
   radius_km: string;
   place_id: string;
+  // Optional prospect vertical (agency vertical picker). Absent/"dental" =
+  // unchanged. Persisted best-effort — see the note where it's stored.
+  vertical?: string;
 };
 
 export async function runAudit(
@@ -244,6 +247,20 @@ export async function runAudit(
     .single();
   if (error || !data) {
     return { error: "Audit finished but saving the result failed." };
+  }
+
+  // Persist the prospect's vertical best-effort (drives the audit's AI-visibility
+  // query set). Separate + ignored-on-error so a DB without migration 028 (no
+  // `vertical` column) still completes the audit as dental — unchanged.
+  const vertical = (input.vertical ?? "").trim();
+  if (vertical && vertical !== "dental") {
+    const { error: vErr } = await supabase
+      .from("prospect_audits")
+      .update({ vertical })
+      .eq("id", auditId);
+    if (vErr) {
+      console.warn("prospect_audits.vertical not set (migration 028?):", vErr.message);
+    }
   }
 
   revalidatePath("/prospect");

@@ -27,18 +27,32 @@ export default async function ProspectAiVisibilityPage({
     .single();
   if (!profile?.is_agency) redirect("/dashboard");
 
-  const { data: audit } = await supabase
+  // Read `vertical` defensively: if migration 028 isn't applied, re-query without
+  // it so the check still works (behaves as dental — unchanged).
+  const auditRes = await supabase
     .from("prospect_audits")
-    .select("id, business_name, area, city")
+    .select("id, business_name, area, city, vertical")
     .eq("id", params.id)
     .maybeSingle();
+  const audit = auditRes.error
+    ? (
+        await supabase
+          .from("prospect_audits")
+          .select("id, business_name, area, city")
+          .eq("id", params.id)
+          .maybeSingle()
+      ).data
+    : auditRes.data;
   if (!audit) notFound();
 
-  const combos: Combo[] = buildQueryTemplates({
-    name: audit.business_name,
-    area: audit.area,
-    city: audit.city,
-  }).flatMap((t, qi) =>
+  const combos: Combo[] = buildQueryTemplates(
+    {
+      name: audit.business_name,
+      area: audit.area,
+      city: audit.city,
+    },
+    (audit as { vertical?: string | null }).vertical,
+  ).flatMap((t, qi) =>
     ENGINE_KEYS.map((engine) => ({
       query_id: `t${qi}`, // synthetic — not persisted for prospects
       query_text: t.query_text,

@@ -15,9 +15,13 @@ const labelClass = "mb-1.5 block text-sm font-medium text-text-primary";
 
 export function RankToolbar({
   defaultBusiness,
+  defaultKeyword,
   hasLocation,
 }: {
   defaultBusiness: string;
+  // Per-vertical primary keyword default (e.g. "dermatologist near me"). Prefills
+  // the keyword field as a sensible starting point; fully editable.
+  defaultKeyword: string;
   // The clinic's location is set once in Settings and used as the scan centre;
   // without it we can't scan, so Add Keyword points the user there instead.
   hasLocation: boolean;
@@ -26,7 +30,7 @@ export function RankToolbar({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(defaultKeyword);
   const [business, setBusiness] = useState(defaultBusiness);
   const [placeId, setPlaceId] = useState("");
   const [gridSize, setGridSize] = useState("5");
@@ -35,14 +39,14 @@ export function RankToolbar({
 
   useEffect(() => {
     if (open) {
-      setKeyword("");
+      setKeyword(defaultKeyword);
       setBusiness(defaultBusiness);
       setPlaceId("");
       setGridSize("5");
       setRadius("3");
       setError(null);
     }
-  }, [open, defaultBusiness]);
+  }, [open, defaultBusiness, defaultKeyword]);
 
   function save() {
     if (!keyword.trim()) {
@@ -115,7 +119,7 @@ export function RankToolbar({
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               className={inputClass}
-              placeholder="dentist near me"
+              placeholder={defaultKeyword}
             />
           </div>
 

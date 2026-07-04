@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
 import { isLiveProvider } from "@/lib/serp";
+import { resolveVerticalSearch } from "@/lib/vertical-search";
 import { SampleDataBanner } from "./sample-banner";
 import {
   StatGrid,
@@ -44,11 +45,16 @@ export default async function RankPage() {
         .order("scanned_at", { ascending: false }),
       supabase
         .from("clinics")
-        .select("business_name, default_lat, default_lng, map_credits_balance")
+        .select("business_name, default_lat, default_lng, map_credits_balance, vertical")
         .single(),
     ]);
 
   const mapCredits = clinic?.map_credits_balance ?? 0;
+  // Per-vertical default keyword (e.g. "physiotherapist near me"), still editable
+  // per keyword. Dental → "dentist near me" (unchanged).
+  const defaultKeyword = resolveVerticalSearch(
+    (clinic as { vertical?: string | null } | null)?.vertical,
+  ).gridKeyword;
 
   const keywords = (kwData as KeywordRow[]) ?? [];
   const scans = (scanData as ScanRow[]) ?? [];
@@ -83,6 +89,7 @@ export default async function RankPage() {
     <div>
       <RankToolbar
         defaultBusiness={clinic?.business_name ?? ""}
+        defaultKeyword={defaultKeyword}
         hasLocation={hasLocation}
       />
       <p className="mt-1 text-sm text-text-secondary">

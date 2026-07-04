@@ -37,7 +37,7 @@ export async function generateQuerySet(): Promise<AiActionState> {
 
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("business_name, area, city")
+    .select("business_name, area, city, vertical")
     .single();
 
   // Skip templates the clinic already has (so re-running never duplicates).
@@ -48,11 +48,14 @@ export async function generateQuerySet(): Promise<AiActionState> {
     (existing ?? []).map((r) => r.query_text.trim().toLowerCase()),
   );
 
-  const rows = buildQueryTemplates({
-    name: clinic?.business_name,
-    area: clinic?.area,
-    city: clinic?.city,
-  })
+  const rows = buildQueryTemplates(
+    {
+      name: clinic?.business_name,
+      area: clinic?.area,
+      city: clinic?.city,
+    },
+    (clinic as { vertical?: string | null } | null)?.vertical,
+  )
     .filter((t) => !have.has(t.query_text.toLowerCase()))
     .map((t) => ({
       clinic_id: ctx.clinicId,

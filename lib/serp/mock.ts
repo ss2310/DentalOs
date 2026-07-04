@@ -19,18 +19,69 @@ function hash(str: string): number {
   return h >>> 0;
 }
 
-const COMPETITOR_NAMES = [
-  "Smile Dental Care",
-  "City Dental Clinic",
-  "Bright Smiles",
-  "Perfect Teeth",
-  "Dental Hub",
-  "Ortho Plus",
-  "Gentle Dentistry",
-  "Family Dental",
-  "Aesthetic Dental Studio",
-  "Root Canal Experts",
-];
+// Competitor names are sample data. They're picked from a pool chosen by the
+// search keyword so a non-dental scan (e.g. "dermatologist near me") shows
+// vertical-native sample competitors instead of dental clinics. Dental stays the
+// default pool, so dental sample output is unchanged.
+const COMPETITOR_POOLS: Record<string, string[]> = {
+  dental: [
+    "Smile Dental Care",
+    "City Dental Clinic",
+    "Bright Smiles",
+    "Perfect Teeth",
+    "Dental Hub",
+    "Ortho Plus",
+    "Gentle Dentistry",
+    "Family Dental",
+    "Aesthetic Dental Studio",
+    "Root Canal Experts",
+  ],
+  derma: [
+    "Glow Skin Clinic",
+    "DermaCare Clinic",
+    "ClearSkin Aesthetics",
+    "Radiance Skin & Hair",
+    "SkinFirst Clinic",
+    "Luster Dermatology",
+    "Clarity Skin Care",
+    "Renew Skin Studio",
+    "Aura Skin Clinic",
+    "Flawless Skin Centre",
+  ],
+  ortho: [
+    "OrthoPlus Clinic",
+    "BoneCare Orthopaedics",
+    "Joint & Spine Centre",
+    "Advanced Orthopaedics",
+    "MotionCare Ortho",
+    "City Ortho Clinic",
+    "Prime Joint Care",
+    "OrthoLife Centre",
+    "Flexi Bone & Joint",
+    "Apex Orthopaedics",
+  ],
+  physio: [
+    "ReVive Physiotherapy",
+    "MoveWell Physio",
+    "ActiveCare Physiotherapy",
+    "FlexPhysio Clinic",
+    "Restore Physio & Rehab",
+    "Momentum Physiotherapy",
+    "CorePhysio Centre",
+    "Stride Rehab Clinic",
+    "PhysioFirst Care",
+    "Balance Physiotherapy",
+  ],
+};
+
+function poolForKeyword(keyword: string): string[] {
+  const k = keyword.toLowerCase();
+  if (/dermat|skin|acne|pigment|hair fall|melasma/.test(k)) return COMPETITOR_POOLS.derma;
+  if (/ortho|knee|joint|bone|spine|back pain|fracture|arthritis/.test(k))
+    return COMPETITOR_POOLS.ortho;
+  if (/physio|physical therap|rehab/.test(k)) return COMPETITOR_POOLS.physio;
+  return COMPETITOR_POOLS.dental;
+}
 
 export function createMockProvider(): SerpProvider {
   return {
@@ -45,7 +96,7 @@ export function createMockProvider(): SerpProvider {
 
       // Slot the target into the visible top-10 when its rank falls there.
       const targetSlot = rank != null && rank <= TOP_RESULTS_LIMIT ? rank - 1 : -1;
-      const topResults: LocalResult[] = COMPETITOR_NAMES.slice(
+      const topResults: LocalResult[] = poolForKeyword(args.keyword).slice(
         0,
         TOP_RESULTS_LIMIT,
       ).map((name, i) => ({
