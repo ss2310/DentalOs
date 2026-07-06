@@ -20,7 +20,7 @@ export function ShareButton({
       ? `${competitorName} se aage nikalne ke ${taskCount} kaam`
       : `${taskCount} kaam`;
     const first = quickFirst ? ", pehla sirf 15 minute ka" : "";
-    const msg = `Aapka 15-din ka growth plan taiyaar hai — ${lead}${first} 👇\n${url}`;
+    const msg = `Aapka 30-din ka growth plan taiyaar hai — ${lead}${first} 👇\n${url}`;
     window.open(
       `https://wa.me/?text=${encodeURIComponent(msg)}`,
       "_blank",

@@ -206,7 +206,7 @@ export async function stageSynthesize(ctx: StageContext): Promise<StageResult> {
     .insert({
       run_id: run.id,
       clinic_id: run.clinic_id,
-      title: "15-Day Growth Plan",
+      title: "30-Day Growth Plan",
       summary: headline,
       status: "active",
     })
@@ -238,7 +238,7 @@ export async function stageSynthesize(ctx: StageContext): Promise<StageResult> {
 
   return {
     costInr: COST_INR.claudeSynthesize * attempts,
-    detail: `Built a ${plan.length}-day plan (${attempts} attempt${attempts === 1 ? "" : "s"})`,
+    detail: `Built a ${plan.length}-item 30-day plan (${attempts} attempt${attempts === 1 ? "" : "s"})`,
   };
 }
 

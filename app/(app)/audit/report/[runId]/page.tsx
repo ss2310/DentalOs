@@ -38,6 +38,13 @@ type SignalRow = {
   value_text: string | null;
   raw_meta: { source_intelligence?: { domain: string; count: number }[] } | null;
 };
+type MetricDefRow = {
+  metric_key: string;
+  display_name: string | null;
+  source: string | null;
+  value_type: string | null;
+  vertical: string | null;
+};
 
 const ENGINES = [
   { key: "gemini_mentioned", label: "Gemini" },
@@ -45,6 +52,27 @@ const ENGINES = [
   { key: "chatgpt_mentioned", label: "ChatGPT" },
   { key: "aio_cited", label: "Google AI" },
 ];
+
+// Curated display order for the fixed-source metric groups (GBP + PageSpeed keys
+// are a fixed set; website_llm keys are discovered from the metric catalog).
+const GBP_KEYS = [
+  "avg_google_rating",
+  "total_google_reviews",
+  "photo_count",
+  "category_count",
+  "business_hours_complete",
+  "review_velocity_computed",
+  "primary_gbp_category",
+];
+const PAGESPEED_KEYS = ["pagespeed_mobile", "core_web_vitals_pass", "https_ssl"];
+
+function humanize(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\bgbp\b/gi, "GBP")
+    .replace(/\bai\b/gi, "AI")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default async function AuditReportPage({
   params,
@@ -132,7 +160,7 @@ export default async function AuditReportPage({
       .single(),
     supabase
       .from("metric_definitions")
-      .select("metric_key, vertical")
+      .select("metric_key, display_name, source, value_type, vertical")
       .eq("is_active", true),
     supabase
       .from("audit_runs")
@@ -144,7 +172,8 @@ export default async function AuditReportPage({
   const self = entities.find((e) => e.entity_kind === "self");
   const competitors = entities.filter((e) => e.entity_kind === "competitor");
   if (!self) notFound();
-  const nameById = new Map(entities.map((e) => [e.id, e.display_name ?? "Competitor"]));
+  const topRival = competitors[0] ?? null;
+  const topRivalName = topRival?.display_name ?? null;
 
   const plan = planRes.data as
     | { id: string; summary: string | null; plan_items: PlanItemView[] }
@@ -167,6 +196,7 @@ export default async function AuditReportPage({
     weight_pct: number;
   }[];
   const signals = (signalsRes.data ?? []) as SignalRow[];
+  const defs = (defsRes.data ?? []) as MetricDefRow[];
   const clinic = clinicRes.data as {
     business_name: string | null;
     area: string | null;
@@ -177,6 +207,11 @@ export default async function AuditReportPage({
     market_ltv_multiplier: number | null;
   } | null;
 
+  // metric_key → definition (label / value_type / source), for the full-picture
+  // labels + formatting.
+  const metaByKey = new Map(defs.map((d) => [d.metric_key, d]));
+  const label = (key: string) => metaByKey.get(key)?.display_name ?? humanize(key);
+
   // measured N of M: distinct self metric_keys with a non-null value / active
   // metric universe (vertical-resolved).
   const selfSignals = signals.filter((s) => s.entity_id === self.id);
@@ -186,10 +221,48 @@ export default async function AuditReportPage({
       .map((s) => s.metric_key),
   );
   const metricUniverse = resolveForVertical(
-    (defsRes.data ?? []) as { metric_key: string; vertical: string | null }[],
+    defs,
     clinic?.vertical ?? "dental",
     (r: { metric_key: string }) => r.metric_key,
-  ) as { metric_key: string }[];
+  ) as MetricDefRow[];
+
+  // signal lookup + value formatter for the full-picture comparison rows.
+  const sigOf = (entityId: string, key: string) =>
+    signals.find((s) => s.entity_id === entityId && s.metric_key === key) ?? null;
+  const fmt = (key: string, s: SignalRow | null): string => {
+    if (!s) return "—";
+    if (s.value_bool != null) return s.value_bool ? "Yes" : "No";
+    if (s.value_number != null) {
+      const n = s.value_number;
+      if (key === "avg_google_rating") return n.toFixed(1);
+      if (key === "pagespeed_mobile") return `${Math.round(n)}/100`;
+      return Number.isInteger(n) ? String(n) : n.toFixed(1);
+    }
+    if (s.value_text != null && s.value_text !== "") return s.value_text;
+    return "—";
+  };
+
+  // Build the comparison rows for a fixed set of metric keys (self vs top rival),
+  // skipping keys neither side measured.
+  const compareRows = (keys: string[]) =>
+    keys
+      .map((key) => {
+        const selfS = sigOf(self.id, key);
+        const rivalS = topRival ? sigOf(topRival.id, key) : null;
+        const has = (s: SignalRow | null) =>
+          s != null &&
+          (s.value_number != null || s.value_bool != null || s.value_text != null);
+        if (!has(selfS) && !has(rivalS)) return null;
+        return { key, label: label(key), you: fmt(key, selfS), rival: fmt(key, rivalS) };
+      })
+      .filter((r): r is { key: string; label: string; you: string; rival: string } => r != null);
+
+  const websiteLlmKeys = metricUniverse
+    .filter((d) => d.source === "website_llm")
+    .map((d) => d.metric_key);
+
+  const reputationRows = compareRows(GBP_KEYS);
+  const websiteRows = compareRows([...PAGESPEED_KEYS, ...websiteLlmKeys]);
 
   // AI panel
   const selfSig = (key: string) => selfSignals.find((s) => s.metric_key === key);
@@ -212,6 +285,7 @@ export default async function AuditReportPage({
   };
   const visibility = visibilityScore(pins);
   const deadZone = deadZonePct(pins);
+  const hasGrid = pins.total_pins != null && pins.total_pins > 0;
 
   const hasMarket =
     clinic?.market_monthly_search_volume != null ||
@@ -223,23 +297,29 @@ export default async function AuditReportPage({
   );
   const selfAvg = selfSummary?.average_digital_score ?? null;
   const quickFirst = items.some((i) => i.day_number <= 1 && i.effort === "15-min");
-  const topCompetitorName = competitors[0]?.display_name ?? null;
   const completedRuns = completedRes.count ?? 0;
 
-  const week1 = items.filter((i) => i.day_number <= 5);
-  const week2 = items.filter((i) => i.day_number >= 6 && i.day_number <= 10);
-  const week3 = items.filter((i) => i.day_number >= 11);
+  // 30-day plan → four weekly buckets.
+  const weeks = [
+    { title: "Week 1 — quick wins first", lo: 1, hi: 7 },
+    { title: "Week 2", lo: 8, hi: 14 },
+    { title: "Week 3", lo: 15, hi: 21 },
+    { title: "Week 4", lo: 22, hi: 30 },
+  ].map((w) => ({
+    ...w,
+    items: items.filter((i) => i.day_number >= w.lo && i.day_number <= w.hi),
+  }));
 
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
-        title="Your 15-Day Growth Plan"
+        title="Your 30-Day Growth Plan"
         subtitle={`Deep audit · ${formatDate(run.completed_at ?? run.created_at)}`}
         action={
           items.length > 0 ? (
             <ShareButton
               taskCount={items.length}
-              competitorName={topCompetitorName}
+              competitorName={topRivalName}
               quickFirst={quickFirst}
             />
           ) : undefined
@@ -270,7 +350,121 @@ export default async function AuditReportPage({
         </div>
       ) : null}
 
-      {/* 2. THE 15-DAY PLAN */}
+      {/* 2. WHERE YOU STAND — the full picture from every data source */}
+      <SectionHeader hint={`measured on ${measuredKeys.size} of ${metricUniverse.length} signals`}>
+        Where You Stand
+      </SectionHeader>
+
+      {/* 2a. score + map visibility strip */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="rounded-card bg-primary p-4 shadow-card">
+          <p className="text-sm text-white/75">Digital score</p>
+          <p className="mt-1 text-3xl font-semibold tracking-[-0.02em] text-white">
+            {selfAvg != null ? selfAvg : "—"}
+          </p>
+          {selfSummary?.score_band ? (
+            <p className="text-sm text-white/75">{selfSummary.score_band}</p>
+          ) : null}
+        </div>
+        <MiniStat
+          label="Map visibility"
+          value={visibility != null ? `${visibility}%` : "—"}
+          sub={visibility != null ? `dead zone ${deadZone}%` : undefined}
+        />
+        <MiniStat
+          label="AI citation rate"
+          value={
+            citationRateSig?.value_number != null
+              ? `${citationRateSig.value_number}%`
+              : "—"
+          }
+          sub={topRivalName ? `vs top rival below` : undefined}
+        />
+      </div>
+
+      {/* 2b. six moats — you vs top rival */}
+      <div className="mt-4 rounded-card border border-border bg-white p-5 shadow-card">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.06em] text-text-secondary">
+          The 6 growth moats{topRivalName ? ` · you vs ${topRivalName}` : ""}
+        </p>
+        <div className="space-y-3">
+          {moatConfig.map((m) => {
+            const selfRow = scoreByEntityMoat.get(`${self.id}:${m.moat_key}`);
+            const eligible = selfRow ? isGapEligible(selfRow) : false;
+            const bestRival = competitors
+              .map((c) => scoreByEntityMoat.get(`${c.id}:${m.moat_key}`)?.score ?? null)
+              .filter((v): v is number => v != null)
+              .sort((a, b) => b - a)[0];
+            return (
+              <div key={m.moat_key}>
+                <div className="mb-1 flex items-baseline justify-between text-sm">
+                  <span className="text-text-primary">{m.display_name}</span>
+                  <span className="text-text-secondary">
+                    {eligible ? (
+                      <>
+                        You {selfRow?.score ?? 0}
+                        {bestRival != null ? ` · Top rival ${bestRival}` : ""}
+                      </>
+                    ) : (
+                      "not yet measured"
+                    )}
+                  </span>
+                </div>
+                <div className="relative h-2 w-full overflow-hidden rounded-pill bg-subtle">
+                  {eligible ? (
+                    <div
+                      className="h-full rounded-pill bg-primary"
+                      style={{ width: `${Math.min(100, selfRow?.score ?? 0)}%` }}
+                    />
+                  ) : null}
+                  {eligible && bestRival != null ? (
+                    <span
+                      className="absolute top-1/2 h-3 w-0.5 -translate-y-1/2 bg-ink/40"
+                      style={{ left: `${Math.min(100, bestRival)}%` }}
+                      title={`Top rival ${bestRival}`}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2c. reputation (Google profile) */}
+      <CompareCard
+        title="Reputation — your Google profile"
+        rows={reputationRows}
+        rivalName={topRivalName}
+      />
+
+      {/* 2d. website & performance */}
+      <CompareCard
+        title="Website & performance"
+        rows={websiteRows}
+        rivalName={topRivalName}
+        emptyNote="No website analyzed — add your website in Settings so we can measure it."
+      />
+
+      {/* 2e. local map coverage (self only) */}
+      {hasGrid ? (
+        <div className="mt-4 rounded-card border border-border bg-white p-5 shadow-card">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.06em] text-text-secondary">
+            Local map coverage
+          </p>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <Pin label="Top 3" value={pins.green_pins} tone="success" />
+            <Pin label="Rank 4–10" value={pins.yellow_pins} tone="warning" />
+            <Pin label="Rank 10+" value={pins.red_pins} tone="danger" />
+            <Pin label="Not found" value={pins.out_pins} tone="muted" />
+            <span className="ml-auto self-center text-text-secondary">
+              across {pins.total_pins} map points near you
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 3. THE 30-DAY PLAN */}
       <SectionHeader hint={`${doneCount} of ${items.length} done`}>
         The Plan
       </SectionHeader>
@@ -285,11 +479,11 @@ export default async function AuditReportPage({
         these actions moved your numbers.
       </p>
 
-      <PlanGroup title="Week 1 — quick wins first" items={week1} />
-      <PlanGroup title="Week 2" items={week2} />
-      <PlanGroup title="Days 11–15" items={week3} />
+      {weeks.map((w) => (
+        <PlanGroup key={w.title} title={w.title} items={w.items} />
+      ))}
 
-      {/* 3. AI VISIBILITY */}
+      {/* 4. AI VISIBILITY */}
       <SectionHeader>AI Visibility</SectionHeader>
       <div className="rounded-card border border-border bg-white p-5 shadow-card">
         <p className="text-[15px] text-text-primary">
@@ -299,17 +493,22 @@ export default async function AuditReportPage({
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {ENGINES.map((e) => {
-            const cited = selfSig(e.key)?.value_bool === true;
+            const val = selfSig(e.key)?.value_bool;
+            const cited = val === true;
+            const notMeasured = val == null;
             return (
               <span
                 key={e.key}
                 className={`rounded-pill px-3 py-1 text-xs font-medium ${
                   cited
                     ? "bg-success/10 text-success"
-                    : "bg-subtle text-text-secondary"
+                    : notMeasured
+                      ? "bg-subtle text-text-secondary/60"
+                      : "bg-subtle text-text-secondary"
                 }`}
               >
-                {cited ? "✓" : "—"} {e.label}
+                {cited ? "✓" : notMeasured ? "•" : "—"} {e.label}
+                {notMeasured ? " (not measured)" : ""}
               </span>
             );
           })}
@@ -349,7 +548,7 @@ export default async function AuditReportPage({
         ) : null}
       </div>
 
-      {/* 4. REVENUE — real card only when the formula lands; never a fake number */}
+      {/* 5. REVENUE — real card only when the formula lands; never a fake number */}
       <SectionHeader>Revenue Impact</SectionHeader>
       <div className="rounded-card border border-border bg-white p-5 shadow-card">
         {hasMarket ? (
@@ -384,7 +583,7 @@ export default async function AuditReportPage({
         </>
       ) : null}
 
-      {/* 5. HOW WE CALCULATED — collapsed */}
+      {/* 7. HOW WE CALCULATED — methodology note */}
       <details className="mt-8 rounded-card border border-border bg-white shadow-card">
         <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-text-primary">
           How we calculated this
@@ -393,65 +592,96 @@ export default async function AuditReportPage({
           </span>
         </summary>
         <div className="border-t border-border px-5 py-4">
-          <div className="mb-4 flex flex-wrap items-baseline gap-x-2">
-            <span className="text-sm text-text-secondary">Your digital score</span>
-            <span className="text-2xl font-semibold tracking-[-0.02em] text-primary">
-              {selfAvg != null ? selfAvg : "—"}
-            </span>
-            {selfSummary?.score_band ? (
-              <span className="text-sm text-text-secondary">
-                ({selfSummary.score_band})
-              </span>
-            ) : null}
-            {visibility != null ? (
-              <span className="ml-auto text-sm text-text-secondary">
-                Map visibility {visibility}% · dead zone {deadZone}%
-              </span>
-            ) : null}
-          </div>
-          <div className="space-y-3">
-            {moatConfig.map((m) => {
-              const selfRow = scoreByEntityMoat.get(`${self.id}:${m.moat_key}`);
-              const eligible = selfRow ? isGapEligible(selfRow) : false;
-              const bestRival = competitors
-                .map((c) => scoreByEntityMoat.get(`${c.id}:${m.moat_key}`)?.score ?? null)
-                .filter((v): v is number => v != null)
-                .sort((a, b) => b - a)[0];
-              return (
-                <div key={m.moat_key}>
-                  <div className="mb-1 flex items-baseline justify-between text-sm">
-                    <span className="text-text-primary">{m.display_name}</span>
-                    <span className="text-text-secondary">
-                      {eligible ? (
-                        <>
-                          You {selfRow?.score ?? 0}
-                          {bestRival != null ? ` · Top rival ${bestRival}` : ""}
-                        </>
-                      ) : (
-                        "not yet measured"
-                      )}
-                    </span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-pill bg-subtle">
-                    {eligible ? (
-                      <div
-                        className="h-full rounded-pill bg-primary"
-                        style={{ width: `${Math.min(100, selfRow?.score ?? 0)}%` }}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <p className="mt-4 text-xs text-text-secondary">
-            Scores are our internal prioritization. Moats we couldn&apos;t measure
-            enough of are shown as &quot;not yet measured&quot; and never counted
-            against you.
+          <p className="text-sm text-text-secondary">
+            We score six growth &quot;moats&quot; from Google profile, website,
+            map-rank and AI-visibility signals, and compare you with your top
+            local rivals. The scores are our internal prioritization — moats we
+            couldn&apos;t measure enough of are shown as &quot;not yet
+            measured&quot; and never counted against you. The plan only ever
+            targets moats we actually measured.
           </p>
         </div>
       </details>
     </div>
+  );
+}
+
+function CompareCard({
+  title,
+  rows,
+  rivalName,
+  emptyNote,
+}: {
+  title: string;
+  rows: { key: string; label: string; you: string; rival: string }[];
+  rivalName: string | null;
+  emptyNote?: string;
+}) {
+  return (
+    <div className="mt-4 rounded-card border border-border bg-white p-5 shadow-card">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.06em] text-text-secondary">
+        {title}
+      </p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-text-secondary">
+          {emptyNote ?? "Nothing measured here yet."}
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="flex items-center bg-subtle px-3 py-2 text-xs font-medium text-text-secondary">
+            <span className="flex-1">Metric</span>
+            <span className="w-20 text-right">You</span>
+            {rivalName ? (
+              <span className="w-28 truncate text-right" title={rivalName}>
+                {rivalName}
+              </span>
+            ) : null}
+          </div>
+          {rows.map((r, i) => (
+            <div
+              key={r.key}
+              className={`flex items-center px-3 py-2.5 text-sm ${
+                i > 0 ? "border-t border-border" : ""
+              }`}
+            >
+              <span className="flex-1 text-text-primary">{r.label}</span>
+              <span className="w-20 text-right font-medium text-text-primary">
+                {r.you}
+              </span>
+              {rivalName ? (
+                <span className="w-28 text-right text-text-secondary">{r.rival}</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Pin({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number | null;
+  tone: "success" | "warning" | "danger" | "muted";
+}) {
+  const dot =
+    tone === "success"
+      ? "bg-success"
+      : tone === "warning"
+        ? "bg-warning"
+        : tone === "danger"
+          ? "bg-danger"
+          : "bg-text-secondary/40";
+  return (
+    <span className="flex items-center gap-1.5 text-text-primary">
+      <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+      <span className="font-medium">{value ?? 0}</span>
+      <span className="text-text-secondary">{label}</span>
+    </span>
   );
 }
 
@@ -469,13 +699,22 @@ function PlanGroup({ title, items }: { title: string; items: PlanItemView[] }) {
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function MiniStat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
     <div className="rounded-card border border-border bg-white p-4 shadow-card">
       <p className="text-sm text-text-secondary">{label}</p>
       <p className="mt-1 text-xl font-semibold tracking-[-0.02em] text-text-primary">
         {value}
       </p>
+      {sub ? <p className="text-xs text-text-secondary">{sub}</p> : null}
     </div>
   );
 }

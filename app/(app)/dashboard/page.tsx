@@ -457,7 +457,7 @@ export default async function DashboardPage() {
               Deep Audit — beat your local competitors
             </p>
             <p className="mt-0.5 text-sm text-text-secondary">
-              See what your top rivals do better and get a 15-day catch-up plan.
+              See what your top rivals do better and get a 30-day catch-up plan.
             </p>
           </div>
           <span aria-hidden className="shrink-0 text-primary">

@@ -27,5 +27,6 @@ export function validateSynthesis(
     themeCap?: number;
     quickWinBy?: number;
     topGapBy?: number;
+    maxDay?: number;
   },
 ): { ok: true; plan: PlanItemJson[] } | { ok: false; reason: string };

@@ -54,11 +54,11 @@ export const AUDIT_SYNTH_MODEL =
 export const AUDIT_CLASSIFY_MODEL =
   process.env.AUDIT_CLASSIFY_MODEL || "claude-haiku-4-5";
 
-// Stage 6 output cap. A full 12–15 item plan (headline + competitor story +
-// per-item description/evidence/context, in Hinglish) runs well past 4k tokens —
-// too small a cap truncates the JSON mid-array and every parse fails. 8k gives
-// comfortable headroom; env-overridable if plans get richer.
-export const AUDIT_SYNTH_MAX_TOKENS = Number(process.env.AUDIT_SYNTH_MAX_TOKENS) || 8000;
+// Stage 6 output cap. A full 16–20 item 30-day plan (headline + competitor story
+// + per-item description/evidence/context, in Hinglish) runs well past 8k tokens —
+// too small a cap truncates the JSON mid-array and every parse fails. 12k gives
+// comfortable headroom for the longer plan; env-overridable if plans get richer.
+export const AUDIT_SYNTH_MAX_TOKENS = Number(process.env.AUDIT_SYNTH_MAX_TOKENS) || 12000;
 
 // ---- Stage 4: AI-visibility layer ----
 export const AI_QUERIES_PER_LAYER = 1; // → 6 queries across L1–L6

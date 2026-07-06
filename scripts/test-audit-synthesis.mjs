@@ -120,26 +120,31 @@ test("buildSynthesisPayload: gaps ordered by weighted gap; evidence values attac
 
 // ---- validator ------------------------------------------------------------
 
-// A well-formed 12-item plan over eligible metric keys. Distribution keeps each
-// moat within the theme cap (ai 4 / trust 3 / conversion 5), the top-gap moat
-// (ai) on day 1, and a 15-min quick win on day 2.
+// A well-formed 16-item plan spread across 30 days over eligible metric keys.
+// Distribution keeps each moat within the theme cap 7 (ai 6 / trust 5 /
+// conversion 5), the top-gap moat (ai) on day 1, and a 15-min quick win on day 2
+// — both inside the first week (days 1-7).
 function goodPlan() {
   const specs = [
-    ["ai_citation_rate", "1-hour"], // 1  (top gap, early)
-    ["total_google_reviews", "15-min"], // 2  (quick win, early)
-    ["whatsapp_cta", "15-min"], // 3
-    ["ai_citation_rate", "15-min"], // 4
-    ["avg_google_rating", "1-hour"], // 5
-    ["whatsapp_cta", "1-hour"], // 6
-    ["ai_citation_rate", "1-hour"], // 7
-    ["whatsapp_cta", "1-hour"], // 8
-    ["total_google_reviews", "1-hour"], // 9
-    ["whatsapp_cta", "1-hour"], // 10
-    ["ai_citation_rate", "1-hour"], // 11
-    ["whatsapp_cta", "15-min"], // 12
+    ["ai_citation_rate", "1-hour", 1], // top gap, early
+    ["total_google_reviews", "15-min", 2], // quick win, early
+    ["whatsapp_cta", "15-min", 3],
+    ["ai_citation_rate", "1-hour", 5],
+    ["avg_google_rating", "1-hour", 7],
+    ["whatsapp_cta", "1-hour", 9],
+    ["ai_citation_rate", "1-hour", 11],
+    ["total_google_reviews", "1-hour", 13],
+    ["whatsapp_cta", "1-hour", 15],
+    ["ai_citation_rate", "1-hour", 17],
+    ["avg_google_rating", "1-hour", 19],
+    ["whatsapp_cta", "1-hour", 21],
+    ["ai_citation_rate", "1-hour", 23],
+    ["total_google_reviews", "1-hour", 25],
+    ["whatsapp_cta", "1-hour", 27],
+    ["ai_citation_rate", "1-hour", 30],
   ];
-  const plan = specs.map(([mk, effort], i) => ({
-    day_number: i + 1,
+  const plan = specs.map(([mk, effort, day], i) => ({
+    day_number: day,
     title: `Task ${i + 1}`,
     description: "Do the concrete thing.",
     evidence: "You: 90 · Dr. Sharma: 210",
@@ -168,7 +173,7 @@ const OPTS = {
 test("validateSynthesis: accepts a well-formed plan", () => {
   const r = validateSynthesis(goodPlan(), OPTS);
   assert.equal(r.ok, true);
-  assert.equal(r.plan.length, 12);
+  assert.equal(r.plan.length, 16);
 });
 
 test("validateSynthesis: rejects an item with no evidence", () => {
@@ -197,35 +202,55 @@ test("validateSynthesis: rejects a metric_key from an unmeasured moat (the gate)
 });
 
 test("validateSynthesis: enforces item count, theme cap, quick-win, top-gap-early", () => {
-  // too few
+  // too few (< 14)
   assert.equal(validateSynthesis({ ...goodPlan(), plan: goodPlan().plan.slice(0, 8) }, OPTS).ok, false);
-  // theme cap: 6 items all trust → exceeds cap 5
+  // too many (> 20)
+  const tooMany = goodPlan();
+  tooMany.plan = [...tooMany.plan, ...tooMany.plan.slice(0, 6)]; // 22 items
+  assert.equal(validateSynthesis(tooMany, OPTS).ok, false);
+  // theme cap: all 16 items on trust → exceeds cap 7
   const capped = goodPlan();
   capped.plan = capped.plan.map((it, i) => ({
     ...it,
     metric_keys: ["total_google_reviews"],
     effort: i === 0 ? "15-min" : it.effort,
   }));
-  assert.match(validateSynthesis(capped, OPTS).reason, /theme .*cap 5/);
+  assert.match(validateSynthesis(capped, OPTS).reason, /theme .*cap 7/);
   // no early quick win
   const noQuick = goodPlan();
   noQuick.plan = noQuick.plan.map((it) => ({ ...it, effort: "1-hour" }));
   assert.match(validateSynthesis(noQuick, OPTS).reason, /quick win/);
-  // top-gap moat (ai) absent from days 1-5, everything else within cap so the
-  // top-gap rule is what trips (not the theme cap).
-  const mk = (m) => ["ai_citation_rate", "total_google_reviews", "avg_google_rating", "whatsapp_cta"][m];
-  const layout = [1, 2, 3, 1, 3, 0, 0, 0, 0, 3, 3, 2]; // 0=ai only on days 6-9
+  // top-gap moat (ai) absent from days 1-7 (only appears from day 8), everything
+  // else within cap + a quick win present, so the top-gap rule is what trips.
+  const noTopSpecs = [
+    ["total_google_reviews", "1-hour", 1],
+    ["whatsapp_cta", "15-min", 2], // quick win, week 1, non-ai
+    ["avg_google_rating", "1-hour", 4],
+    ["whatsapp_cta", "1-hour", 6],
+    ["ai_citation_rate", "1-hour", 8], // ai starts only in week 2
+    ["whatsapp_cta", "1-hour", 10],
+    ["ai_citation_rate", "1-hour", 12],
+    ["total_google_reviews", "1-hour", 14],
+    ["ai_citation_rate", "1-hour", 16],
+    ["whatsapp_cta", "1-hour", 18],
+    ["ai_citation_rate", "1-hour", 20],
+    ["avg_google_rating", "1-hour", 22],
+    ["ai_citation_rate", "1-hour", 24],
+    ["whatsapp_cta", "1-hour", 26],
+    ["total_google_reviews", "1-hour", 28],
+    ["ai_citation_rate", "1-hour", 30],
+  ];
   const noTop = {
     headline: "h",
     competitor_story: ["a", "b", "c"],
-    plan: layout.map((m, i) => ({
-      day_number: i + 1,
+    plan: noTopSpecs.map(([mk, effort, day], i) => ({
+      day_number: day,
       title: `T${i + 1}`,
       description: "d",
       evidence: "You: 1 · Dr. Sharma: 2",
       competitor_context: "c",
-      metric_keys: [mk(m)],
-      effort: i === 0 ? "15-min" : "1-hour",
+      metric_keys: [mk],
+      effort,
     })),
   };
   assert.match(validateSynthesis(noTop, OPTS).reason, /top-gap moat/);

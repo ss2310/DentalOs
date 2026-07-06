@@ -18,7 +18,7 @@ const STAGE_LABEL: Record<string, string> = {
   collecting: "Reading Google profiles & websites…",
   ai_queries: "Testing AI answer engines…",
   scoring: "Scoring you vs your competitors…",
-  synthesizing: "Writing your 15-day plan…",
+  synthesizing: "Writing your 30-day plan…",
   complete: "Done!",
 };
 
@@ -58,7 +58,7 @@ export function RunDeepAudit({ limit }: { limit: number }) {
       }
       setLabel(STAGE_LABEL[res.status ?? ""] ?? res.detail ?? "Working…");
       if (res.done) {
-        toast("Your 15-day growth plan is ready 🎉");
+        toast("Your 30-day growth plan is ready 🎉");
         router.push(`/audit/report/${runId}`);
         return;
       }

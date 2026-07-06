@@ -7,6 +7,12 @@ import { formatDate } from "@/lib/format";
 import { RunDeepAudit } from "./run-deep-audit";
 
 export const dynamic = "force-dynamic";
+// The audit page hosts the RunDeepAudit poller, which invokes the runAuditStage
+// server action one stage per call. Stage 6 (synthesis) is a single long Claude
+// generation (~2-3 min for the 30-day plan), so the segment's function timeout
+// must cover it. 300s is the Vercel Pro ceiling; on Hobby (60s cap) synthesis
+// would time out — the audit needs at least a Pro plan.
+export const maxDuration = 300;
 
 type RunRow = {
   id: string;
@@ -38,7 +44,7 @@ export default async function AuditIndexPage() {
     <div className="mx-auto max-w-3xl">
       <PageHeader
         title="Deep Audit"
-        subtitle="See exactly what your top local competitors are doing better — and get a 15-day plan to catch up."
+        subtitle="See exactly what your top local competitors are doing better — and get a 30-day plan to catch up."
         action={isAdmin ? <RunDeepAudit limit={DEEP_AUDIT_MONTHLY_LIMIT} /> : undefined}
       />
 
@@ -50,7 +56,7 @@ export default async function AuditIndexPage() {
           <div>
             <p className="text-sm font-medium text-white/75">Your latest plan</p>
             <p className="mt-1 text-[17px] font-semibold text-white">
-              Open your 15-day growth plan →
+              Open your 30-day growth plan →
             </p>
           </div>
         </Link>
