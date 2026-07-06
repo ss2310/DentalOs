@@ -2,22 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import {
-  getSerpProvider,
-  generateGrid,
-  NOT_FOUND_RANK,
-  buildCompetitorSummary,
-} from "@/lib/serp";
-import type { LocalResult } from "@/lib/serp";
+import { executeGridScan } from "@/lib/serp/scan";
 import { monthlyScanCap } from "@/lib/serp/budget";
 import { getUserRole, isAdminRole } from "@/lib/roles";
 import { spendCredits, refundCredit } from "@/lib/credits";
 
 export type RankActionState = { ok?: boolean; error?: string; upgrade?: boolean };
-
-// How many grid points we scan in parallel. Keeps a full 7×7 (49) scan from
-// firing 49 requests at once while still finishing reasonably fast.
-const SCAN_CONCURRENCY = 5;
 
 export async function addKeyword(input: {
   keyword: string;
@@ -117,14 +107,6 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
     };
   }
 
-  const points = generateGrid(
-    Number(clinicLoc.default_lat),
-    Number(clinicLoc.default_lng),
-    kw.grid_size,
-    Number(kw.radius_km),
-  );
-  const n = points.length;
-
   // Spend 1 map credit before running (one map credit = one grid scan, no matter
   // how many SERP requests the grid fires). Blocks with an upgrade prompt at 0.
   // Refunded below if the scan can't start or every request fails.
@@ -185,53 +167,28 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
     };
   }
 
-  const provider = getSerpProvider();
-  const gridPoints = points.map((p) => ({
-    lat: p.lat,
-    lng: p.lng,
-    rank: null as number | null,
-  }));
-  // Top local results per cell, kept so we can compute the competitor aggregate
-  // below without any extra API calls (the provider already returned them).
-  const cellTops: LocalResult[][] = points.map(() => []);
-
-  // Bounded-concurrency worker pool over the grid points.
-  let next = 0;
-  let failures = 0;
-  let lastError: unknown = null;
-  async function worker() {
-    while (next < n) {
-      const i = next++;
-      try {
-        const res = await provider.searchLocalRank({
-          keyword: kwKeyword,
-          lat: points[i].lat,
-          lng: points[i].lng,
-          targetBusinessName: kwTarget,
-          targetPlaceId: kwPlaceId,
-        });
-        gridPoints[i].rank = res.rank;
-        cellTops[i] = res.topResults;
-      } catch (err) {
-        failures++;
-        lastError = err; // keep the real provider error to surface below
-        gridPoints[i].rank = null;
-      }
-    }
-  }
-  await Promise.all(
-    Array.from({ length: Math.min(SCAN_CONCURRENCY, n) }, () => worker()),
-  );
+  // Run the grid scan (chargeless core — the credit was spent above). Grid
+  // generation + the bounded-concurrency provider loop + the competitor
+  // aggregate all live in executeGridScan, shared with the Deep Audit pipeline.
+  const scan = await executeGridScan({
+    keyword: kwKeyword,
+    targetBusinessName: kwTarget,
+    targetPlaceId: kwPlaceId,
+    centerLat: Number(clinicLoc.default_lat),
+    centerLng: Number(clinicLoc.default_lng),
+    gridSize: kw.grid_size,
+    radiusKm: Number(kw.radius_km),
+  });
 
   // Every point failed → don't keep a misleading all-blank scan. Delete the
   // reservation so it doesn't count against the monthly cap, and surface the
   // real provider error (e.g. "Serper request failed (429)") instead of a
   // vague message.
-  if (failures === n) {
+  if (scan.failures === scan.requestsMade) {
     await supabase.from("rank_scans").delete().eq("id", scanId);
     await refundCredit(mapSpend.ledgerId);
-    console.error("All scan requests failed:", lastError);
-    const reason = lastError instanceof Error ? lastError.message : "";
+    console.error("All scan requests failed:", scan.lastError);
+    const reason = scan.lastError instanceof Error ? scan.lastError.message : "";
     return {
       error: reason
         ? `Every scan request failed (${reason}). Check SERP_PROVIDER and the provider's API key.`
@@ -239,34 +196,16 @@ export async function runScan(keywordId: string): Promise<RankActionState> {
     };
   }
 
-  const mean =
-    gridPoints.reduce((s, p) => s + (p.rank ?? NOT_FOUND_RANK), 0) / n;
-  const inTop3 = gridPoints.filter((p) => p.rank != null && p.rank <= 3).length;
-  const avgRank = Math.round(mean * 10) / 10;
-  const pctInTop3 = Math.round((inTop3 / n) * 1000) / 10;
-
-  // Competitor aggregate — derived from the top results we already fetched, so
-  // it costs no extra requests. Powers the /competitors feature.
-  const competitors = buildCompetitorSummary(
-    points.map((p, i) => ({
-      lat: p.lat,
-      lng: p.lng,
-      targetRank: gridPoints[i].rank,
-      top: cellTops[i],
-    })),
-    kwTarget,
-  );
-
   // Finalize the reserved row with the results (RLS scopes to the clinic).
   const { error } = await supabase
     .from("rank_scans")
     .update({
-      avg_rank: avgRank,
-      pct_in_top3: pctInTop3,
-      grid_points: gridPoints,
-      competitors,
-      provider: provider.name,
-      requests_made: n,
+      avg_rank: scan.avgRank,
+      pct_in_top3: scan.pctInTop3,
+      grid_points: scan.gridPoints,
+      competitors: scan.competitors,
+      provider: scan.providerName,
+      requests_made: scan.requestsMade,
       status: "complete",
     })
     .eq("id", scanId);

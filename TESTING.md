@@ -2385,3 +2385,202 @@ subscribe (links fire the same `PAYMENT_SUCCESS_WEBHOOK`; correlation is via
 - [ ] Cashfree secret is server-only (route runs `nodejs` runtime, key never sent
       to the browser); the webhook is reachable without a session but does nothing
       on an invalid signature.
+
+## Deep Audit — Stages 1–3 (pipeline backend)
+
+Migrations **035 + 036** applied; `notify pgrst, 'reload schema';` run.
+Env: `GOOGLE_MAPS_API_KEY`, `PAGESPEED_API_KEY`, `ANTHROPIC_API_KEY` set; a real
+`SERP_PROVIDER` (serper) if you want a live fallback scan. No UI yet — drive the
+server actions from a scratch route / server component or a `psql` + action test.
+
+### Metering / billing (no map credits)
+- [ ] `startDeepAudit()` returns a `runId` and increments
+      `clinics.deep_audits_used_this_cycle` by 1; **no** `map_credits_balance`
+      change. A delta-0 `credit_ledger` row (reason `audit_deep`, `related_id` =
+      runId) is written for attribution.
+- [ ] Running it a **3rd** time in the same cycle returns `{ limit: true }` and
+      does **not** create a run (default cap 2, `DEEP_AUDIT_MONTHLY_LIMIT`).
+- [ ] Manually set `deep_audits_cycle_start` to >1 month ago → next
+      `startDeepAudit()` resets the counter to 1 (rolling monthly window).
+- [ ] Two rapid concurrent `startDeepAudit()` calls near the cap can't both pass
+      (row-lock in `start_deep_audit`).
+
+### Stage 1 — Discover
+- [ ] With a recent (<30d) completed `rank_scan`, Stage 1 reuses it (no new scan
+      row). With none / >30d old, it runs a fresh chargeless grid scan and inserts
+      a `rank_scans` row — and **no** map credit is spent (`runScan`'s 1-credit
+      charge does NOT ride along; `executeGridScan` is chargeless).
+- [ ] Writes 1 `self` + up to 3 `competitor` `audit_entities` (≤5 total), each
+      with a resolved Google `place_id`. `audit_runs.competitor_place_ids` is set.
+- [ ] Competitors are the **most-frequent top-3 occupants** (sorted by
+      `top3_cells`). A rival that doesn't resolve via Text Search is skipped, not
+      guessed. Re-running Stage 1 replaces entities (and cascades old signals).
+
+### Stage 2 — GBP pull
+- [ ] One `audit_signals` row per places metric per entity
+      (`avg_google_rating`, `total_google_reviews`, `photo_count`,
+      `primary_gbp_category`, `secondary_categories`, `category_count`,
+      `business_hours_complete`), each with the payload fragment in `raw_meta`.
+      Field mask is explicit in `PLACE_DETAILS_MASK`.
+- [ ] `audit_entities.website_url` / `gbp_url` / `display_name` get enriched from
+      Details (Stage 3 needs `website_url`).
+- [ ] **First run:** no `review_velocity_computed` signal (silently skipped).
+      With a prior **completed** run, velocity = (reviews_now − then)/days×30 is
+      written for self + competitors (matched by `place_id`).
+- [ ] A Places Details failure for ONE entity is logged and skipped — the stage
+      still completes for the others.
+
+### Stage 3 — Web pull
+- [ ] Per entity with a website: `pagespeed_mobile` (number),
+      `core_web_vitals_pass` (Pass/Fail), `https_ssl` (bool) written. A PageSpeed
+      timeout/error writes **null** values with `raw_meta.error` — the run does
+      **not** crash.
+- [ ] Exactly **one** Claude call per entity classifies all `website_llm`
+      metrics; each signal stores the model's one-line `evidence` in `raw_meta`.
+      Off-menu enum values are rejected to null.
+- [ ] `gbp_name_violation` is judged on the **GBP display name** (from Stage 2),
+      not the website. An entity with no website still gets classified for it.
+- [ ] Website fetch is byte-capped (500KB), scripts/styles stripped; instructions
+      embedded in site HTML are treated as data, never obeyed.
+
+### Orchestration / resumability
+- [ ] `runAuditStage(runId)` advances one stage per call: status walks
+      `discovering → collecting`, `stage_cursor` → `discover → gbp → web`.
+      After `web`, another call returns `{ done: true }` (Stages 4–6 pending).
+- [ ] Force a Stage 2 failure (e.g. bad `GOOGLE_MAPS_API_KEY`) → run goes
+      `failed` with `error` set, `stage_cursor` stays `discover`. Re-calling
+      `runAuditStage` **re-runs Stage 2** (idempotent: old places signals cleared).
+- [ ] A **discover** failure (no keyword / no location) refunds the allowance
+      slot (`deep_audits_used_this_cycle` back down); a later-stage failure does
+      not (same run retryable for free).
+- [ ] `audit_runs.est_api_cost_inr` accumulates a non-zero estimate across stages
+      (A3 margin tracking).
+
+### Security / multi-tenancy
+- [ ] `start_deep_audit` / `release_deep_audit` derive the clinic from the session
+      (`current_clinic_id()`) — no client-supplied clinic_id. Both are
+      `revoke … public,anon` / `grant … authenticated`.
+- [ ] Stage writes use the **service-role** client but every insert/update is
+      scoped to `run.clinic_id` + `run.id`; a clinic can only ever `select` its
+      own `audit_*` rows (RLS). `runAuditStage` verifies run ownership via RLS
+      before switching to the admin client.
+- [ ] Receptionist role is rejected by both actions.
+
+## Deep Audit — Stage 4 (AI visibility)
+
+Migration **037** applied; `notify pgrst, 'reload schema';` run. Env: at least one
+of `GEMINI_API_KEY` / `OPENROUTER_API_KEY` / `SERPER_API_KEY` set (ChatGPT +
+Perplexity share `OPENROUTER_API_KEY`). Stage 4 runs after `web` (cursor
+`web → ai_queries`, status `ai_queries`).
+
+### Query generation (L1–L6)
+- [ ] 12 queries generated: 2 per layer, using the clinic's `city`/`area`, name,
+      and top `rate_cards` treatments (falls back to the dental default list when
+      the clinic has no rate cards).
+- [ ] Exactly **2 Hindi/Hinglish** queries (both in L6, e.g. "root canal kaise
+      hota hai").
+
+### Engine adapters (provider-agnostic)
+- [ ] Only engines with a key present run; a missing key logs
+      `[ai_queries] engines skipped (no key): …` and does **not** fail the run.
+- [ ] Gemini call includes the `google_search` grounding tool and captures
+      `groundingMetadata` source URLs.
+- [ ] Perplexity (`perplexity/sonar`) and ChatGPT (`openai/gpt-4o-mini`) both go
+      through OpenRouter on the one `OPENROUTER_API_KEY`; Sonar `citations` are
+      captured as sources.
+- [ ] `google_aio` reports `present:false` when Serper returns no `aiOverview`
+      (the verified-correct negative) — **no fake `aio_cited=true`** is written.
+- [ ] One engine erroring on one query records an empty answer (logged) and the
+      batch continues; the run doesn't crash.
+
+### Parsing + persistence
+- [ ] One Claude parse call **per engine batch** (skipped entirely when an engine
+      returned no text/sources — e.g. google_aio all-absent — saving the spend).
+- [ ] `ai_query_results` has one row per (query × engine) with `self_cited`,
+      `competitors_cited[]` (subset of this run's competitor names), and `sources`
+      jsonb (`{url, domain, type}`). Re-running Stage 4 replaces the run's rows.
+- [ ] Rollups in `audit_signals` (source `ai_citations`): per-engine booleans
+      (`gemini_mentioned` / `perplexity_cited` / `chatgpt_mentioned` /
+      `aio_cited`) on self; `ai_citation_rate` (%) with **source-intelligence**
+      domain aggregation in `raw_meta.source_intelligence`; `best_ai_layer`;
+      `ai_mentions_count` per entity (self **and** each competitor).
+
+### Cost / orchestration
+- [ ] `audit_runs.est_api_cost_inr` increases by the Stage-4 estimate (engines ×
+      queries + one Claude parse per engine).
+- [ ] `runAuditStage` after `web` runs Stage 4, sets `stage_cursor='ai_queries'`,
+      status `ai_queries`; a further call returns `{ done:true }` (Stages 5–6
+      pending). A Stage-4 failure marks the run `failed`; retry re-runs Stage 4
+      idempotently (old rows cleared).
+
+### Security / multi-tenancy
+- [ ] `ai_query_results` is clinic-read-only under RLS (`clinic_id =
+      current_clinic_id()`), no client write policy; engine writes via service
+      role scoped to `run.clinic_id`.
+- [ ] All engine keys are server-only (never `NEXT_PUBLIC_`).
+
+## Deep Audit — Stage 5: scoring core (`lib/audit/scoring.mjs`)
+
+Pure, framework-free scorer (no I/O). Automated coverage:
+`npm test` (→ `scripts/test-audit-scoring.mjs`, 26 cases). Run it after any
+formula edit — it is the parity guard for the six-MOAT spec.
+
+### Formula parity (automated)
+- [ ] `node --test scripts/test-audit-scoring.mjs` is green: every tier boundary
+      of all six moats, the blank-handling rules, coverage counts, grid
+      derivation, weighted average, clamp, and config version.
+- [ ] **Worked example** asserts a hand-computed full-self entity: Local SEO 32 /
+      Trust 67 / Conversion 70 / Op-Velocity 3 / AI-AEO 40 / Market 0 →
+      average **40.6** ("Average" band).
+- [ ] TODO: swap the `TODO(parity)` stub for the hand-scored **Airtable clinic**
+      once its inputs + expected outputs are provided — that is the real parity
+      lock.
+
+### Behaviour to eyeball once wired to a live run (Stage-5 wrapper, next step)
+- [ ] Grid pins reach scoring: Stage 1 must persist self `grid` signals
+      (`green/yellow/red/out/total_pins`, `rank_spread`, `agrp`) via
+      `deriveGridPins` — until then Local SEO floors at the visibility=2 branch.
+- [ ] Every entity (self **and** each competitor) is scored through the identical
+      `scoreEntity` path; competitors carry **no grid** (by design).
+- [ ] `moat_scores` rows carry `config_version` (from `moat_config.version`) and
+      honest `signals_measured/signals_total`; scores clamp to `[0, max]` while
+      `raw_score` keeps the pre-clamp value for the "how we calculated" view.
+- [ ] v1 blanks are expected: **Operational Velocity ≈ 3** and **Market Activity
+      = 0** on run #1 (all-manual inputs), and these drag the average at full
+      weight (no coverage re-normalisation) — not a bug.
+- [ ] Summary `expected_market_share_pct` / revenue-leak fields stay **null**
+      (formulas not yet ported); `market_ready` is true only for self with all
+      three `clinics.market_*` inputs present.
+
+### Coverage gate (RULE — enforced in the scoring core)
+A moat we didn't measure must be **impossible to recommend against**. Every moat
+score carries `coverage`, `gap_eligible`, and `measurement_status`; the gate is
+`isGapEligible()` (`signals_measured > 0` **and** coverage ≥ `MIN_GAP_COVERAGE`
+= 20%). Single source of truth — Stage 6 and the report consult it, never
+re-derive coverage.
+- [ ] A moat with `gap_eligible === false` is **excluded from weighted-gap
+      prioritization** and **produces no plan items**; the report shows it as
+      **"not yet measured"**, never as a competitive gap.
+- [ ] The moat is still **scored** — the number appears in the secondary
+      "how we calculated" detail view; the gate bars recommendations, not scoring.
+- [ ] In v1, **Operational Velocity** (all-manual inputs) and **Market Activity**
+      (run #1, no directory/velocity data) are `not_yet_measured` → they cannot
+      surface as gaps or spawn plan actions until their signals are collected.
+      (Covered by `test-audit-scoring.mjs`.)
+
+### `plannableGaps` — the single planning door (enforcement, not just a flag)
+Stage 6 selects + orders plan actions from `plannableGaps(selfScores,
+rivalScoresList, moatConfig)` **only** — it never reads `moatScores` directly for
+planning. The function applies the coverage gate FIRST, then computes each
+eligible moat's weighted competitive gap (best rival − us) × weight. It returns
+fresh gap rows that **omit `raw_score`/`score`-object internals**, so a planner
+built on this output has no access path to a raw moat score to route around the
+gate. Raw scores stay reachable only via the separate detail-view path.
+- [ ] A `not_yet_measured` moat never appears in `plannableGaps` output — proven
+      even when a rival scores 95 on it (`test-audit-scoring.mjs`).
+- [ ] Output rows carry no `raw_score` field (asserted).
+- [ ] Gaps are ordered by `weighted_gap` desc; a moat where we lead contributes
+      `weighted_gap = 0` (leading is not an opportunity).
+- [ ] **When Stage 6 lands:** add the end-to-end test asserting `plan_items`
+      contains **zero** rows whose `metric_keys` belong to a `not_yet_measured`
+      moat — the behavioural proof the flag-level tests can't give alone.
