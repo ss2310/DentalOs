@@ -91,6 +91,7 @@ const NAV: NavEntry[] = [
       { label: "Generate", href: "/generate", Icon: GenerateIcon },
       { label: "Map Rank", href: "/rank", Icon: MapPinIcon },
       { label: "Competitors", href: "/competitors", Icon: SwordsIcon },
+      { label: "Deep Audit", href: "/audit", Icon: SearchIcon },
     ],
   },
   { label: "Settings", href: "/settings", Icon: SettingsIcon, adminOnly: true },

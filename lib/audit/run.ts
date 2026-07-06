@@ -5,6 +5,8 @@ import { stageDiscover } from "@/lib/audit/stages/discover";
 import { stageGbpPull } from "@/lib/audit/stages/gbp";
 import { stageWebPull } from "@/lib/audit/stages/web";
 import { stageAiQueries } from "@/lib/audit/stages/ai_queries";
+import { stageScoring } from "@/lib/audit/stages/scoring";
+import { stageSynthesize } from "@/lib/audit/stages/synthesize";
 import type { AuditRun, StageContext, StageResult } from "@/lib/audit/types";
 
 // The Deep Audit stage machine. Ordered registry; the runAuditStage server
@@ -23,8 +25,8 @@ export const STAGES: Stage[] = [
   { key: "gbp", status: "collecting", run: stageGbpPull },
   { key: "web", status: "collecting", run: stageWebPull },
   { key: "ai_queries", status: "ai_queries", run: stageAiQueries }, // Stage 4
-  // { key: "scoring",     status: "scoring",      run: stageScoring },     // Stage 5
-  // { key: "synthesize",  status: "synthesizing", run: stageSynthesize },  // Stage 6
+  { key: "scoring", status: "scoring", run: stageScoring }, // Stage 5
+  { key: "synthesize", status: "synthesizing", run: stageSynthesize }, // Stage 6
 ];
 
 // Index of the NEXT stage to run given the last-completed cursor.
@@ -65,22 +67,25 @@ export async function runNextStage(
 
   const result = await stage.run({ admin, run }); // may throw
 
+  const isLastImplemented = idx + 1 >= STAGES.length;
   const newCost = Number(run.est_api_cost_inr ?? 0) + result.costInr;
+  // The final stage (synthesize) transitions the run to a terminal 'complete'
+  // and stamps completed_at (the review-velocity baseline for the next audit).
   await admin
     .from("audit_runs")
     .update({
-      status: stage.status,
+      status: isLastImplemented ? "complete" : stage.status,
       stage_cursor: stage.key,
       stage_detail: result.detail,
       est_api_cost_inr: newCost,
+      ...(isLastImplemented ? { completed_at: new Date().toISOString() } : {}),
     })
     .eq("id", run.id);
 
-  const isLastImplemented = idx + 1 >= STAGES.length;
   return {
     ran: true,
     done: isLastImplemented,
-    status: stage.status,
+    status: isLastImplemented ? "complete" : stage.status,
     stageKey: stage.key,
     detail: result.detail,
   };

@@ -2584,3 +2584,57 @@ gate. Raw scores stay reachable only via the separate detail-view path.
 - [ ] **When Stage 6 lands:** add the end-to-end test asserting `plan_items`
       contains **zero** rows whose `metric_keys` belong to a `not_yet_measured`
       moat — the behavioural proof the flag-level tests can't give alone.
+
+## Deep Audit — Stages 5 & 6 + report page
+
+Backend automated tests: `npm test` (`test-audit-scoring.mjs`,
+`test-audit-synthesis.mjs`). The report + poller are UI — checklist below.
+Drive a live run: `/audit` (owner) → **Run Deep Audit** → watch stage progress →
+lands on `/audit/[runId]`.
+
+### Stage 5 — scoring (stages/scoring.ts)
+- [ ] After `ai_queries`, the run advances to status `scoring`, then
+      `synthesizing`, then `complete` with `completed_at` set.
+- [ ] `moat_scores` has one row per (entity × moat) — self AND every competitor —
+      with `signals_measured/signals_total/config_version`; `audit_summaries`
+      has one row per entity (`average_digital_score`, `score_band`).
+- [ ] Self grid signals exist (Stage 1): `total_pins` etc., so Local SEO is
+      measured, not floored at visibility=2.
+
+### Stage 6 — synthesis (stages/synthesize.ts)
+- [ ] `audit_plans` (status `active`) + 12–15 `plan_items`; the prior active
+      plan flipped to `superseded`; `audit_summaries.synthesis` (self) holds the
+      full JSON (headline + competitor_story + plan).
+- [ ] EVERY plan_item has non-empty `evidence` and `metric_keys` — a weak plan is
+      rejected+retried, and a run that can't produce one fails (retryable free).
+- [ ] No plan_item cites a metric from a `not_yet_measured` moat (Op-Velocity /
+      Market Activity in v1) — the coverage gate holds end to end.
+- [ ] Days 1–5 carry the biggest weighted gaps + a 15-min quick win; no single
+      moat exceeds ~5 items.
+- [ ] On run #2, Day 1's description acknowledges prior completions/movement.
+
+### Report page (/audit/[runId])
+- [ ] Order top-to-bottom: headline (teal) → competitor story → the 15-day plan →
+      AI visibility → revenue → (trend if ≥2 runs) → collapsed "How we calculated".
+- [ ] Plan items expand to show evidence + "why now"; **Mark done / Skip / Undo**
+      update `plan_items.status` and the progress bar ("N of M done") moves.
+- [ ] AI panel: per-engine cited chips (self), mentions self vs competitors, and
+      the "sources AI trusts" domain list — no raw scores.
+- [ ] Revenue card: market data present → "unlocking soon"; absent → Settings
+      nudge. NEVER a fabricated number.
+- [ ] "How we calculated" is collapsed by default; shows moat bars self vs top
+      rival, digital score, "measured on N of M signals"; unmeasured moats read
+      "not yet measured", never a gap.
+- [ ] WhatsApp share opens wa.me with the Hinglish summary + report URL (new tab).
+- [ ] Non-complete run → friendly running/failed state, not a broken page.
+
+### Entry point + poller
+- [ ] Dashboard (owner) shows the Deep Audit card → `/audit`; sidebar Marketing
+      has "Deep Audit". Receptionists see history but no Run button.
+- [ ] Run button drives the pipeline stage-by-stage with live labels, toasts
+      "plan is ready" on completion, and routes to the report; allowance
+      exhausted → upsell message (no crash).
+
+> Preview note: live UI verification for this change was blocked by a port-3000
+> conflict with another session's dev server; verified via `tsc --noEmit`
+> (clean), `npm test` (56 pass), and a manual client/server-boundary audit.

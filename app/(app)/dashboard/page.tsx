@@ -446,6 +446,26 @@ export default async function DashboardPage() {
         </Link>
       </StatGrid>
 
+      {/* Deep Audit entry — owner/doctor only */}
+      {showBusiness ? (
+        <Link
+          href="/audit"
+          className="mt-6 flex items-center justify-between gap-3 rounded-card border border-border bg-white p-5 shadow-card transition-colors hover:bg-subtle"
+        >
+          <div className="min-w-0">
+            <p className="text-[15px] font-medium text-text-primary">
+              Deep Audit — beat your local competitors
+            </p>
+            <p className="mt-0.5 text-sm text-text-secondary">
+              See what your top rivals do better and get a 15-day catch-up plan.
+            </p>
+          </div>
+          <span aria-hidden className="shrink-0 text-primary">
+            →
+          </span>
+        </Link>
+      ) : null}
+
       {/* Actions needed */}
       <h2 className="mt-8 text-sm font-medium uppercase tracking-wide text-text-secondary">
         Actions Needed

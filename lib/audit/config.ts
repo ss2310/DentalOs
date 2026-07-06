@@ -35,7 +35,12 @@ export const COST_INR = {
   openrouterChatgpt: 1, // one gpt-4o-mini query via OpenRouter
   serperSearch: 0.4, // one Serper /search (google_aio)
   claudeParse: 3, // one Claude citation-parse batch per engine
+  claudeSynthesize: 8, // one Stage-6 plan-synthesis call (larger output)
 } as const;
+
+// Stage 6 model id (env-overridable), same fallback chain as the classifier.
+export const AUDIT_SYNTH_MODEL =
+  process.env.AUDIT_SYNTH_MODEL || process.env.NOTES_AGENT_MODEL || "claude-sonnet-4-6";
 
 // ---- Stage 4: AI-visibility layer ----
 export const AI_QUERIES_PER_LAYER = 1; // → 6 queries across L1–L6

@@ -14,9 +14,37 @@ export type AuditActionState = {
   runId?: string;
   limit?: boolean; // allowance exhausted for the cycle
   status?: string;
-  done?: boolean; // no more implemented stages (Stages 1–3 complete)
+  done?: boolean; // the pipeline finished (run is 'complete')
   detail?: string;
 };
+
+// Progress a plan item (done / skipped / pending). The one CLIENT write in the
+// audit module — RLS + the 035 column-lock restrict the writable columns to
+// (status, done_at), so staff can tick a day's action without touching the
+// engine-owned body of the plan. Any signed-in clinic member may progress it.
+export async function setPlanItemStatus(
+  itemId: string,
+  status: "pending" | "done" | "skipped",
+): Promise<AuditActionState> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("plan_items")
+    .update({
+      status,
+      done_at: status === "done" ? new Date().toISOString() : null,
+    })
+    .eq("id", itemId);
+  if (error) {
+    console.error("setPlanItemStatus failed:", error);
+    return { error: "Could not update the task. Please try again." };
+  }
+  return { ok: true, status };
+}
 
 // Open a new deep audit: atomically consume one per-cycle allowance slot and
 // create the run (start_deep_audit). Returns the runId the caller then drives
@@ -80,7 +108,7 @@ export async function runAuditStage(runId: string): Promise<AuditActionState> {
   try {
     const res = await runNextStage(admin, run as AuditRun);
     revalidatePath("/audit");
-    revalidatePath(`/audit/${runId}`);
+    revalidatePath(`/audit/report/${runId}`);
     return { ok: true, status: res.status, done: res.done, detail: res.detail };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Stage failed.";

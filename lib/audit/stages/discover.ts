@@ -4,6 +4,7 @@ import { executeGridScan } from "@/lib/serp/scan";
 import { matchTarget } from "@/lib/serp/match";
 import type { RawLocalResult } from "@/lib/serp/types";
 import { placesTextSearch } from "@/lib/places/client";
+import { deriveGridPins } from "@/lib/audit/scoring.mjs";
 import type { CompetitorSummary, CompetitorRow } from "@/lib/types";
 import {
   COST_INR,
@@ -64,7 +65,7 @@ export async function stageDiscover(ctx: StageContext): Promise<StageResult> {
   // --- latest scan, or run a fresh one if stale (>30d) ---
   const { data: latestScan } = await admin
     .from("rank_scans")
-    .select("id, scanned_at, competitors")
+    .select("id, scanned_at, competitors, grid_points")
     .eq("clinic_id", run.clinic_id)
     .eq("status", "complete")
     .order("scanned_at", { ascending: false })
@@ -77,9 +78,13 @@ export async function stageDiscover(ctx: StageContext): Promise<StageResult> {
     latestScan.scanned_at != null &&
     new Date(latestScan.scanned_at).getTime() >= staleBefore;
 
+  // The per-cell target ranks — reused for the visibility grid signals below
+  // (self only). Present from either the reused scan or the fresh one.
+  let gridPoints: { rank: number | null }[] = [];
   let summary: CompetitorSummary;
   if (isFresh) {
     summary = latestScan!.competitors as CompetitorSummary;
+    gridPoints = (latestScan!.grid_points as { rank: number | null }[]) ?? [];
   } else {
     // Chargeless scan — the audit's allowance already paid for it.
     const scan = await executeGridScan({
@@ -95,6 +100,7 @@ export async function stageDiscover(ctx: StageContext): Promise<StageResult> {
     if (scan.failures === scan.requestsMade) {
       throw new Error("Could not refresh the map scan (every request failed).");
     }
+    gridPoints = scan.gridPoints;
     // rank_scans.keyword_id is required, so we can only persist the scan when a
     // keyword row exists to attach it to; otherwise the aggregate is used
     // in-memory (the audit needs the competitor set, not a stored scan).
@@ -176,8 +182,39 @@ export async function stageDiscover(ctx: StageContext): Promise<StageResult> {
       website_url: null,
     })),
   ];
-  const { error: insErr } = await admin.from("audit_entities").insert(rows);
+  const { data: inserted, error: insErr } = await admin
+    .from("audit_entities")
+    .insert(rows)
+    .select("id, entity_kind");
   if (insErr) throw new Error(`Failed to write entities: ${insErr.message}`);
+
+  // --- self grid signals (source 'grid') from the scan's per-cell ranks.
+  //     Self ONLY — no competitor grids (the scan measures the clinic's own
+  //     position). These feed the Local SEO visibility score in Stage 5. The
+  //     entity insert above cascade-cleared any prior signals, so no delete. ---
+  const selfEntity = (inserted ?? []).find((e) => e.entity_kind === "self");
+  if (selfEntity && gridPoints.length > 0) {
+    const pins = deriveGridPins(gridPoints);
+    const gridSignals = Object.entries({
+      green_pins: pins.green_pins,
+      yellow_pins: pins.yellow_pins,
+      red_pins: pins.red_pins,
+      out_pins: pins.out_pins,
+      total_pins: pins.total_pins,
+      agrp: pins.agrp,
+      rank_spread: pins.rank_spread,
+    }).map(([metric_key, value_number]) => ({
+      run_id: run.id,
+      entity_id: selfEntity.id,
+      clinic_id: run.clinic_id,
+      metric_key,
+      source: "grid",
+      value_number,
+      raw_meta: { from_scan: true },
+    }));
+    const { error: gridErr } = await admin.from("audit_signals").insert(gridSignals);
+    if (gridErr) throw new Error(`Failed to write grid signals: ${gridErr.message}`);
+  }
 
   await admin
     .from("audit_runs")
