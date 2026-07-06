@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveAiEngines, ENGINE_METRIC } from "@/lib/audit/engines";
 import { generateQueries } from "@/lib/audit/queries";
 import { parseCitations } from "@/lib/audit/parse-citations";
+import { matchSelf } from "@/lib/audit/self-match.mjs";
 import {
   AI_ENGINE_DELAY_MS,
   COST_INR,
@@ -34,20 +35,27 @@ const ENGINE_COST: Record<string, number> = {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Retry on a rate-limit (429) with escalating backoff — Gemini's free tier
-// throttles a 12-query burst. Any other error propagates to the per-query catch.
+// Retry on a rate-limit (429) or a transient failure (503 / timeout) with
+// exponential backoff — 2 retries (3 attempts: 0s, 2s, 4s) before giving up.
+// Gemini's free tier throttles a 6-query burst (429) and its grounded endpoint
+// intermittently 503s/times out. After the last retry the error propagates to the
+// per-query catch, which records the cell as status='error' (NOT a measured
+// negative) so a transient failure is never scored as "the engine didn't cite us".
 async function askWithRetry(
   engine: { ask: (q: string) => Promise<import("@/lib/audit/engines").AiEngineResponse> },
   text: string,
 ) {
-  const backoffs = [4000, 8000];
+  const backoffs = [2000, 4000]; // 2 retries, exponential
   for (let attempt = 0; ; attempt++) {
     try {
       return await engine.ask(text);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const rateLimited = /\b429\b|rate limit|resource_exhausted/i.test(msg);
-      if (rateLimited && attempt < backoffs.length) {
+      const transient =
+        /\b429\b|\b503\b|rate limit|resource_exhausted|overloaded|unavailable|timed?\s*out|timeout|etimedout|econnreset/i.test(
+          msg,
+        );
+      if (transient && attempt < backoffs.length) {
         await sleep(backoffs[attempt]);
         continue;
       }
@@ -63,7 +71,7 @@ export async function stageAiQueries(ctx: StageContext): Promise<StageResult> {
   // --- entities: self + competitors ---
   const { data: entsData } = await admin
     .from("audit_entities")
-    .select("id, entity_kind, display_name, place_id")
+    .select("id, entity_kind, display_name, place_id, website_url")
     .eq("run_id", run.id);
   const ents = (entsData ?? []) as AuditEntity[];
   const self = ents.find((e) => e.entity_kind === "self");
@@ -81,9 +89,10 @@ export async function stageAiQueries(ctx: StageContext): Promise<StageResult> {
     .single();
   const treatments = await loadTreatments(admin, run.clinic_id);
 
-  const selfNames = uniq(
-    [self.display_name, clinic?.business_name].filter(Boolean) as string[],
-  );
+  // The clinic's full name as stored — used verbatim by the deterministic
+  // self-matcher (no stripping, so a bare "Mahima" can't false-positive).
+  const selfName = (self.display_name ?? clinic?.business_name ?? "").trim();
+  const selfWebsite = self.website_url ?? null;
   const queries = generateQueries({
     city: clinic?.city ?? "",
     area: clinic?.area ?? clinic?.city ?? "",
@@ -111,24 +120,23 @@ export async function stageAiQueries(ctx: StageContext): Promise<StageResult> {
     .eq("source", "ai_citations");
 
   const rows: AiQueryResultInsert[] = [];
-  const engineSelfCited: Record<string, boolean> = {};
+  const engineSelfCited: Record<string, boolean | null> = {};
   const mentionCount: Record<string, number> = {}; // entity_id → citations
   const layerSelf: Record<string, number> = {}; // layer → self-cited count
   const domainAgg: Record<string, { count: number; type: string }> = {};
   let selfCitedTotal = 0;
-  let totalCells = 0;
+  let measuredCells = 0; // status='ok' cells — the citation-rate denominator
+  let erroredCells = 0; // status='error' cells — EXCLUDED from the denominator
 
   for (const engine of active) {
     const answers: EngineAnswer[] = [];
     for (const q of queries) {
       try {
         const r = await askWithRetry(engine, q.text);
-        answers.push({ layer: q.layer, query: q.text, engine: engine.name, ...r });
+        answers.push({ layer: q.layer, query: q.text, engine: engine.name, status: "ok", ...r });
       } catch (err) {
-        console.error(
-          `[ai_queries] ${engine.name} failed for "${q.text}":`,
-          err instanceof Error ? err.message : err,
-        );
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[ai_queries] ${engine.name} failed for "${q.text}":`, msg);
         answers.push({
           layer: q.layer,
           query: q.text,
@@ -136,18 +144,22 @@ export async function stageAiQueries(ctx: StageContext): Promise<StageResult> {
           present: false,
           text: "",
           sources: [],
+          status: "error",
+          error_detail: msg,
         });
       }
       cost += ENGINE_COST[engine.name] ?? 0;
       await sleep(AI_ENGINE_DELAY_MS);
     }
 
-    // A parse failure (e.g. a slow Claude batch) must NOT sink the whole stage —
-    // degrade this engine to "no citations found" and carry on.
+    // Claude extracts competitors + source types for cells that actually answered.
+    // Self-citation is NOT decided here (it's the deterministic matcher below), so
+    // a parse failure never affects self_cited — degrade to "no competitors / no
+    // typed sources" and carry on.
     let parsed: Awaited<ReturnType<typeof parseCitations>>;
     try {
-      parsed = await parseCitations({ selfNames, competitorNames, answers });
-      if (answers.some((a) => a.text || a.sources.length > 0)) {
+      parsed = await parseCitations({ competitorNames, answers });
+      if (answers.some((a) => a.status === "ok" && (a.text || a.sources.length > 0))) {
         cost += COST_INR.claudeParse;
       }
     } catch (err) {
@@ -155,23 +167,54 @@ export async function stageAiQueries(ctx: StageContext): Promise<StageResult> {
         `[ai_queries] citation parse failed for ${engine.name}:`,
         err instanceof Error ? err.message : err,
       );
-      parsed = answers.map(() => ({
-        self_cited: false,
-        competitors_cited: [],
-        sources: [],
-      }));
+      parsed = answers.map(() => ({ competitors_cited: [], sources: [] }));
     }
 
     engineSelfCited[engine.name] = false;
+    let engineMeasured = 0;
     answers.forEach((a, i) => {
-      const p = parsed[i];
-      totalCells++;
-      if (p.self_cited) {
+      // ERROR CELL — a failed measurement is NEVER a measured negative. Store it
+      // as status='error', self_cited=null, and exclude it from the denominator.
+      // The raw response is empty because the engine never answered.
+      if (a.status === "error") {
+        erroredCells++;
+        rows.push({
+          run_id: run.id,
+          clinic_id: run.clinic_id,
+          layer: a.layer,
+          query_text: a.query,
+          engine: engine.name,
+          status: "error",
+          error_detail: a.error_detail ?? "engine call failed",
+          self_cited: null,
+          matched_string: null,
+          competitors_cited: [],
+          sources: [],
+          answer_text: "",
+          answer_sources: [],
+        });
+        return;
+      }
+
+      // MEASURED CELL.
+      measuredCells++;
+      engineMeasured++;
+      const p = parsed[i] ?? { competitors_cited: [], sources: [] };
+
+      // Deterministic, recorded self-citation (defensible against answer_text).
+      const m = matchSelf({
+        name: selfName,
+        websiteUrl: selfWebsite,
+        answerText: a.text,
+        sources: a.sources,
+      });
+      if (m.matched) {
         selfCitedTotal++;
         engineSelfCited[engine.name] = true;
         layerSelf[a.layer] = (layerSelf[a.layer] ?? 0) + 1;
         mentionCount[self.id] = (mentionCount[self.id] ?? 0) + 1;
       }
+
       for (const cn of p.competitors_cited) {
         const ce = competitors.find((c) => c.display_name === cn);
         if (ce) mentionCount[ce.id] = (mentionCount[ce.id] ?? 0) + 1;
@@ -182,17 +225,29 @@ export async function stageAiQueries(ctx: StageContext): Promise<StageResult> {
         cur.count++;
         domainAgg[s.domain] = cur;
       }
+
       rows.push({
         run_id: run.id,
         clinic_id: run.clinic_id,
         layer: a.layer,
         query_text: a.query,
         engine: engine.name,
-        self_cited: p.self_cited,
+        status: "ok",
+        error_detail: null,
+        self_cited: m.matched,
+        matched_string: m.matchedString,
         competitors_cited: p.competitors_cited,
         sources: p.sources,
+        answer_text: a.text,
+        answer_sources: a.sources,
       });
     });
+
+    // A fully-errored engine has ZERO measurements → its per-engine boolean is
+    // "not measured" (null), never a failure-derived false. (Extends the Break #3
+    // rule to the engine-level signal; a partially-measured engine keeps a real
+    // false because it genuinely measured at least one cell.)
+    if (engineMeasured === 0) engineSelfCited[engine.name] = null;
   }
 
   if (rows.length > 0) {
@@ -220,15 +275,19 @@ export async function stageAiQueries(ctx: StageContext): Promise<StageResult> {
       raw_meta,
     });
 
-  // per-engine self-cited booleans (existing 035 metrics)
+  // per-engine self-cited booleans (existing 035 metrics). A fully-errored engine
+  // is unmeasured (null) — never a failure-derived false.
   for (const engine of active) {
     const metric = ENGINE_METRIC[engine.name];
-    if (metric) pushSelf(metric, { value_bool: engineSelfCited[engine.name] ?? false });
+    const v = engineSelfCited[engine.name];
+    if (metric) pushSelf(metric, { value_bool: v == null ? null : v });
   }
 
-  // citation rate + source intelligence (the "which sites AI trusts" deliverable)
+  // citation rate + source intelligence (the "which sites AI trusts" deliverable).
+  // Denominator = MEASURED cells only; errored cells are excluded so a rate-limit
+  // burst can't masquerade as "the engine didn't cite us". raw_meta reports both.
   const rate =
-    totalCells > 0 ? Math.round((selfCitedTotal / totalCells) * 1000) / 10 : 0;
+    measuredCells > 0 ? Math.round((selfCitedTotal / measuredCells) * 1000) / 10 : 0;
   const topDomains = Object.entries(domainAgg)
     .sort((a, b) => b[1].count - a[1].count)
     .slice(0, 15)
@@ -236,7 +295,12 @@ export async function stageAiQueries(ctx: StageContext): Promise<StageResult> {
   pushSelf(
     "ai_citation_rate",
     { value_number: rate },
-    { self_cited: selfCitedTotal, total: totalCells, source_intelligence: topDomains },
+    {
+      self_cited: selfCitedTotal,
+      total: measuredCells,
+      errored: erroredCells,
+      source_intelligence: topDomains,
+    },
   );
 
   const bestLayer =
@@ -263,7 +327,10 @@ export async function stageAiQueries(ctx: StageContext): Promise<StageResult> {
 
   return {
     costInr: cost,
-    detail: `${active.length} engine(s) × ${queries.length} queries; self cited ${selfCitedTotal}/${totalCells}`,
+    detail:
+      `${active.length} engine(s) × ${queries.length} queries; ` +
+      `self cited ${selfCitedTotal}/${measuredCells} measured` +
+      (erroredCells ? ` (${erroredCells} errored, excluded)` : ""),
   };
 }
 
@@ -282,8 +349,4 @@ async function loadTreatments(
     .map((r: { treatment_name?: string }) => r.treatment_name ?? "")
     .filter(Boolean);
   return names.length ? names : DENTAL_TREATMENTS_DEFAULT;
-}
-
-function uniq(a: string[]): string[] {
-  return Array.from(new Set(a));
 }

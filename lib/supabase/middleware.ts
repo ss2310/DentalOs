@@ -86,6 +86,10 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/audit/") ||
     request.nextUrl.pathname.startsWith("/p/") ||
     request.nextUrl.pathname.startsWith("/s/") ||
+    // Dev-only audit test harness (app/api/dev/*). Guarded to development here
+    // AND in the route itself; never reachable in production.
+    (process.env.NODE_ENV === "development" &&
+      request.nextUrl.pathname.startsWith("/api/dev/")) ||
     // Payment gateway webhooks — server-to-server, no session; verified by
     // signature inside the route (app/api/webhooks/cashfree).
     request.nextUrl.pathname.startsWith("/api/webhooks/");

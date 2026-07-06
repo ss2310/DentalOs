@@ -1,6 +1,7 @@
 import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
+import { AUDIT_CLASSIFY_MODEL } from "@/lib/audit/config";
 import type { MetricDef, WebsiteSnapshot } from "@/lib/audit/types";
 
 // ONE Claude call per entity that classifies ALL website_llm metrics at once,
@@ -17,11 +18,7 @@ export type Classified = {
 };
 
 function model(): string {
-  return (
-    process.env.AUDIT_CLASSIFY_MODEL ||
-    process.env.NOTES_AGENT_MODEL ||
-    "claude-sonnet-4-6"
-  );
+  return AUDIT_CLASSIFY_MODEL;
 }
 
 function metricLine(m: MetricDef): string {

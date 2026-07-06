@@ -83,7 +83,10 @@ export type QueryLayer = "L1" | "L2" | "L3" | "L4" | "L5" | "L6";
 // A generated query with its framework layer.
 export type AuditQuery = { layer: QueryLayer; text: string };
 
-// One engine's answer to one query (from an AiEngine adapter).
+// One engine's answer to one query (from an AiEngine adapter). `status` records
+// whether the call actually succeeded: an errored/timed-out call is 'error' with
+// an empty text — NEVER a measured negative (see the citation rollup + migration
+// 038). error_detail carries the failure reason for the audit trail.
 export type EngineAnswer = {
   layer: QueryLayer;
   query: string;
@@ -91,23 +94,35 @@ export type EngineAnswer = {
   present: boolean; // engine produced an answer / AIO was present
   text: string; // answer text ('' when none)
   sources: { url: string; title?: string }[]; // grounded/cited urls
+  status: "ok" | "error"; // 'error' → the engine call failed after retries
+  error_detail?: string; // failure reason when status='error'
 };
 
-// Claude's per-query citation extraction for one engine batch.
+// Claude's per-query extraction for one engine batch. Self-citation is decided
+// deterministically (lib/audit/self-match.mjs), NOT here — Claude only extracts
+// which known competitors are named and types the source URLs.
 export type CitationParse = {
-  self_cited: boolean;
   competitors_cited: string[];
   sources: { url: string; domain: string; type: string }[];
 };
 
-// A row to insert into ai_query_results.
+// A row to insert into ai_query_results. self_cited is NULLABLE: null = "not
+// measured" (the engine errored); false = measured & not cited; true = measured &
+// cited. answer_text/answer_sources persist the FULL raw engine response so the
+// verdict is checkable forever; matched_string records the exact string that made
+// self_cited true.
 export type AiQueryResultInsert = {
   run_id: string;
   clinic_id: string;
   layer: string;
   query_text: string;
   engine: string;
-  self_cited: boolean;
+  status: "ok" | "error";
+  error_detail: string | null;
+  self_cited: boolean | null;
+  matched_string: string | null;
   competitors_cited: string[];
   sources: CitationParse["sources"] | null;
+  answer_text: string;
+  answer_sources: EngineAnswer["sources"] | null;
 };

@@ -6,7 +6,9 @@ import "server-only";
 
 // Per-cycle free allowance (metered on clinics.deep_audits_used_this_cycle).
 // Env override lets us tune without a migration. "Buy extra audit" comes later.
-export const DEEP_AUDIT_MONTHLY_LIMIT = Number(process.env.DEEP_AUDIT_MONTHLY_LIMIT) || 2;
+// Default 1/month; set DEEP_AUDIT_MONTHLY_LIMIT=2 in .env.local while testing so
+// repeated test runs aren't blocked by the cap.
+export const DEEP_AUDIT_MONTHLY_LIMIT = Number(process.env.DEEP_AUDIT_MONTHLY_LIMIT) || 1;
 
 // Hard cost guard: at most 1 self + N competitors, capped at 5 entities total,
 // each costing at most 1 Places Details + 1 PageSpeed + 1 Claude classification.
@@ -17,8 +19,10 @@ export const MAX_ENTITIES = 5;
 export const SCAN_FRESHNESS_DAYS = 30;
 
 // Website fetch guard — cap bytes per page so one bloated site can't blow memory
-// or the Claude context. Scripts/styles are stripped before this cap applies.
-export const WEBSITE_BYTE_CAP = 500 * 1024; // 500 KB
+// or the Claude context (classification is the dominant Claude cost, and it
+// scales with this cap). 100 KB of stripped text is ample to classify the
+// website_llm metrics; a bloated site no longer balloons the token bill.
+export const WEBSITE_BYTE_CAP = 100 * 1024; // 100 KB
 export const WEBSITE_FETCH_TIMEOUT_MS = 12_000;
 export const PAGESPEED_TIMEOUT_MS = 30_000;
 
@@ -41,6 +45,20 @@ export const COST_INR = {
 // Stage 6 model id (env-overridable), same fallback chain as the classifier.
 export const AUDIT_SYNTH_MODEL =
   process.env.AUDIT_SYNTH_MODEL || process.env.NOTES_AGENT_MODEL || "claude-sonnet-4-6";
+
+// Stage 3 (website classify) + Stage 4 (citation parse) model. These are
+// extraction/classification tasks, not writing — Haiku 4.5 handles them well at
+// ~3x lower cost than Sonnet, and they're the two highest-volume Claude calls in
+// a run. Deliberately NOT chained to NOTES_AGENT_MODEL so voice-notes tuning
+// can't silently upgrade the audit's cost. Env-overridable.
+export const AUDIT_CLASSIFY_MODEL =
+  process.env.AUDIT_CLASSIFY_MODEL || "claude-haiku-4-5";
+
+// Stage 6 output cap. A full 12–15 item plan (headline + competitor story +
+// per-item description/evidence/context, in Hinglish) runs well past 4k tokens —
+// too small a cap truncates the JSON mid-array and every parse fails. 8k gives
+// comfortable headroom; env-overridable if plans get richer.
+export const AUDIT_SYNTH_MAX_TOKENS = Number(process.env.AUDIT_SYNTH_MAX_TOKENS) || 8000;
 
 // ---- Stage 4: AI-visibility layer ----
 export const AI_QUERIES_PER_LAYER = 1; // → 6 queries across L1–L6

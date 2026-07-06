@@ -1,6 +1,7 @@
 import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
+import { AUDIT_SYNTH_MAX_TOKENS } from "@/lib/audit/config";
 import type { SynthesisPayload } from "@/lib/audit/synthesis-input";
 
 // The Stage 6 Claude call: turns the evidence-only payload into the 15-day plan
@@ -89,13 +90,21 @@ export async function callSynthesisModel(
     ? `${contract(payload)}\n\nYour previous answer was rejected: ${feedback}\nFix it and return the corrected JSON only.`
     : contract(payload);
 
-  const client = new Anthropic({ apiKey, timeout: 90_000, maxRetries: 1 });
+  const client = new Anthropic({ apiKey, timeout: 120_000, maxRetries: 1 });
   const resp = await client.messages.create({
     model: model(),
-    max_tokens: 4000,
+    max_tokens: AUDIT_SYNTH_MAX_TOKENS,
     system: SYSTEM,
     messages: [{ role: "user", content: userContent }],
   });
+
+  // A truncated response is unparseable JSON — surface it clearly instead of a
+  // cryptic "Expected ',' or ']'" so a too-small cap is obvious.
+  if (resp.stop_reason === "max_tokens") {
+    throw new Error(
+      `synthesis truncated at the ${AUDIT_SYNTH_MAX_TOKENS}-token cap — raise AUDIT_SYNTH_MAX_TOKENS`,
+    );
+  }
 
   const text = resp.content.find((b) => b.type === "text");
   const raw = text && text.type === "text" ? text.text : "";
