@@ -2697,3 +2697,43 @@ proof point never reaches generation (`scripts/test-social-voice.mjs`).
       types still present and generate fine.
 - [ ] /history still renders old GBP Post / Instagram Caption items correctly
       (post_types rows were hidden, not deleted).
+
+## Moment Capture (S1 + S2 + Social integration)
+
+Unit-tested invariants (`npm test`, `scripts/test-capture-consent.mjs`): a
+consent_type='review_only' moment is invisible to the social picker/composer
+(the shared query predicate); the 30-day review-ask cap blocks across surveys
+AND captures and opens exactly at day 30; the review message builder takes no
+photo input and contains no medical language.
+
+### Capture flow (/capture — staff-usable, mobile)
+- [ ] After photo required, before optional; JPG/PNG/WebP ≤8 MB enforced.
+- [ ] Patient: search-or-quick-add (name + valid +91 mobile).
+- [ ] Saving with NEITHER consent toggle is impossible (client blocks; server
+      + DB CHECK also reject a crafted request).
+- [ ] Consent A only → badge "Review only"; B (± A) → "Social OK". Recorder +
+      timestamp stored on the row.
+- [ ] Review ask appears only with consent A + a Google review link in
+      Settings; wa.me opens with the Hinglish message (NO photo, no medical
+      words) → "✓ Review request sent" (single-fire).
+- [ ] Cap: patient with a survey sent <30 days ago → "Already asked N days
+      ago" instead of the button; crafted markCaptureReviewSent also rejected.
+
+### Gallery (/capture/gallery)
+- [ ] Signed-URL thumbnails only (no public URLs anywhere).
+- [ ] "Compose post" shows ONLY on Social-OK moments for owner/doctor.
+- [ ] A moment used in a post shows its live status (In approval / Ready /
+      Posted ✓); delete removes storage objects + row (consent revocation).
+
+### Composer (/capture/[id]/compose)
+- [ ] A review_only moment's compose URL 404s (query-level gate), and
+      /api/capture/compose returns 404 for it too.
+- [ ] Before/After template disabled without a before photo; feed 1080×1080 +
+      story 1080×1920 both render with the baked-in "Actual patient — shared
+      with consent" line (in the pixels, not overlay). Compose = 0 credits.
+- [ ] "Write 3 caption options" costs exactly 1 content credit; captions have
+      zero medical claims (validator-gated); failed call refunds the credit.
+- [ ] "Send to approval queue" → social_posts row (image_source=
+      moment_capture) lands in pending_approval and flows the SAME review →
+      approve → manual-publish (copy/download/share) → posted_manually path,
+      counting against the same monthly quota. No parallel workflow anywhere.

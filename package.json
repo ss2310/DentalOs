@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test scripts/test-audio-purge.mjs scripts/test-vertical-parity.mjs scripts/test-multi-vertical-flag.mjs scripts/test-audit-scoring.mjs scripts/test-audit-synthesis.mjs scripts/test-audit-self-match.mjs scripts/test-deep-audit-recurring.mjs scripts/test-social-status.mjs scripts/test-social-ymyl.mjs scripts/test-social-voice.mjs",
+    "test": "node --test scripts/test-audio-purge.mjs scripts/test-vertical-parity.mjs scripts/test-multi-vertical-flag.mjs scripts/test-audit-scoring.mjs scripts/test-audit-synthesis.mjs scripts/test-audit-self-match.mjs scripts/test-deep-audit-recurring.mjs scripts/test-social-status.mjs scripts/test-social-ymyl.mjs scripts/test-social-voice.mjs scripts/test-capture-consent.mjs",
     "seed:vertical": "node scripts/seed-vertical.mjs"
   },
   "dependencies": {
@@ -34,5 +34,8 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

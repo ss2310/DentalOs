@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole, isAdminRole } from "@/lib/roles";
 import { resolveForVertical, DEFAULT_VERTICAL } from "@/lib/vertical";
+import { SOCIAL_CONSENT } from "@/lib/capture/consent";
 import { PageHeader } from "@/components/page";
 import { NewPostClient } from "./new-client";
 
@@ -21,7 +23,9 @@ export default async function NewSocialPostPage() {
   if (!clinic) redirect("/dashboard");
   const vertical = clinic.vertical ?? DEFAULT_VERTICAL;
 
-  const [{ data: topics }, { data: recent }] = await Promise.all([
+  // "Use a captured moment": ONLY consent_type='review_and_social' moments are
+  // queried — a review_only moment never reaches this page's props at all.
+  const [{ data: topics }, { data: recent }, { data: moments }] = await Promise.all([
     supabase
       .from("topic_suggestions")
       .select("bank, label, vertical, sort_order")
@@ -34,6 +38,12 @@ export default async function NewSocialPostPage() {
       .select("id, topic, created_at, post_types(name)")
       .order("created_at", { ascending: false })
       .limit(10),
+    supabase
+      .from("capture_moments")
+      .select("id, treatment, created_at, patients(full_name)")
+      .eq("consent_type", SOCIAL_CONSENT)
+      .order("created_at", { ascending: false })
+      .limit(6),
   ]);
 
   const resolved = resolveForVertical(
@@ -48,6 +58,34 @@ export default async function NewSocialPostPage() {
         title="New social post"
         subtitle="One topic, every platform — 1 credit per post, images free."
       />
+      {(moments ?? []).length > 0 ? (
+        <div className="mt-5 rounded-card border border-border bg-white p-4 shadow-card">
+          <p className="text-sm font-semibold uppercase tracking-[0.08em] text-text-secondary">
+            Use a captured moment
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Real patient photos (consented for social) — composed with the
+            &quot;shared with consent&quot; frame.
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            {(moments ?? []).map((m) => (
+              <Link
+                key={m.id as string}
+                href={`/capture/${m.id}/compose`}
+                className="flex min-h-[44px] items-center justify-between rounded-button border border-border px-4 text-[15px] hover:border-primary/40"
+              >
+                <span>
+                  {((m.patients as { full_name?: string } | null)?.full_name as string) ??
+                    "Patient"}
+                  {m.treatment ? ` — ${m.treatment}` : ""}
+                </span>
+                <span className="text-sm font-medium text-primary">Compose →</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <NewPostClient
         suggestions={{
           social: resolved.filter((t) => t.bank === "social").map((t) => t.label).slice(0, 8),

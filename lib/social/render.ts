@@ -66,8 +66,10 @@ async function font(file: string): Promise<Buffer> {
 }
 
 // --- tiny element helper (satori takes React-shaped plain objects) ----------
-type El = { type: string; props: Record<string, unknown> };
-function h(
+// Exported for the Moment Capture composer (lib/capture/compose.ts), which
+// builds its own photo layouts on the same engine.
+export type El = { type: string; props: Record<string, unknown> };
+export function h(
   type: string,
   style: Record<string, unknown>,
   children?: El[] | string,
@@ -228,17 +230,27 @@ export const SINGLE_LAYOUTS = ["hero", "band", "inverse"] as const;
 export type SingleLayout = (typeof SINGLE_LAYOUTS)[number];
 
 // --- rendering ----------------------------------------------------------------
-async function toPng(el: El, kit: BrandKit): Promise<Buffer> {
+/** Render one element tree to PNG at the given dimensions (font = brand kit's). */
+export async function renderElementToPng(
+  el: El,
+  kit: Pick<BrandKit, "font">,
+  width: number,
+  height: number,
+): Promise<Buffer> {
   const files = FONT_FILES[kit.font] ?? FONT_FILES.inter;
   const svg = await satori(el as never, {
-    width: SIZE,
-    height: SIZE,
+    width,
+    height,
     fonts: [
       { name: "Brand", data: await font(files.regular), weight: 400, style: "normal" },
       { name: "Brand", data: await font(files.bold), weight: 700, style: "normal" },
     ],
   });
-  return Buffer.from(new Resvg(svg, { fitTo: { mode: "width", value: SIZE } }).render().asPng());
+  return Buffer.from(new Resvg(svg, { fitTo: { mode: "width", value: width } }).render().asPng());
+}
+
+async function toPng(el: El, kit: BrandKit): Promise<Buffer> {
+  return renderElementToPng(el, kit, SIZE, SIZE);
 }
 
 /** First sentence/line of the caption as the card headline (emoji-stripped). */

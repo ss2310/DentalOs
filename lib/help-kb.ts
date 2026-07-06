@@ -194,6 +194,33 @@ export const HELP_SECTIONS: HelpSection[] = [
     },
   },
   {
+    key: "moments",
+    label: "Moments",
+    routes: ["/capture"],
+    audience: "all",
+    stage: "Run the Clinic",
+    summary:
+      "Capture a result photo chairside — with the patient's recorded consent — then ask for a review in one tap.",
+    details: [
+      "After a great result, snap the photo (before photo optional), pick the patient, and record their consent with two separate toggles: A) okay to send a review request, B) okay to share the photo on social media. Nothing saves without at least one consent.",
+      "If they agreed to a review request, a ready Hinglish WhatsApp message opens with your Google review link — the photo is never attached. Each patient can only be asked once every 30 days (the app checks surveys and moments together).",
+      "The Gallery is your proof library: every consented photo, its consent type, and — if it became a social post — that post's status. Delete a moment any time if a patient withdraws consent; the photos are removed permanently.",
+      "Photos consented for social can be composed into a branded before/after post from the Gallery (owner/doctor only) — always stamped 'Actual patient — shared with consent'.",
+    ],
+    questions: {
+      en: [
+        "How do I capture a patient's result photo?",
+        "What are the two consent toggles?",
+        "How do I delete a photo if the patient changes their mind?",
+      ],
+      hi: [
+        "Patient ka result photo kaise capture karun?",
+        "Do consent toggles kya hain?",
+        "Patient mana kare toh photo kaise delete karun?",
+      ],
+    },
+  },
+  {
     key: "payments",
     label: "Payments",
     routes: ["/billing"],
@@ -329,18 +356,75 @@ export const HELP_SECTIONS: HelpSection[] = [
       "AI-written marketing content — Google Business posts, Instagram captions, WhatsApp messages, and web pages.",
     details: [
       "Pick a content type and topic; AI writes it. Generating and regenerating cost content credits (the amount depends on the content type). Saving what you generated is free.",
+      "Generate covers your website and Google presence: service pages, geo landing pages, blog articles, Q&A pages, WhatsApp broadcasts, review responses, and reel scripts. Instagram and Google Business feed posts now live in Social.",
       "You can also publish AI-generated landing pages for specific areas or treatments (1 content credit to publish).",
     ],
     questions: {
       en: [
-        "How do I generate a social media post?",
+        "What content types can I generate?",
         "How many credits does a generation cost?",
         "How do I publish a landing page?",
       ],
       hi: [
-        "Social media post kaise generate karun?",
+        "Kaunse content types generate kar sakta hoon?",
         "Ek generation mein kitne credits lagte hain?",
         "Landing page kaise publish karun?",
+      ],
+    },
+  },
+  {
+    key: "social",
+    label: "Social",
+    routes: ["/social"],
+    audience: "admin",
+    stage: "Marketing",
+    summary:
+      "Instagram, Facebook, and Google Business posts in your clinic's voice — you approve everything, then post manually.",
+    details: [
+      "Set your Brand Personality once (a 2-minute wizard: who you are, tone, language per platform, facts you're proud of). Every post is written in that voice; a fact without a source is never used.",
+      "'Plan my week' asks 3 questions and creates 5 posts across platforms for your approval. 'New post' makes one topic into Instagram, Facebook, and Google Business versions in one go. Each post costs 1 content credit.",
+      "Post images and 6-slide carousels are composed from your logo and brand colours — they're FREE (no credits) and no AI-generated images are ever used.",
+      "Every post waits in the approval queue: preview it exactly as the platform shows it, then Approve, Edit (safety checks re-run), or Reject. After approving: copy the caption, download the image, post it yourself in the app, and tap 'Mark as posted'. GrowthOS never posts automatically.",
+      "Your plan includes a monthly post quota (30 on Growth). A built-in safety check blocks made-up statistics, prices, or medical promises before anything reaches the queue.",
+    ],
+    questions: {
+      en: [
+        "How do I plan a week of posts?",
+        "Are post images free?",
+        "Why was my post flagged?",
+        "How do I set my Brand Personality?",
+      ],
+      hi: [
+        "Hafte bhar ke posts kaise plan karun?",
+        "Kya post images free hain?",
+        "Mera post flag kyun hua?",
+        "Brand Personality kaise set karun?",
+      ],
+    },
+  },
+  {
+    key: "deep-audit",
+    label: "Deep Audit",
+    routes: ["/audit"],
+    audience: "admin",
+    stage: "Marketing",
+    summary:
+      "A full automated audit of your online presence vs local competitors — ending in a 30-day action plan.",
+    details: [
+      "One tap runs a 6-stage audit (~8 minutes): it finds your real competitors, pulls Google Business profiles, analyses websites, tests whether AI assistants (ChatGPT, Gemini, Perplexity) recommend you, scores you against your top rival, and writes a 30-day plan of specific actions with evidence.",
+      "Your plan includes 1 deep audit per billing period; extra audits are ₹599 each (Upgrade page). The report has a WhatsApp share button for sending the summary.",
+      "Every 30 days the audit re-runs automatically (if you have an audit available) and you get a 'what moved' digest — including a warning when a competitor's reviews start growing much faster than yours. Tick plan items as you finish them; a mid-plan nudge reminds you if progress stalls.",
+    ],
+    questions: {
+      en: [
+        "How do I run a Deep Audit?",
+        "What does the 30-day plan contain?",
+        "How much does an extra audit cost?",
+      ],
+      hi: [
+        "Deep Audit kaise chalaun?",
+        "30-din ke plan mein kya hota hai?",
+        "Extra audit ka kitna kharcha hai?",
       ],
     },
   },
@@ -471,16 +555,18 @@ export const HELP_TOPICS: HelpTopic[] = [
     key: "credits",
     title: "Credits",
     details: [
-      "There are TWO credit balances. CONTENT credits pay for AI content in Generate, the Reviews Insights report (2), a campaign's AI-drafted message (1), and publishing a landing page (1).",
+      "There are TWO credit balances. CONTENT credits pay for AI content in Generate (1–3 per piece), Social posts (1 per post; caption options for a patient moment are 1), the Reviews Insights report (2), a campaign's AI-drafted message (1), and publishing a landing page (1).",
       "MAP-SCAN credits pay for Map Rank scans (1 each) and, for agencies, prospect audits (1 each).",
-      "Saving content you already generated is free, and recording AI Visibility checks is free. If you run out, you'll see a 'not enough credits' message — buy a credit pack on Upgrade, or wait for your monthly plan reset.",
+      "Deep Audits have their own balance: 1 included per billing period, extra audits ₹599 (Upgrade page).",
+      "FREE things: saving generated content, recording AI Visibility checks, and ALL social images — post images, carousels, and patient-moment compositions cost no credits.",
+      "If you run out, you'll see a 'not enough credits' message — buy a credit pack on Upgrade, or wait for your monthly plan reset. Social also has a monthly post quota (30 on Growth), separate from credits.",
     ],
   },
   {
     key: "roles",
     title: "Roles & staff",
     details: [
-      "Three roles: Owner, Doctor, and Receptionist. Owner and Doctor see everything. Receptionists get the front-desk subset — they do NOT see Revenue Recovered, the Marketing tools (AI Visibility, Generate, Map Rank, Competitors), or Settings. (They can open Campaigns, but only owners/doctors can have AI draft the message.)",
+      "Three roles: Owner, Doctor, and Receptionist. Owner and Doctor see everything. Receptionists get the front-desk subset — they do NOT see Revenue Recovered, the Marketing tools (AI Visibility, Generate, Social, Map Rank, Competitors, Deep Audit), or Settings. (They can open Campaigns, but only owners/doctors can have AI draft the message. They CAN use Moments — capturing photos and consent is front-desk work — but composing a social post from a moment is owner/doctor only.)",
       "The owner adds staff in Settings → Staff (name, email, a temporary password, and their role). New staff sign in with that email and temp password.",
     ],
   },
