@@ -13,6 +13,8 @@ type Stats = {
   content_consumed_month: number;
   map_consumed_month: number;
   signups_week: number;
+  revenue_month: number | string;
+  pending_links: number;
 };
 
 function Card({
@@ -53,6 +55,8 @@ export default async function AdminOverviewPage() {
     content_consumed_month: 0,
     map_consumed_month: 0,
     signups_week: 0,
+    revenue_month: 0,
+    pending_links: 0,
   };
 
   return (
@@ -69,6 +73,15 @@ export default async function AdminOverviewPage() {
         <Card label="Total clinics" value={String(s.total_clinics)} accent />
         <Card label="MRR" value={formatINR(s.mrr)} accent />
         <Card label="Signups this week" value={String(s.signups_week)} accent />
+      </div>
+
+      {/* Payments */}
+      <h2 className="mt-8 mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-text-secondary">
+        Payments
+      </h2>
+      <div className="grid grid-cols-2 gap-4">
+        <Card label="Revenue this month" value={formatINR(s.revenue_month)} accent />
+        <Card label="Pending payment links" value={String(s.pending_links)} />
       </div>
 
       {/* Subscription status breakdown */}

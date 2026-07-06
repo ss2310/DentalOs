@@ -3,8 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { requireAdminContext, writeAudit } from "@/lib/admin/auth";
 import { FEATURE_FLAG_KEYS } from "@/lib/admin/feature-flags";
+import { createCashfreePaymentLink } from "@/lib/billing/cashfree";
 
 export type AdminActionState = { ok?: boolean; error?: string };
+
+export type PaymentLinkState = AdminActionState & {
+  linkUrl?: string;
+  waUrl?: string | null;
+};
 
 /**
  * Toggle one per-clinic feature flag. Re-verifies super-admin independently
@@ -82,6 +88,87 @@ export async function activatePlan(
   });
   revalidatePath(`/admin/clinics/${clinicId}`);
   return { ok: true };
+}
+
+/**
+ * Create a Cashfree Payment Link for a plan/pack and return it + a WhatsApp deep
+ * link to the clinic owner. Files a pending 'payment_link' row (price from DB),
+ * creates the link, stores cf_link_id, and audits the send. The webhook fulfills
+ * on payment — this only sends the link.
+ */
+export async function sendPaymentLink(
+  clinicId: string,
+  kind: "plan" | "pack",
+  id: string,
+): Promise<PaymentLinkState> {
+  if (!clinicId || !id) return { error: "Pick a plan or pack first." };
+  if (kind !== "plan" && kind !== "pack") return { error: "Invalid selection." };
+  const { adminId, db } = await requireAdminContext();
+
+  // 1. File the pending 'payment_link' row (DB-authoritative price + guard).
+  const { data: startData, error: startErr } = await db.rpc("admin_start_payment_link", {
+    p_clinic: clinicId,
+    p_kind: kind,
+    p_id: id,
+    p_actor: adminId,
+  });
+  if (startErr) {
+    console.error("admin_start_payment_link failed:", startErr);
+    return { error: startErr.message || "Could not start the payment link." };
+  }
+  const row = startData as {
+    pending_payment_id: string;
+    amount_inr: number | string;
+    item_type: string;
+    item_name: string;
+    customer_phone: string | null;
+    customer_email: string | null;
+  };
+
+  // 2. Create the Cashfree link.
+  let link: { cfLinkId: string; linkUrl: string };
+  try {
+    link = await createCashfreePaymentLink({
+      linkId: row.pending_payment_id,
+      amount: Number(row.amount_inr),
+      purpose: `GrowthOS ${row.item_name}`,
+      customerPhone: row.customer_phone,
+      customerEmail: row.customer_email,
+    });
+  } catch (e) {
+    await db
+      .from("pending_payments")
+      .update({ status: "failed" })
+      .eq("id", row.pending_payment_id);
+    return {
+      error: e instanceof Error ? e.message : "Could not create the payment link.",
+    };
+  }
+
+  // 3. Store cf_link_id (the webhook's mapping key) + audit the send.
+  const { error: finErr } = await db.rpc("admin_finalize_payment_link", {
+    p_pending_id: row.pending_payment_id,
+    p_cf_link_id: link.cfLinkId,
+    p_actor: adminId,
+  });
+  if (finErr) console.error("admin_finalize_payment_link failed:", finErr);
+
+  await writeAudit(db, adminId, "billing.payment_link_sent", { type: "clinic", id: clinicId }, {
+    kind,
+    item_id: id,
+    cf_link_id: link.cfLinkId,
+  });
+
+  // 4. WhatsApp deep link to the owner (wa.me, Hinglish) — new tab on the client.
+  const phone10 = (row.customer_phone ?? "").replace(/\D/g, "").slice(-10);
+  const message = `Namaste! Aapka GrowthOS ${row.item_name} activate karne ke liye yeh secure payment link hai 🙏 ${link.linkUrl} — 7 din tak valid hai.`;
+  const waUrl =
+    phone10.length === 10
+      ? `https://wa.me/91${phone10}?text=${encodeURIComponent(message)}`
+      : null;
+
+  revalidatePath(`/admin/clinics/${clinicId}`);
+  return { ok: true, linkUrl: link.linkUrl, waUrl };
 }
 
 /** Grant content/map credits (positive admin_adjust ledger entry). */

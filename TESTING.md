@@ -2316,6 +2316,65 @@ with `cloudflared tunnel --url http://localhost:3000` and use
       Cashfree retries; because the RPC is idempotent, the retry completes the
       fulfillment exactly once (no double-apply).
 
+## Cashfree Payment Links + payment visibility (migration 034)
+
+Admin-sent payment links + the platform money feed. **Requires `034_payment_links.sql`
+applied** (on top of 032/033) + `notify pgrst, 'reload schema';`. Super-admin only.
+The webhook (C2 route) already handles link payments — no new Cashfree event to
+subscribe (links fire the same `PAYMENT_SUCCESS_WEBHOOK`; correlation is via
+`order_tags.cf_link_id`).
+
+### Send Payment Link (admin clinic detail)
+- [ ] On `/admin/clinics/[id]` a **"Send payment link"** card lists plans + packs.
+      Pick one with a price > ₹0 → **Create link** → a Cashfree link appears with a
+      **Copy link** button and a **WhatsApp owner** button (green). A `pending_payments`
+      row is created: `source='payment_link'`, `status='created'`, `cf_link_id` set,
+      `amount_inr` = the DB price. A `billing_events` `payment_link_sent` row (actor =
+      admin) + an `admin_audit` row are written.
+- [ ] **Copy** puts the URL on the clipboard; **WhatsApp owner** opens
+      `wa.me/91<owner phone>` in a **new tab** with the Hinglish message
+      ("Namaste! Aapka GrowthOS <item> activate karne ke liye … 7 din tak valid hai.").
+      A clinic with no owner phone shows "No owner phone on file" instead of the button.
+- [ ] **Price guard**: trying to link a ₹0 / unpriced plan is rejected with a clear
+      error; no link, no lingering `created` row left usable (it's marked failed on
+      link-create failure).
+
+### Link payment fulfillment (end-to-end, sandbox)
+- [ ] Open the generated link, pay with a sandbox instrument. The webhook maps it via
+      `order_tags.cf_link_id` → the `pending_payments` row flips to **`paid`** (with
+      `paid_at`), and fulfillment is **identical** to hosted checkout: plan activated
+      / credits added, `billing_events` `payment_received`|`topup` provider `cashfree`,
+      an **invoice** row (next `GOS-YYYY-NNNN`), and the "Payment received 🎉"
+      notification. Idempotent on redelivery.
+- [ ] A **failed/user-dropped** attempt on a link does **NOT** mark the row failed
+      (links are retryable) — the row stays `created` and a later successful payment
+      still fulfills it.
+
+### /admin/payments money feed
+- [ ] The **Payments** nav item opens a table of **all** `pending_payments` across
+      clinics: clinic (links to detail) · item · amount · **source badge
+      (checkout/link)** · status badge · created · paid · Cashfree id.
+- [ ] The **status filter** chips (all/created/paid/failed/expired) narrow the table
+      with live counts; filtering is client-side (no reload).
+
+### /admin overview cards
+- [ ] A **Payments** section shows **Revenue this month** (Σ paid `pending_payments`
+      this IST month) and **Pending payment links** (count of `source='payment_link'`
+      still `created`). Both match the DB.
+
+### Clinic detail payment history
+- [ ] `/admin/clinics/[id]` shows a **Payments** section (that clinic's
+      `pending_payments`, newest first, with source + status + paid time) and an
+      **Invoices** section (invoice number, description, amount) alongside the existing
+      Billing events / Credit history.
+
+### Security / gating
+- [ ] A non-super-admin hitting `/admin/payments` gets a **404**. `sendPaymentLink`,
+      `admin_start_payment_link`, `admin_finalize_payment_link`, and
+      `admin_payments_feed` are all super-admin/service-role only — a normal client
+      can't call them. The link amount comes from the DB (never the client), and the
+      clinic is taken from the admin's explicit target, not any client value.
+
 ### Security / multi-tenancy
 - [ ] `invoices` — a clinic reads only its **own** invoices (RLS
       `clinic_id = current_clinic_id()`); no client write policy. `invoice_counters`

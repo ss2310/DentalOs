@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 type CashfreeWebhookPayload = {
   type?: string;
   data?: {
-    order?: { order_id?: string };
+    // For a Payment Link payment, Cashfree injects the link id into order_tags.
+    order?: { order_id?: string; order_tags?: Record<string, string> | null };
     payment?: { cf_payment_id?: string | number; payment_status?: string };
     customer_details?: { customer_id?: string };
   };
@@ -66,13 +67,15 @@ export async function POST(req: Request): Promise<NextResponse> {
   // 3. Only now read fields.
   const status = payload?.data?.payment?.payment_status;
   const orderId = payload?.data?.order?.order_id;
+  // Payment Link payments carry the link id here; hosted checkout does not.
+  const cfLinkId = payload?.data?.order?.order_tags?.cf_link_id ?? null;
   const rawCfId = payload?.data?.payment?.cf_payment_id;
   const cfPaymentId = rawCfId != null ? String(rawCfId) : "";
   const customerId = payload?.data?.customer_details?.customer_id ?? null;
 
-  if (!orderId) {
-    // Verified but unusable (e.g. a bare test ping). Ack so Cashfree stops.
-    await heartbeat("ok", "verified event with no order_id");
+  if (!orderId && !cfLinkId) {
+    // Verified but unmappable (e.g. a bare test ping). Ack so Cashfree stops.
+    await heartbeat("ok", "verified event with no order id");
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
@@ -80,7 +83,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   try {
     if (status === "SUCCESS") {
       const { data, error } = await admin.rpc("confirm_cashfree_payment", {
-        p_order_id: orderId,
+        p_order_id: orderId ?? null,
+        p_cf_link_id: cfLinkId,
         p_cf_payment_id: cfPaymentId,
         p_customer_id: customerId,
         p_raw: payload,
@@ -88,13 +92,19 @@ export async function POST(req: Request): Promise<NextResponse> {
       if (error) throw error;
       await heartbeat("ok", `${String(data ?? "ok")} ${cfPaymentId}`.trim());
     } else if (status === "FAILED" || status === "USER_DROPPED") {
-      const { error } = await admin.rpc("fail_cashfree_payment", {
-        p_order_id: orderId,
-        p_reason: status,
-        p_raw: payload,
-      });
-      if (error) throw error;
-      await heartbeat("ok", `failed ${orderId}`);
+      if (cfLinkId) {
+        // A link can be retried until it expires, so a single failed attempt must
+        // NOT mark the pending row failed — leave it 'created' for a later success.
+        await heartbeat("ok", `link attempt ${status} ${cfLinkId}`);
+      } else {
+        const { error } = await admin.rpc("fail_cashfree_payment", {
+          p_order_id: orderId,
+          p_reason: status,
+          p_raw: payload,
+        });
+        if (error) throw error;
+        await heartbeat("ok", `failed ${orderId}`);
+      }
     } else {
       // Non-terminal / unhandled status (e.g. PENDING) — ack and ignore.
       await heartbeat("ok", `ignored ${status ?? "unknown"}`);

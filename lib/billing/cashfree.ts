@@ -51,6 +51,55 @@ function normalizePhone(phone: string | null | undefined): string {
   return local.length === 10 ? local : "9999999999"; // sandbox-safe fallback
 }
 
+/**
+ * Create a Cashfree hosted Payment Link for an admin-sent purchase. link_id is
+ * our pending_payments.id; the paid webhook carries cf_link_id in order_tags,
+ * which we store on the row so confirm_cashfree_payment maps it back. Returns the
+ * shareable URL + cf_link_id. Server-only; never trusts a client amount.
+ */
+export async function createCashfreePaymentLink(input: {
+  linkId: string;
+  amount: number;
+  purpose: string;
+  customerPhone: string | null;
+  customerEmail?: string | null;
+}): Promise<{ cfLinkId: string; linkUrl: string }> {
+  const cf = cashfreeClient();
+  // Links are paid by the clinic owner (possibly logged out), so no return_url —
+  // fulfillment is webhook-driven. Valid for 7 days.
+  const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const res = await cf.PGCreateLink({
+      link_id: input.linkId,
+      link_amount: Number(input.amount),
+      link_currency: "INR",
+      link_purpose: input.purpose,
+      customer_details: {
+        customer_phone: normalizePhone(input.customerPhone),
+        ...(input.customerEmail ? { customer_email: input.customerEmail } : {}),
+      },
+      link_notes: { pending_payment_id: input.linkId },
+      link_expiry_time: expiry,
+      // We deliver the link over WhatsApp ourselves — don't double-notify.
+      link_notify: { send_sms: false, send_email: false },
+    });
+    const cfLinkId = res.data.cf_link_id;
+    const linkUrl = res.data.link_url;
+    if (!cfLinkId || !linkUrl) {
+      throw new Error("Cashfree did not return a link.");
+    }
+    return { cfLinkId: String(cfLinkId), linkUrl: String(linkUrl) };
+  } catch (e) {
+    const detail = cashfreeError(e);
+    console.error("Cashfree PGCreateLink failed:", detail, e);
+    throw new Error(
+      process.env.NODE_ENV === "production"
+        ? "Could not create the payment link. Please try again."
+        : `Could not create the payment link: ${detail}`,
+    );
+  }
+}
+
 export const cashfreeProvider: BillingProvider = {
   name: "cashfree",
   async startCheckout({ kind, id }) {

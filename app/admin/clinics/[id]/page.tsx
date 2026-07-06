@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAdminContext } from "@/lib/admin/auth";
 import { formatDate, formatINR } from "@/lib/format";
 import { FeatureFlagsEditor } from "./feature-flags";
-import { AdminActions, type PlanChoice } from "./admin-actions";
+import { AdminActions, type PlanChoice, type PackChoice } from "./admin-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +49,33 @@ type EventRow = {
   amount_inr: number | string | null;
   note: string | null;
   status: string | null;
+};
+
+type PaymentRow = {
+  id: string;
+  item_type: string;
+  amount_inr: number | string;
+  source: string;
+  status: string;
+  cf_order_id: string | null;
+  cf_link_id: string | null;
+  created_at: string;
+  paid_at: string | null;
+};
+
+type InvoiceRow = {
+  id: string;
+  invoice_number: string;
+  amount_inr: number | string;
+  item_description: string;
+  created_at: string;
+};
+
+const PAYMENT_STATUS_STYLE: Record<string, string> = {
+  paid: "bg-success/10 text-success",
+  created: "bg-warning/10 text-warning",
+  failed: "bg-danger/10 text-danger",
+  expired: "bg-subtle text-text-secondary",
 };
 
 const REASON_LABELS: Record<string, string> = {
@@ -100,8 +127,11 @@ export default async function AdminClinicDetail({
     content,
     scans,
     { data: planRows },
+    { data: packRows },
     { data: ledgerRows },
     { data: eventRows },
+    { data: paymentRows },
+    { data: invoiceRows },
   ] = await Promise.all([
     db
       .from("profiles")
@@ -118,6 +148,11 @@ export default async function AdminClinicDetail({
       .eq("is_active", true)
       .order("sort_order", { ascending: true }),
     db
+      .from("credit_packs")
+      .select("id, name, price_inr")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true }),
+    db
       .from("credit_ledger")
       .select("id, created_at, kind, delta, reason, balance_after")
       .eq("clinic_id", clinic.id)
@@ -129,12 +164,27 @@ export default async function AdminClinicDetail({
       .eq("clinic_id", clinic.id)
       .order("created_at", { ascending: false })
       .limit(30),
+    db
+      .from("pending_payments")
+      .select("id, item_type, amount_inr, source, status, cf_order_id, cf_link_id, created_at, paid_at")
+      .eq("clinic_id", clinic.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    db
+      .from("invoices")
+      .select("id, invoice_number, amount_inr, item_description, created_at")
+      .eq("clinic_id", clinic.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
   const users = (userRows as ClinicUser[] | null) ?? [];
   const plans = (planRows as PlanChoice[] | null) ?? [];
+  const packs = (packRows as PackChoice[] | null) ?? [];
   const ledger = (ledgerRows as LedgerRow[] | null) ?? [];
   const events = (eventRows as EventRow[] | null) ?? [];
+  const payments = (paymentRows as PaymentRow[] | null) ?? [];
+  const invoices = (invoiceRows as InvoiceRow[] | null) ?? [];
   const planName = plans.find((p) => p.id === clinic.plan_id)?.name ?? "—";
 
   const renewalDate =
@@ -227,6 +277,7 @@ export default async function AdminClinicDetail({
         isActive={clinic.is_active}
         currentPlanId={clinic.plan_id}
         plans={plans}
+        packs={packs}
       />
 
       {/* Credit history */}
@@ -304,6 +355,75 @@ export default async function AdminClinicDetail({
                   {formatINR(e.amount_inr)}
                 </span>
               ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Payments */}
+      <h2 className="mt-8 mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-text-secondary">
+        Payments
+      </h2>
+      {payments.length === 0 ? (
+        <p className="rounded-card border border-border bg-white p-6 text-center text-sm text-text-secondary">
+          No gateway payments or links yet.
+        </p>
+      ) : (
+        <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-white">
+          {payments.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-text-primary">
+                  <span className="capitalize">{p.item_type}</span>
+                  <span className="ml-2 rounded-pill bg-subtle px-2 py-0.5 text-xs font-normal text-text-secondary">
+                    {p.source === "payment_link" ? "link" : "checkout"}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-xs text-text-secondary">
+                  {formatDate(p.created_at)}
+                  {p.paid_at ? ` · paid ${formatDate(p.paid_at)}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-sm font-medium text-text-primary">
+                  {formatINR(p.amount_inr)}
+                </span>
+                <span
+                  className={`rounded-pill px-2 py-0.5 text-xs font-medium capitalize ${
+                    PAYMENT_STATUS_STYLE[p.status] ?? "bg-subtle text-text-secondary"
+                  }`}
+                >
+                  {p.status}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Invoices */}
+      <h2 className="mt-8 mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-text-secondary">
+        Invoices
+      </h2>
+      {invoices.length === 0 ? (
+        <p className="rounded-card border border-border bg-white p-6 text-center text-sm text-text-secondary">
+          No invoices yet.
+        </p>
+      ) : (
+        <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-white">
+          {invoices.map((inv) => (
+            <div key={inv.id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-text-primary">
+                  {inv.invoice_number}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-text-secondary">
+                  {inv.item_description} · {formatDate(inv.created_at)}
+                </p>
+              </div>
+              <span className="shrink-0 text-sm font-medium text-text-primary">
+                {formatINR(inv.amount_inr)}
+              </span>
             </div>
           ))}
         </div>
