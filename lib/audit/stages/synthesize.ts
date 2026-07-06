@@ -3,6 +3,7 @@ import "server-only";
 import { buildSynthesisPayload } from "@/lib/audit/synthesis-input.mjs";
 import { validateSynthesis } from "@/lib/audit/synthesis-validate.mjs";
 import { visibilityScore } from "@/lib/audit/scoring.mjs";
+import { competitorWatch } from "@/lib/audit/recurring.mjs";
 import { resolveForVertical } from "@/lib/vertical.mjs";
 import { callSynthesisModel } from "@/lib/audit/synthesis";
 import { COST_INR } from "@/lib/audit/config";
@@ -128,6 +129,21 @@ export async function stageSynthesize(ctx: StageContext): Promise<StageResult> {
     values: valuesByEntity.get(c.id) ?? {},
   }));
 
+  // Competitor watch: if a rival is out-pacing us on Google reviews by >3×, the
+  // synthesis prompt is told to force a Week-1 review-generation counter-action.
+  const vel = (v: Record<string, SignalValue>): number | null =>
+    typeof v["review_velocity_computed"] === "number"
+      ? (v["review_velocity_computed"] as number)
+      : null;
+  const watch = competitorWatch(
+    vel(selfValues),
+    rivals.map((r) => ({ name: r.name, velocity: vel(r.values) })),
+  );
+  const watchArg =
+    watch.flagged && watch.worst
+      ? { name: watch.worst.name, multiple: watch.worst.multiple }
+      : null;
+
   // --- prior-run context (deltas + prior-plan completion) ---
   const { data: selfSummary } = await admin
     .from("audit_summaries")
@@ -173,7 +189,7 @@ export async function stageSynthesize(ctx: StageContext): Promise<StageResult> {
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     attempts++;
     try {
-      raw = await callSynthesisModel(payload, lastReason || undefined);
+      raw = await callSynthesisModel(payload, lastReason || undefined, watchArg);
     } catch (err) {
       lastReason = err instanceof Error ? err.message : "model call failed";
       continue;

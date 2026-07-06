@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "@/components/toast";
 import { SearchIcon } from "@/components/icons";
 import { startDeepAudit, runAuditStage } from "./actions";
+import { BuyExtraAudit } from "./buy-extra-audit";
 
 // Drives the whole pipeline from the browser: startDeepAudit consumes an
 // allowance slot, then we loop runAuditStage (ONE stage per call, resumable)
@@ -25,7 +26,13 @@ const STAGE_LABEL: Record<string, string> = {
 // A generous stop so a wedged run can't loop forever (6 stages + retries).
 const MAX_STEPS = 20;
 
-export function RunDeepAudit({ limit }: { limit: number }) {
+export function RunDeepAudit({
+  balance,
+  extraAuditPackId,
+}: {
+  balance: number;
+  extraAuditPackId: string | null;
+}) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [label, setLabel] = useState<string | null>(null);
@@ -90,10 +97,17 @@ export function RunDeepAudit({ limit }: { limit: number }) {
         Run Deep Audit
       </button>
       <p className="mt-2 text-xs text-text-secondary">
-        Included: up to {limit} deep audits per billing cycle.
+        {balance > 0
+          ? `${balance} audit${balance === 1 ? "" : "s"} available · 1 included each plan period`
+          : "1 audit included each plan period · extra audits ₹599"}
       </p>
       {upsell ? (
-        <p className="mt-2 text-sm font-medium text-warning">{upsell}</p>
+        <div className="mt-3 rounded-card border border-warning/30 bg-warning/5 p-3">
+          <p className="text-sm font-medium text-warning">{upsell}</p>
+          <div className="mt-2">
+            <BuyExtraAudit packId={extraAuditPackId} />
+          </div>
+        </div>
       ) : null}
     </div>
   );

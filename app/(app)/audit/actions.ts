@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserRole, isAdminRole } from "@/lib/roles";
-import { DEEP_AUDIT_MONTHLY_LIMIT } from "@/lib/audit/config";
 import { runNextStage } from "@/lib/audit/run";
 import type { AuditRun } from "@/lib/audit/types";
 
@@ -59,16 +58,15 @@ export async function startDeepAudit(): Promise<AuditActionState> {
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
 
-  const { data: runId, error } = await supabase.rpc("start_deep_audit", {
-    p_limit: DEEP_AUDIT_MONTHLY_LIMIT,
-  });
+  const { data: runId, error } = await supabase.rpc("start_deep_audit");
   if (error) {
     console.error("start_deep_audit failed:", error);
     return { error: "Could not start the audit. Please try again." };
   }
   if (!runId) {
     return {
-      error: `You've used all ${DEEP_AUDIT_MONTHLY_LIMIT} deep audits included this cycle. Buying extra audits is coming soon.`,
+      error:
+        "You've used your included audit. Buy an extra audit for ₹599, or it refreshes when your plan renews.",
       limit: true,
     };
   }

@@ -40,7 +40,9 @@ const SYSTEM = [
   "fences.",
 ].join("\n");
 
-function contract(payload: SynthesisPayload): string {
+type WatchArg = { name: string; multiple: number } | null;
+
+function contract(payload: SynthesisPayload, watch: WatchArg): string {
   const prior = payload.prior
     ? [
         "",
@@ -93,19 +95,30 @@ function contract(payload: SynthesisPayload): string {
     "(days 1-7), with at least one 15-min quick win in the first 7 days. Mix across",
     "moats (max ~7 items per moat). Heavier / compounding tasks can sit in later",
     "weeks.",
+    ...(watch
+      ? [
+          "",
+          `PRIORITY — Competitor watch: ${watch.name} is gaining Google reviews ` +
+            `${watch.multiple}x faster than this clinic. Week 1 (days 1-7) MUST ` +
+            "include a concrete review-generation counter-action (e.g. ask specific " +
+            "recent happy patients for a Google review), citing total_google_reviews " +
+            "in its metric_keys.",
+        ]
+      : []),
   ].join("\n");
 }
 
 export async function callSynthesisModel(
   payload: SynthesisPayload,
   feedback?: string,
+  watch: WatchArg = null,
 ): Promise<Record<string, unknown>> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
 
   const userContent = feedback
-    ? `${contract(payload)}\n\nYour previous answer was rejected: ${feedback}\nFix it and return the corrected JSON only.`
-    : contract(payload);
+    ? `${contract(payload, watch)}\n\nYour previous answer was rejected: ${feedback}\nFix it and return the corrected JSON only.`
+    : contract(payload, watch);
 
   // A full 16–20 item Hinglish plan is a long generation (~6-7k output tokens);
   // at the old 120s client timeout it aborted mid-stream every attempt and the

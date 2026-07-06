@@ -92,7 +92,10 @@ export async function updateSession(request: NextRequest) {
       request.nextUrl.pathname.startsWith("/api/dev/")) ||
     // Payment gateway webhooks — server-to-server, no session; verified by
     // signature inside the route (app/api/webhooks/cashfree).
-    request.nextUrl.pathname.startsWith("/api/webhooks/");
+    request.nextUrl.pathname.startsWith("/api/webhooks/") ||
+    // Scheduled jobs (Vercel Cron / pg_cron) — no session; each route verifies a
+    // CRON_SECRET bearer token itself (app/api/cron/*).
+    request.nextUrl.pathname.startsWith("/api/cron/");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

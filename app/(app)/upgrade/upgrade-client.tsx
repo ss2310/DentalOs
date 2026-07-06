@@ -22,12 +22,14 @@ export type PackOption = {
   price_inr: number | string;
   content_credits: number;
   map_credits: number;
+  deep_audits?: number;
 };
 
-function creditLine(content: number, map: number): string {
+function creditLine(content: number, map: number, audits = 0): string {
   const parts: string[] = [];
   if (content > 0) parts.push(`${content} content credits`);
   if (map > 0) parts.push(`${map} map scans`);
+  if (audits > 0) parts.push(`${audits} deep audit${audits === 1 ? "" : "s"}`);
   return parts.join(" · ") || "—";
 }
 
@@ -164,7 +166,7 @@ export function UpgradeOptions({
                 {formatINR(pack.price_inr)}
               </p>
               <p className="mt-1 text-sm text-text-secondary">
-                {creditLine(pack.content_credits, pack.map_credits)}
+                {creditLine(pack.content_credits, pack.map_credits, pack.deep_audits ?? 0)}
               </p>
               <button
                 type="button"

@@ -7,6 +7,7 @@ import { PageHeader, SectionHeader } from "@/components/page";
 import { formatDate } from "@/lib/format";
 import { PlanItemRow, type PlanItemView } from "../../plan-item-row";
 import { ShareButton } from "../../share-button";
+import { WaSendButton } from "../../wa-send-button";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +85,7 @@ export default async function AuditReportPage({
 
   const { data: run } = await supabase
     .from("audit_runs")
-    .select("id, status, created_at, completed_at, error")
+    .select("id, status, created_at, completed_at, error, digest_wa_message")
     .eq("id", runId)
     .maybeSingle();
   if (!run) notFound();
@@ -347,6 +348,16 @@ export default async function AuditReportPage({
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {/* Recurring delta digest — one-tap WhatsApp of this month's "what moved". */}
+      {run.digest_wa_message ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-success/30 bg-success/5 p-4">
+          <p className="text-sm text-text-primary">
+            Share this month&apos;s progress update.
+          </p>
+          <WaSendButton message={run.digest_wa_message} label="Send update" />
         </div>
       ) : null}
 

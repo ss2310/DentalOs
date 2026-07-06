@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole, isAdminRole } from "@/lib/roles";
-import { DEEP_AUDIT_MONTHLY_LIMIT } from "@/lib/audit/config";
 import { PageHeader, SectionHeader, EmptyState } from "@/components/page";
 import { formatDate } from "@/lib/format";
 import { RunDeepAudit } from "./run-deep-audit";
@@ -32,20 +31,35 @@ export default async function AuditIndexPage() {
   const supabase = createClient();
   const isAdmin = isAdminRole(await getUserRole());
 
-  const { data } = await supabase
-    .from("audit_runs")
-    .select("id, status, created_at, completed_at, stage_detail")
-    .order("created_at", { ascending: false })
-    .limit(12);
+  const [{ data }, { data: clinic }, { data: pack }] = await Promise.all([
+    supabase
+      .from("audit_runs")
+      .select("id, status, created_at, completed_at, stage_detail")
+      .order("created_at", { ascending: false })
+      .limit(12),
+    supabase.from("clinics").select("deep_audit_credits").single(),
+    supabase
+      .from("credit_packs")
+      .select("id")
+      .eq("name", "Deep Audit Top-up")
+      .eq("is_active", true)
+      .maybeSingle(),
+  ]);
   const runs = (data ?? []) as RunRow[];
   const latestComplete = runs.find((r) => r.status === "complete");
+  const auditBalance = clinic?.deep_audit_credits ?? 0;
+  const extraAuditPackId = (pack?.id as string | undefined) ?? null;
 
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
         title="Deep Audit"
         subtitle="See exactly what your top local competitors are doing better — and get a 30-day plan to catch up."
-        action={isAdmin ? <RunDeepAudit limit={DEEP_AUDIT_MONTHLY_LIMIT} /> : undefined}
+        action={
+          isAdmin ? (
+            <RunDeepAudit balance={auditBalance} extraAuditPackId={extraAuditPackId} />
+          ) : undefined
+        }
       />
 
       {latestComplete ? (

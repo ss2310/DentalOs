@@ -82,6 +82,18 @@ export async function runNextStage(
     })
     .eq("id", run.id);
 
+  // On completion, fire the delta digest for run #2+ (best-effort — a digest
+  // failure must never fail the run). Covers BOTH the manual browser poller and
+  // the cron runner, since both reach completion here.
+  if (isLastImplemented) {
+    try {
+      const { maybeSendDeltaDigest } = await import("@/lib/audit/digest");
+      await maybeSendDeltaDigest(admin, run);
+    } catch (err) {
+      console.error("[run] delta digest failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
   return {
     ran: true,
     done: isLastImplemented,

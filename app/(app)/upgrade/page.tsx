@@ -20,7 +20,7 @@ export default async function UpgradePage() {
   const { data: clinic } = await supabase
     .from("clinics")
     .select(
-      "subscription_status, trial_ends_at, current_period_end, content_credits_balance, map_credits_balance, plan_id",
+      "subscription_status, trial_ends_at, current_period_end, content_credits_balance, map_credits_balance, deep_audit_credits, plan_id",
     )
     .single();
 
@@ -32,7 +32,7 @@ export default async function UpgradePage() {
       .order("sort_order", { ascending: true }),
     supabase
       .from("credit_packs")
-      .select("id, name, price_inr, content_credits, map_credits")
+      .select("id, name, price_inr, content_credits, map_credits, deep_audits")
       .eq("is_active", true)
       .order("sort_order", { ascending: true }),
   ]);
@@ -87,7 +87,7 @@ export default async function UpgradePage() {
         <p className="mt-2 text-sm text-text-secondary">{statusHint}</p>
       </div>
 
-      <StatGrid cols={2}>
+      <StatGrid cols={3}>
         <StatCard
           hero
           label="Content credits"
@@ -98,6 +98,11 @@ export default async function UpgradePage() {
           label="Map-scan credits"
           value={String(clinic?.map_credits_balance ?? 0)}
           hint="Map rank scans & prospect audits"
+        />
+        <StatCard
+          label="Deep audits"
+          value={String(clinic?.deep_audit_credits ?? 0)}
+          hint="1 included each plan period · ₹599 for extras"
         />
       </StatGrid>
 
