@@ -2638,3 +2638,62 @@ lands on `/audit/[runId]`.
 > Preview note: live UI verification for this change was blocked by a port-3000
 > conflict with another session's dev server; verified via `tsc --noEmit`
 > (clean), `npm test` (56 pass), and a manual client/server-boundary audit.
+
+## Social Content Engine — Phase 1 (manual publish)
+
+Unit-tested invariants (`npm test`): poisoned stat blocked (`scripts/test-social-ymyl.mjs`),
+illegal status transition rejected (`scripts/test-social-status.mjs`), unverified
+proof point never reaches generation (`scripts/test-social-voice.mjs`).
+
+### Brand Personality (/social/brand)
+- [ ] Wizard: 6 questions over 3 screens, chips + free text; vague identity line
+      (<15 chars) gets one polite pushback on Next.
+- [ ] Proof point without a source shows the "unverified — won't be used" note;
+      a generated post NEVER cites it. Add a source → it may appear.
+- [ ] Skip → posts still generate (safe default profile auto-created, source='default').
+- [ ] Saving again creates a NEW version (old one deactivated), never an overwrite.
+- [ ] Brand kit: colors/font/logo save; logo >2 MB or non-image rejected.
+
+### Generation (/social/new — 1 credit per platform variant; images/carousels free)
+- [ ] One call returns per-platform variants: IG (hook-first, ≤2,200 chars,
+      EXACTLY 5 hashtags mixing locality + service), FB (conversational, ≤2
+      hashtags), GBP (type-aware; soft warnings listed, never blocking).
+- [ ] Carousel mode: exactly 6 slides (hook → problem → 3 value → CTA).
+- [ ] Hinglish reads natural (few-shots injected), not word-for-word translation.
+- [ ] YMYL: a fabricated %/price regenerates once; still bad → post lands as a
+      flagged DRAFT with violations named — it cannot be submitted until edited clean.
+- [ ] Insufficient credits → 402 + upgrade prompt; failed model call → credit refunded.
+- [ ] Monthly quota reached (plans.social_posts_monthly) → 402 upgrade prompt,
+      NO credit spent.
+
+### Queue + approval (/social)
+- [ ] Weekly planner: 3 questions → 5 posts (IG×3 incl. one carousel, FB, GBP)
+      land in pending_approval as one batch, scheduled across the week.
+- [ ] Approval is per-variant (no bulk approve): preview matches the platform
+      (IG card w/ image, FB text, GBP card). Approve / Edit / Reject.
+- [ ] Edit re-runs the YMYL validator; violations come back named and the edit
+      is NOT saved until clean.
+- [ ] Illegal transitions impossible from the UI AND from crafted requests
+      (draft → posted etc. rejected server-side).
+- [ ] Calendar-lite: queued posts grouped by week ("This week", "Next week", …).
+
+### Render + manual publish (/social/publish/[id])
+- [ ] "Render image" is FREE (0 credits — verify credit balance unchanged);
+      output is branded 1080×1080 (logo/colors/font from brand kit; emoji
+      stripped from image text), carousel renders all 6 slides.
+- [ ] Copy caption copies caption + hashtags; Download fetches every slide;
+      share sheet opens natively (mobile) with wa.me-to-self fallback.
+- [ ] "Mark as posted" → ✓ Posted (button gone — anti-duplicate), posted_at set,
+      ONE posting_activity_events row (repeat calls don't duplicate it).
+- [ ] Receptionist accounts see none of /social (nav hidden + route redirect).
+
+### Admin (/admin/social)
+- [ ] Per-clinic generated / ready / posted this month + credit spend; 404 for
+      non-super-admins (never 403).
+
+### Generate ↔ Social dedupe
+- [ ] /generate no longer shows "GBP Post" or "Instagram Caption" cards; the teal
+      pointer card links to /social. All Website/WhatsApp/Review/Reel/GBP-Q&A
+      types still present and generate fine.
+- [ ] /history still renders old GBP Post / Instagram Caption items correctly
+      (post_types rows were hidden, not deleted).

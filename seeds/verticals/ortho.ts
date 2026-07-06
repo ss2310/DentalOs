@@ -6,12 +6,12 @@
 // touches a NULL (shared) or other vertical's row; a re-run replaces only ortho
 // rows. The vertical row must already exist in `verticals` before seeding.
 //
-// Compliance rules and few-shots are captured here for completeness, but no store
+
 // tables exist yet — the loader reports them as pending (no DB write).
 
 export type VerticalTopic = { bank: string; label: string; sort_order: number };
 export type FewShot = { post_type: string; example: string };
-export type ComplianceRule = { rule: string };
+export type ComplianceRule = { rule: string; kind?: "banned_phrase" | "disclaimer" | "guidance" };
 
 export type VerticalSeed = {
   slug: string;

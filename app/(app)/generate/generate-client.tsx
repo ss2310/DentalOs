@@ -328,6 +328,20 @@ export function GenerateClient({
         </div>
       </div>
 
+      {/* Instagram & GBP posts moved to the Social Content Engine. */}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-card border border-primary/30 bg-primary/5 p-4">
+        <p className="text-[15px] text-text-primary">
+          <span className="font-semibold">Instagram &amp; Google Business posts moved to Social</span>{" "}
+          — with branded images, your Brand Personality, and an approval queue.
+        </p>
+        <Link
+          href="/social"
+          className="flex h-11 items-center rounded-button bg-primary px-4 text-[15px] font-medium text-white hover:bg-primary/90"
+        >
+          Open Social →
+        </Link>
+      </div>
+
       {/* Post-type grid */}
       {postTypes.length === 0 ? (
         <div className="mt-6 rounded-card border border-border bg-white p-8 text-center">

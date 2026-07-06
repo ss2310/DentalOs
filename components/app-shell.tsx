@@ -26,6 +26,7 @@ import {
   SwordsIcon,
   SearchIcon,
   ToothIcon,
+  SendIcon,
   AiVisibilityIcon,
   UpgradeIcon,
   ShieldIcon,
@@ -89,6 +90,7 @@ const NAV: NavEntry[] = [
     items: [
       { label: "AI Visibility", href: "/ai-visibility", Icon: AiVisibilityIcon },
       { label: "Generate", href: "/generate", Icon: GenerateIcon },
+      { label: "Social", href: "/social", Icon: SendIcon },
       { label: "Map Rank", href: "/rank", Icon: MapPinIcon },
       { label: "Competitors", href: "/competitors", Icon: SwordsIcon },
       { label: "Deep Audit", href: "/audit", Icon: SearchIcon },

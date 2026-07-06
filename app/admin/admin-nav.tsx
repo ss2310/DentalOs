@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/admin/plans", label: "Plans & Packs" },
   { href: "/admin/payments", label: "Payments" },
   { href: "/admin/usage", label: "Usage & Costs" },
+  { href: "/admin/social", label: "Social" },
   { href: "/admin/system", label: "System" },
 ];
 

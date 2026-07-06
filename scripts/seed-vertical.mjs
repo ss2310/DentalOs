@@ -1,6 +1,6 @@
 // Loads a seeds/verticals/<slug>.ts file into the DB (service-role). Seeds the
-// vertical's TOPIC SUGGESTIONS (vertical=<slug>); few-shots and compliance rules
-// are reported as pending because those store tables don't exist yet.
+// vertical's TOPIC SUGGESTIONS, FEW-SHOT EXAMPLES (few_shot_examples) and
+// COMPLIANCE RULES (compliance_rules) — all tagged vertical=<slug> (042).
 //
 //   npm run seed:vertical -- derma        (or: node scripts/seed-vertical.mjs derma)
 //
@@ -114,20 +114,72 @@ async function main() {
     console.log(`  topics: inserted ${rows.length}.`);
   }
 
-  // No store tables for these yet — report rather than pretend.
-  if (fewShots.length > 0) {
-    console.log(
-      `  few-shots: ${fewShots.length} defined but SKIPPED — no few_shot_examples table exists yet (add a migration first).`,
-    );
-  } else {
-    console.log("  few-shots: none defined.");
+  // Few-shots + compliance land in their 042 store tables. Same replace-only-
+  // this-vertical safety as topics: delete is hard-locked to vertical = slug
+  // (never NULL — the shared/dental pool is untouchable from here).
+  const platformOf = (postType) => {
+    const t = String(postType ?? "").toLowerCase();
+    if (t.includes("gbp") || t.includes("google business")) return "gbp";
+    if (t.includes("instagram")) return "instagram";
+    if (t.includes("facebook")) return "facebook";
+    return "any";
+  };
+
+  {
+    const { error: delErr } = await db
+      .from("few_shot_examples")
+      .delete()
+      .eq("vertical", slug);
+    if (delErr) {
+      console.error(`  few-shots: clear failed — ${delErr.message}`);
+      process.exit(1);
+    }
+    if (fewShots.length === 0) {
+      console.log("  few-shots: none defined.");
+    } else {
+      const rows = fewShots.map((f, i) => ({
+        vertical: slug,
+        platform: platformOf(f.post_type),
+        example: f.example,
+        sort_order: i + 1,
+        is_active: true,
+      }));
+      const { error } = await db.from("few_shot_examples").insert(rows);
+      if (error) {
+        console.error(`  few-shots: insert failed — ${error.message}`);
+        process.exit(1);
+      }
+      console.log(`  few-shots: inserted ${rows.length}.`);
+    }
   }
-  if (compliance.length > 0) {
-    console.log(
-      `  compliance: ${compliance.length} defined but SKIPPED — no compliance_rules table exists yet (add a migration first).`,
-    );
-  } else {
-    console.log("  compliance: none defined.");
+
+  {
+    const { error: delErr } = await db
+      .from("compliance_rules")
+      .delete()
+      .eq("vertical", slug);
+    if (delErr) {
+      console.error(`  compliance: clear failed — ${delErr.message}`);
+      process.exit(1);
+    }
+    if (compliance.length === 0) {
+      console.log("  compliance: none defined.");
+    } else {
+      // Seed compliance entries are prose guidance unless the seed marks a kind.
+      const rows = compliance.map((c, i) => ({
+        vertical: slug,
+        kind: c.kind ?? "guidance",
+        rule: c.rule,
+        sort_order: i + 1,
+        is_active: true,
+      }));
+      const { error } = await db.from("compliance_rules").insert(rows);
+      if (error) {
+        console.error(`  compliance: insert failed — ${error.message}`);
+        process.exit(1);
+      }
+      console.log(`  compliance: inserted ${rows.length}.`);
+    }
   }
 
   console.log("Done.");

@@ -8,13 +8,13 @@
 // or `insert into verticals (id, display_name, is_active) values
 // ('derma','Dermatology',false);`) before seeding, because topics FK-reference it.
 //
-// Compliance rules and few-shots are captured here for completeness, but no store
-// tables exist yet — the loader reports them as pending (no DB write) until a
-// compliance_rules / few_shot_examples table + migration lands.
+
+
+// Compliance rules and few-shots load into compliance_rules / few_shot_examples (042).
 
 export type VerticalTopic = { bank: string; label: string; sort_order: number };
 export type FewShot = { post_type: string; example: string };
-export type ComplianceRule = { rule: string };
+export type ComplianceRule = { rule: string; kind?: "banned_phrase" | "disclaimer" | "guidance" };
 
 export type VerticalSeed = {
   slug: string;
