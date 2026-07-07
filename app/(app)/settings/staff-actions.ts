@@ -72,7 +72,7 @@ export async function addStaff(input: AddStaffInput): Promise<StaffState> {
   // SECURITY: role + clinic linkage go in app_metadata, which only the
   // service-role admin API can set. handle_new_user() (migration 014) reads
   // authz from there, never from user_metadata — so these can't be forged.
-  const { error } = await admin.auth.admin.createUser({
+  const { data: created, error } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
@@ -91,6 +91,30 @@ export async function addStaff(input: AddStaffInput): Promise<StaffState> {
         ? "An account with this email already exists."
         : "Could not create the account. Please try again.",
     };
+  }
+
+  // Deterministically set the teammate's role + clinic link. The
+  // handle_new_user trigger (migration 014) normally reads these from
+  // app_metadata, but GoTrue can persist app_metadata in a step AFTER the
+  // auth-row insert the trigger fires on — intermittently leaving the profile
+  // with a NULL home_clinic_id, so the new teammate never appears in the
+  // clinic's (RLS-scoped) staff list even though the account exists. Setting
+  // it explicitly here mirrors the signup flow and makes this deterministic.
+  // Idempotent: when the trigger already got it right, this writes the same
+  // values.
+  const newUserId = created.user?.id ?? null;
+  if (newUserId) {
+    const { error: profErr } = await admin.from("profiles").upsert(
+      { id: newUserId, full_name, role, home_clinic_id: ctx.clinicId },
+      { onConflict: "id" },
+    );
+    if (profErr) {
+      // Without the clinic link the teammate is invisible and can't sign in
+      // usefully — roll back the half-created account rather than strand it.
+      await admin.auth.admin.deleteUser(newUserId);
+      console.error("Staff profile setup failed:", profErr.message);
+      return { error: "Could not finish creating the account. Please try again." };
+    }
   }
 
   revalidatePath("/settings");
