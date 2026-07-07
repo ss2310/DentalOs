@@ -1,4 +1,8 @@
 # GrowthOS — Full-App Test Plan & Demo-Day Prep
+> **Superseded for testing by [MANUAL-TEST-SCRIPT.md](MANUAL-TEST-SCRIPT.md)** (pricing v2,
+> model picker, premium visuals, profile gate). Use this file only for the
+> demo-evening staging notes; use the manual test script for verification.
+
 
 One pass, two outcomes: every feature verified on production, AND a demo
 clinic full of realistic data for the evening. Follow the order — later
@@ -44,8 +48,8 @@ number today.
 
 ## Phase 0 — Account & settings (20 min)
 
-- ☐ Sign up fresh on production (owner email). Trial starts: **50 content +
-  4 map credits** visible on Upgrade.
+- ☐ Sign up fresh on production (owner email). Trial starts: **30 content +
+  2 map credits** visible on Upgrade.
 - ☐ Settings → Clinic Info: fill EVERYTHING incl. Google review link and
   socials. (Half the app's messages template from these fields.)
 - ☐ Settings → Rate Card: enter the 7 treatments above.
@@ -173,7 +177,7 @@ number today.
 
 ## Phase 5 — Money & guardrails (20 min)
 
-- ☐ Upgrade page: plan card ₹2,499, both balances, Deep Audit pack ₹599.
+- ☐ Upgrade page: plan card ₹2,999, priced credit packs (Content 50 = ₹549, Content 200 = ₹1,699, Map 10 = ₹449, Map 50 = ₹1,799), Deep Audit pack ₹599.
 - ☐ Click through to Cashfree checkout — **verify it reaches the real
   payment page, then CANCEL** (env `CASHFREE_ENV=production` proven; don't
   pay unless you want a live ₹ test).

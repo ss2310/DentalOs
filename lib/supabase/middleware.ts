@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { effectiveStatus, isBlockedStatus } from "@/lib/subscription";
+import { isProfileComplete } from "@/lib/clinic-profile";
 
 /**
  * Refreshes the Supabase auth session on every request and keeps the
@@ -118,7 +119,9 @@ export async function updateSession(request: NextRequest) {
     if (!alwaysAllowed) {
       const { data: clinicRow } = await supabase
         .from("clinics")
-        .select("subscription_status, trial_ends_at")
+        .select(
+          "subscription_status, trial_ends_at, business_name, doctor_name, phone, city, area, address",
+        )
         .maybeSingle();
       const eff = effectiveStatus(
         clinicRow?.subscription_status,
@@ -138,6 +141,26 @@ export async function updateSession(request: NextRequest) {
         url.pathname = "/upgrade";
         url.search = "";
         return NextResponse.redirect(url);
+      }
+
+      // ---- Profile-completion gate (pages only, never APIs) ---------------
+      // Content generation, wa.me messaging, and local SEO all assume the six
+      // core clinic fields exist. Owners/doctors get walked to /settings until
+      // they're filled; receptionists are never gated (they can't open
+      // /settings — their owner completes setup). The role query runs ONLY
+      // when the profile is incomplete, so complete clinics pay nothing.
+      if (!path.startsWith("/api/") && !isProfileComplete(clinicRow)) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (prof?.role === "clinic_owner" || prof?.role === "doctor") {
+          const url = request.nextUrl.clone();
+          url.pathname = "/settings";
+          url.search = "?setup=1";
+          return NextResponse.redirect(url);
+        }
       }
     }
   }

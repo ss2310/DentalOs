@@ -17,8 +17,11 @@ Permanent project rules. Read this before building any feature.
 - **Next.js 14** (App Router) + **TypeScript** + **Tailwind CSS**
 - **Supabase** — Postgres, Auth, Row Level Security (RLS), Edge Functions
 - **Vercel** for hosting
-- **Claude API** for content generation, called from a **server-side API route
-  only** (never expose the key to the client).
+- **Claude API** for content generation (default model), called from a
+  **server-side API route only** (never expose the key to the client). The
+  Content Studio also offers **ChatGPT & Gemini via OpenRouter** — model list +
+  per-model credit surcharges live in `lib/models.ts`; every prompt template is
+  tuned against Claude, so it stays the recommended default.
 
 ## Non-negotiable rules
 

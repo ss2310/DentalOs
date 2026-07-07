@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole, isAdminRole } from "@/lib/roles";
+import { CONTENT_MODELS } from "@/lib/models";
 
 export type SaveState = { ok?: boolean; error?: string };
 
@@ -19,6 +20,7 @@ export async function saveContent(input: {
   content: string;
   schema: string | null;
   citable?: boolean;
+  modelUsed?: string | null;
 }): Promise<SaveState> {
   const content = input.content.trim();
   if (!input.postTypeId || !content) {
@@ -62,11 +64,25 @@ export async function saveContent(input: {
     credits_deducted: cost,
   };
 
-  // citable_mode arrives with migration 009; if it isn't applied yet, retry the
-  // insert without it so saving never breaks.
+  // Only persist a model id we recognise — never a client-invented string.
+  const modelUsed = CONTENT_MODELS.some((m) => m.id === input.modelUsed)
+    ? input.modelUsed
+    : null;
+
+  // citable_mode arrives with migration 009 and model_used with 045; if either
+  // isn't applied yet, retry without the newer columns so saving never breaks.
   let { error: insertError } = await supabase
     .from("generated_content")
-    .insert({ ...base, citable_mode: input.citable ?? false });
+    .insert({ ...base, citable_mode: input.citable ?? false, model_used: modelUsed });
+  if (
+    insertError &&
+    (insertError.code === "PGRST204" ||
+      /model_used/i.test(insertError.message ?? ""))
+  ) {
+    ({ error: insertError } = await supabase
+      .from("generated_content")
+      .insert({ ...base, citable_mode: input.citable ?? false }));
+  }
   if (
     insertError &&
     (insertError.code === "PGRST204" ||

@@ -10,6 +10,12 @@ import {
   type PostType,
   type ExtraInput,
 } from "@/lib/generate";
+import {
+  CONTENT_MODELS,
+  DEFAULT_CONTENT_MODEL,
+  contentModel,
+  type ContentModelId,
+} from "@/lib/models";
 import { saveContent } from "./actions";
 import { PublishHostedPage } from "./publish-hosted-page";
 
@@ -18,6 +24,8 @@ type Result = {
   schema: string | null;
   encoded: string | null;
   citable: boolean;
+  // Which AI wrote this result (the picker may change before Save).
+  model: string;
 };
 
 const inputClass =
@@ -90,6 +98,8 @@ export function GenerateClient({
   const [pickCustom, setPickCustom] = useState(false);
   // AI-Citable Mode — defaults ON, shown only for web-crawlable (Website) types.
   const [citable, setCitable] = useState(true);
+  // Which AI writes it — sticky across type changes (a preference, not an input).
+  const [modelId, setModelId] = useState<ContentModelId>(DEFAULT_CONTENT_MODEL);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -200,7 +210,8 @@ export function GenerateClient({
   // GBP / Instagram / Reel / WhatsApp / review types never see it.
   const isWebCrawlable = selected?.platform === "Website";
 
-  const cost = selected?.credits_cost ?? 0;
+  // Total = the type's base cost + the chosen model's surcharge.
+  const cost = (selected?.credits_cost ?? 0) + contentModel(modelId).surcharge;
   const canAfford = creditsLeft >= cost;
 
   const missingRequired =
@@ -241,6 +252,7 @@ export function GenerateClient({
           context: effectiveContext,
           extras,
           citable: isWebCrawlable ? citable : false,
+          model: modelId,
         }),
       });
       const data = await res.json();
@@ -254,6 +266,7 @@ export function GenerateClient({
         schema: data.schema ?? null,
         encoded: data.encoded ?? null,
         citable: data.citable === true,
+        model: typeof data.model === "string" ? data.model : modelId,
       });
       setCreditsLeft(
         typeof data.creditsLeft === "number"
@@ -285,6 +298,7 @@ export function GenerateClient({
         content: result.content,
         schema: result.schema,
         citable: result.citable,
+        modelUsed: result.model,
       });
       if (res?.error) {
         toast(res.error);
@@ -564,6 +578,42 @@ export function GenerateClient({
                 className={areaClass}
               />
             </div>
+
+            <div>
+              <label className={labelClass}>AI model</label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {CONTENT_MODELS.map((m) => {
+                  const active = m.id === modelId;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setModelId(m.id)}
+                      aria-pressed={active}
+                      className={`flex min-h-[44px] flex-col items-start rounded-button border px-3 py-2 text-left transition-colors ${
+                        active
+                          ? "border-primary ring-2 ring-primary/20"
+                          : "border-border hover:bg-subtle"
+                      }`}
+                    >
+                      <span className="text-[15px] font-medium text-text-primary">
+                        {m.label}
+                        {m.recommended ? (
+                          <span className="ml-1.5 text-xs font-medium text-primary">
+                            Recommended
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="text-xs text-text-secondary">
+                        {m.surcharge > 0
+                          ? `+${m.surcharge} credit${m.surcharge === 1 ? "" : "s"}`
+                          : "Included"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -643,9 +693,14 @@ export function GenerateClient({
       {/* Result */}
       {!loading && result ? (
         <div className="mt-6 rounded-card border border-border bg-white p-5">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
-            Result
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
+              Result
+            </h2>
+            <span className="rounded-pill bg-subtle px-2.5 py-1 text-xs font-medium text-text-secondary">
+              {contentModel(result.model).label}
+            </span>
+          </div>
           <div className="mt-3 whitespace-pre-wrap rounded-button border border-border bg-subtle p-4 text-[15px] leading-relaxed text-text-primary">
             {result.content}
           </div>

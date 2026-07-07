@@ -12,6 +12,7 @@ import { DataMigration } from "./data-migration";
 import { BillingTab, type BillingInfo } from "./billing-tab";
 import { VoiceNotesSettings } from "./voice-notes-settings";
 import { VerticalSelector } from "./vertical-selector";
+import { BrandLogoCard, type BrandKitInfo } from "./brand-logo-card";
 
 export type VerticalSettingsInfo = {
   enabled: boolean;
@@ -44,6 +45,8 @@ export function SettingsTabs({
   billing,
   voiceNotes,
   vertical,
+  brandKit,
+  logoUrl,
 }: {
   clinic: Clinic;
   rateCards: RateCard[];
@@ -54,6 +57,8 @@ export function SettingsTabs({
   billing: BillingInfo;
   voiceNotes: VoiceNotesSettingsInfo;
   vertical: VerticalSettingsInfo;
+  brandKit: BrandKitInfo;
+  logoUrl: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("clinic");
 
@@ -100,6 +105,7 @@ export function SettingsTabs({
               />
             ) : null}
             <ClinicInfoForm clinic={clinic} />
+            <BrandLogoCard kit={brandKit} logoUrl={logoUrl} />
           </>
         ) : tab === "rates" ? (
           <RateCardManager rateCards={rateCards} />

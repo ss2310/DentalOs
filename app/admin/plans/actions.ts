@@ -270,9 +270,10 @@ export async function addPack(input: PackInput): Promise<AdminPlanState> {
 }
 
 /**
- * Create the Growth Annual plan if none exists yet (₹24,990, credits copied
- * from Growth Monthly, billing_period 'annual'). Created INACTIVE so the admin
- * reviews it before it appears on /upgrade.
+ * Create the Growth Annual plan if none exists yet (₹29,990 — two months
+ * free vs ₹2,999 monthly; credits copied from Growth Monthly, billing_period
+ * 'annual'). Created INACTIVE so the admin reviews it before it appears on
+ * /upgrade.
  */
 export async function createAnnualPlan(): Promise<AdminPlanState> {
   const { adminId, db } = await requireAdminContext();
@@ -298,7 +299,7 @@ export async function createAnnualPlan(): Promise<AdminPlanState> {
     .from("plans")
     .insert({
       name: "Growth Annual",
-      price_inr: 24990,
+      price_inr: 29990,
       content_credits: content,
       map_credits: map,
       billing_period: "annual",
@@ -317,7 +318,7 @@ export async function createAnnualPlan(): Promise<AdminPlanState> {
 
   await writeAudit(db, adminId, "plan.create", { type: "plan", id: created.id }, {
     name: "Growth Annual",
-    price_inr: 24990,
+    price_inr: 29990,
     content_credits: content,
     map_credits: map,
     billing_period: "annual",

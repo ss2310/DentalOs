@@ -80,6 +80,17 @@ export const SCHEMA_TYPES = new Set([
   "Question Answer Page",
 ]);
 
+/**
+ * Unwraps output that arrives fenced as a single ```…``` block — Gemini (and
+ * occasionally GPT) like to wrap the ENTIRE result in a markdown fence, which
+ * would break the labelled-line parsers below. Inner fences are untouched.
+ */
+export function stripOuterCodeFence(s: string): string {
+  const t = s.trim();
+  const m = t.match(/^```[a-z]*[ \t]*\n([\s\S]*?)\n?```$/i);
+  return m ? m[1].trim() : t;
+}
+
 /** Trims a string to `max` chars on a word boundary (no mid-word cuts). */
 export function trimOnWordBoundary(s: string, max: number): string {
   const t = s.trim();

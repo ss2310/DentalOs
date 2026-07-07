@@ -96,11 +96,12 @@ export async function signUpAction(
   }
 
   // Trial window: 30 days from signup. Balances start at the Free Trial grant
-  // (50 content / 4 map); the ledger rows below record that grant for history.
+  // (30 content / 2 map — pricing v2, migration 047: the trial should taste,
+  // not feast); the ledger rows below record that grant for history.
   const now = new Date();
   const trialEndsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const TRIAL_CONTENT = 50;
-  const TRIAL_MAP = 4;
+  const TRIAL_CONTENT = 30;
+  const TRIAL_MAP = 2;
 
   // Look up the seeded Free Trial plan (migration 019). Degrade to a null plan_id
   // if the catalog isn't seeded yet — the trial status + balances still apply.

@@ -10,6 +10,7 @@ import {
   addDays,
 } from "@/lib/format";
 import { POSITIVE_OUTCOMES } from "@/lib/recovery-badges";
+import { isProfileComplete } from "@/lib/clinic-profile";
 import { APPT_STATUS } from "@/app/(app)/appointments/status";
 import type {
   AppointmentStatus,
@@ -145,13 +146,20 @@ export default async function DashboardPage() {
     rateCardRes,
     satisfactionRes,
     followupRes,
+    kitRes,
+    voiceRes,
   ] = await Promise.all([
     supabase
       .from("profiles")
       .select("full_name, role")
       .eq("id", user?.id ?? "")
       .maybeSingle(),
-    supabase.from("clinics").select("business_name, doctor_name").single(),
+    supabase
+      .from("clinics")
+      .select(
+        "business_name, doctor_name, phone, city, area, address, google_review_url",
+      )
+      .single(),
     // 1. Appointments today (excluding completed / cancelled)
     supabase
       .from("appointments")
@@ -251,6 +259,9 @@ export default async function DashboardPage() {
       .or(`due_date.lte.${today},due_date.is.null`)
       .order("due_date", { ascending: true, nullsFirst: false })
       .limit(50),
+    // Setup checklist: logo + Brand Personality existence (new clinics).
+    supabase.from("clinic_brand_kits").select("logo_path").maybeSingle(),
+    supabase.from("clinic_voice_profiles").select("clinic_id").maybeSingle(),
   ]);
 
   // Prefer the logged-in user's own name; fall back to the clinic's doctor
@@ -359,6 +370,45 @@ export default async function DashboardPage() {
     },
   ];
 
+  // ---- Setup checklist (owner/doctor, new clinics) -------------------------
+  // Ticks come from real data; the card disappears once everything is done.
+  const setupItems: { label: string; done: boolean; href: string }[] = [
+    {
+      label: "Complete your clinic info",
+      done: isProfileComplete(
+        clinicRes.data as Parameters<typeof isProfileComplete>[0],
+      ),
+      href: "/settings",
+    },
+    {
+      label: "Upload your logo (stamped on every post image)",
+      done: !!kitRes.data?.logo_path,
+      href: "/settings",
+    },
+    {
+      label: "Set your Brand Personality",
+      done: !!voiceRes.data,
+      href: "/social/brand",
+    },
+    {
+      label: "Add your treatments & prices (Rate Card)",
+      done: rateCards.length > 0,
+      href: "/settings",
+    },
+    {
+      label: "Add your Google review link",
+      done: !!clinicRes.data?.google_review_url,
+      href: "/settings",
+    },
+    {
+      label: "Add your first patient",
+      done: patients.length > 0,
+      href: "/patients",
+    },
+  ];
+  const setupDone = setupItems.filter((i) => i.done).length;
+  const showSetup = showBusiness && setupDone < setupItems.length;
+
   const followupTasks = (followupRes.data as unknown as FollowupRow[]) ?? [];
   const followupsDue = followupTasks.length;
   if (followupsDue > 0) {
@@ -393,6 +443,43 @@ export default async function DashboardPage() {
           defaultDoctor={doctorName}
         />
       </div>
+
+      {/* Setup checklist — walks a new clinic to a fully-working account. */}
+      {showSetup ? (
+        <div className="mt-5 rounded-card border border-primary/30 bg-primary/5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[15px] font-semibold text-text-primary">
+              Set up your clinic
+            </p>
+            <span className="rounded-pill bg-white px-2.5 py-1 text-xs font-medium text-text-secondary">
+              {setupDone}/{setupItems.length} done
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {setupItems.map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className={`flex min-h-[44px] items-center gap-2.5 rounded-button px-3 py-2 text-[15px] ${
+                  item.done
+                    ? "text-text-secondary"
+                    : "bg-white text-text-primary hover:bg-subtle"
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className={item.done ? "text-success" : "text-text-secondary"}
+                >
+                  {item.done ? "✓" : "○"}
+                </span>
+                <span className={item.done ? "line-through opacity-70" : ""}>
+                  {item.label}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Stat cards — the day's headline metric leads in solid brand teal */}
       <StatGrid cols={4}>

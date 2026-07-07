@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "@/components/toast";
 import { formatDate } from "@/lib/format";
 import { platformBadge } from "@/lib/generate";
+import { contentModelLabel } from "@/lib/models";
 import { markPublished, deleteContent } from "./actions";
 
 export type HistoryRow = {
@@ -17,6 +18,8 @@ export type HistoryRow = {
   published_date: string | null;
   created_at: string;
   citable_mode: boolean;
+  // Which AI wrote it (migration 045). null = pre-045 rows (all Claude then).
+  model_used?: string | null;
   post: { name: string; platform: string } | null;
 };
 
@@ -157,6 +160,11 @@ export function HistoryClient({ rows }: { rows: HistoryRow[] }) {
                       {r.citable_mode ? (
                         <span className="rounded-pill bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
                           ✨ Citable
+                        </span>
+                      ) : null}
+                      {contentModelLabel(r.model_used) ? (
+                        <span className="rounded-pill bg-subtle px-2.5 py-1 text-xs font-medium text-text-secondary">
+                          {contentModelLabel(r.model_used)}
                         </span>
                       ) : null}
                     </div>

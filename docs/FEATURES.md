@@ -119,6 +119,12 @@ The clinic's feed on autopilot, with a human hand on the send button:
   regenerate once, then surface named. Not just prompt rules; enforcement.
 - **Free branded images**: 1080×1080 posts and 6-slide carousels composed
   server-side from your logo + brand colors (zero AI images, zero credits).
+- **Premium visuals (optional)**: an AI-generated photo backdrop behind the
+  same branded overlay — Photo backdrop (+1 credit single / +3 carousel) or
+  Studio photo (+2 / +5, a top-tier image model), both via one OpenRouter
+  account. Hard safety rails: no people/faces, no fake results, no clinical
+  imagery — real patients appear only via consented Moments. One backdrop per
+  carousel, reused across slides.
 - **One approval queue**: weekly planner (3 questions → 5 scheduled posts),
   per-post approval with platform-true previews, then a 3-step manual publish
   (copy caption → download images → share/mark posted). No auto-posting, no

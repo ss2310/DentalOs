@@ -10,22 +10,30 @@ export default async function HistoryPage() {
   const BASE =
     "id, topic, tone_used, generated_copy, schema_markup, status, published_date, created_at, post:post_type_id(name, platform)";
 
-  // citable_mode lands with migration 009; fall back gracefully if it isn't
-  // applied yet so /history never breaks.
+  // citable_mode lands with migration 009 and model_used with 045; cascade the
+  // fallback (both → citable only → bare) so /history never breaks mid-rollout.
   const primary = await supabase
     .from("generated_content")
-    .select(`${BASE}, citable_mode`)
+    .select(`${BASE}, citable_mode, model_used`)
     .order("created_at", { ascending: false })
     .limit(100);
-  const data = primary.error
-    ? (
-        await supabase
-          .from("generated_content")
-          .select(BASE)
-          .order("created_at", { ascending: false })
-          .limit(100)
-      ).data
-    : primary.data;
+  let data: unknown[] | null = primary.data;
+  if (primary.error) {
+    const withCitable = await supabase
+      .from("generated_content")
+      .select(`${BASE}, citable_mode`)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    data = withCitable.error
+      ? (
+          await supabase
+            .from("generated_content")
+            .select(BASE)
+            .order("created_at", { ascending: false })
+            .limit(100)
+        ).data
+      : withCitable.data;
+  }
 
   const rows = (data as unknown as HistoryRow[]) ?? [];
 

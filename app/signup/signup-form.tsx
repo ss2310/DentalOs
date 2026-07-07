@@ -185,8 +185,8 @@ export function SignupForm({
       </SubmitButton>
 
       <p className="text-center text-xs text-text-secondary">
-        Free for 30 days — 50 content credits &amp; 4 map scans included. No card
-        required.
+        Free for 30 days — 30 content credits, 2 map scans &amp; 1 full Deep
+        Audit included. No card required.
       </p>
 
       <p className="pt-1 text-center text-sm text-text-secondary">

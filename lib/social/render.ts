@@ -226,6 +226,66 @@ function layoutInverse(kit: BrandKit, clinic: ClinicLite, logo: string | null, t
   );
 }
 
+// aiHero: the PREMIUM hybrid — an AI-generated photo backdrop behind the same
+// brand overlay (logo chip, headline, footer) in white over a bottom-up scrim.
+// Always a composition, never a raw AI image: image models can't render
+// Hinglish reliably and the brand lockup must be exact (PREMIUM-VISUALS spec).
+function layoutAiHero(
+  kit: BrandKit,
+  clinic: ClinicLite,
+  logo: string | null,
+  bgDataUri: string,
+  title: string,
+  body?: string,
+  slideNo?: string,
+): El {
+  const bg: El = {
+    type: "img",
+    props: {
+      src: bgDataUri,
+      width: SIZE,
+      height: SIZE,
+      style: { position: "absolute", top: 0, left: 0, objectFit: "cover" },
+    },
+  };
+  const scrim = h("div", {
+    position: "absolute", top: 0, left: 0, width: SIZE, height: SIZE,
+    backgroundImage:
+      "linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.16) 45%, rgba(0,0,0,0.60) 100%)",
+  });
+  const overlay = h(
+    "div",
+    {
+      position: "absolute", top: 0, left: 0, width: SIZE, height: SIZE,
+      display: "flex", flexDirection: "column", justifyContent: "space-between",
+      padding: 80,
+    },
+    [
+      h("div", { display: "flex", justifyContent: "space-between", alignItems: "center" }, [
+        logoChip(kit, clinic, logo, true),
+        ...(slideNo
+          ? [h("div", { fontSize: 30, color: "#FFFFFFB3", fontWeight: 700 }, slideNo)]
+          : []),
+      ]),
+      h("div", { display: "flex", flexDirection: "column", gap: 30 }, [
+        h("div", {
+          fontSize: title.length > 70 ? 56 : 70, fontWeight: 700, color: "#FFFFFF",
+          lineHeight: 1.12, letterSpacing: "-0.02em",
+        }, title),
+        ...(body
+          ? [h("div", { fontSize: 36, color: "#FFFFFFE0", lineHeight: 1.45 }, body)]
+          : []),
+      ]),
+      footer(kit, clinic, "Abhi WhatsApp kariye", true),
+    ],
+  );
+  return h(
+    "div",
+    { width: SIZE, height: SIZE, display: "flex", position: "relative", fontFamily: "Brand" },
+    [bg, scrim, overlay],
+  );
+}
+
 export const SINGLE_LAYOUTS = ["hero", "band", "inverse"] as const;
 export type SingleLayout = (typeof SINGLE_LAYOUTS)[number];
 
@@ -269,6 +329,10 @@ export type RenderInput = {
   slides: CarouselSlide[] | null;
   campaignType?: string | null;
   layout?: SingleLayout;
+  // Premium hybrid: an AI-generated backdrop as a data URI. When set, every
+  // page uses the aiHero layout over this ONE background (a carousel reuses
+  // it across all slides — one generation per run, by design).
+  premiumBg?: string;
 };
 
 /**
@@ -308,7 +372,9 @@ export async function renderPostImages(
       const title = stripEmoji(s.title);
       const body = stripEmoji(s.body);
       const no = `${i + 1}/${slides.length}`;
-      if (i === 0) pages.push(layoutInverse(brand, clinic, logoDataUri, title, body, no));
+      if (input.premiumBg)
+        pages.push(layoutAiHero(brand, clinic, logoDataUri, input.premiumBg, title, body, no));
+      else if (i === 0) pages.push(layoutInverse(brand, clinic, logoDataUri, title, body, no));
       else if (i === slides.length - 1)
         pages.push(layoutInverse(brand, clinic, logoDataUri, title, body, no));
       else if (i % 2 === 1) pages.push(layoutHero(brand, clinic, logoDataUri, title, body));
@@ -318,7 +384,9 @@ export async function renderPostImages(
     const title = headlineFromCaption(input.caption);
     const layout = input.layout ?? "hero";
     const badge = input.campaignType ? stripEmoji(input.campaignType).slice(0, 24) : undefined;
-    if (layout === "band") pages.push(layoutBand(brand, clinic, logoDataUri, title, undefined, badge));
+    if (input.premiumBg)
+      pages.push(layoutAiHero(brand, clinic, logoDataUri, input.premiumBg, title));
+    else if (layout === "band") pages.push(layoutBand(brand, clinic, logoDataUri, title, undefined, badge));
     else if (layout === "inverse") pages.push(layoutInverse(brand, clinic, logoDataUri, title));
     else pages.push(layoutHero(brand, clinic, logoDataUri, title));
   }

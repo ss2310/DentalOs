@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { PREMIUM_TIERS, premiumTier, tierCost } from "@/lib/visuals/tiers";
 
 // Tiny shared presentational helpers for the Social module (server-safe).
 
@@ -48,6 +49,66 @@ export function StatusBadge({ status }: { status: string }) {
     >
       {STATUS_LABEL[status] ?? status}
     </span>
+  );
+}
+
+/** Chip shown on previews rendered with a premium AI backdrop. */
+export function PremiumChip({ tier }: { tier: string | null | undefined }) {
+  const t = premiumTier(tier);
+  if (!t) return null;
+  return (
+    <span className="inline-flex items-center rounded-pill bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+      ✨ {t.label}
+    </span>
+  );
+}
+
+/**
+ * The render choice stack: free branded render (the default, first, primary)
+ * plus the premium backdrop tiers. Copy rule: the free tier is "branded",
+ * never "basic" — it must not feel nerfed.
+ */
+export function RenderChoices({
+  format,
+  rendering,
+  onRender,
+  compact,
+}: {
+  format: string;
+  rendering: boolean;
+  onRender: (premium?: string) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className="flex w-full flex-col gap-2">
+      {!compact ? (
+        <button
+          onClick={() => onRender()}
+          disabled={rendering}
+          className="flex h-11 w-full items-center justify-center rounded-button bg-primary px-4 text-[15px] font-medium text-white disabled:opacity-60"
+        >
+          {rendering ? "Rendering…" : "Render branded image (free)"}
+        </button>
+      ) : null}
+      <div className="grid grid-cols-2 gap-2">
+        {PREMIUM_TIERS.map((t) => {
+          const cost = tierCost(t, format);
+          return (
+            <button
+              key={t.id}
+              onClick={() => onRender(t.id)}
+              disabled={rendering}
+              className="flex min-h-[44px] flex-col items-center justify-center rounded-button border border-primary/30 bg-white px-3 py-1.5 text-[14px] font-medium text-text-primary disabled:opacity-60"
+            >
+              <span>✨ {t.label}</span>
+              <span className="text-xs text-text-secondary">
+                {cost} credit{cost === 1 ? "" : "s"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

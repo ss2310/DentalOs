@@ -14,16 +14,26 @@ export default async function ReviewPage({ params }: { params: { id: string } })
   if (!isAdminRole(await getUserRole())) redirect("/dashboard");
   const supabase = createClient();
 
-  const [{ data: post }, { data: clinic }] = await Promise.all([
+  const COLS =
+    "id, platform, format, caption, hashtags, carousel_slides, gbp_post_type, soft_warnings, ymyl_flags, status, scheduled_date, topic, render_paths";
+  // premium_tier lands with migration 046; re-query without it if unapplied.
+  const [postRes, { data: clinic }] = await Promise.all([
     supabase
       .from("social_posts")
-      .select(
-        "id, platform, format, caption, hashtags, carousel_slides, gbp_post_type, soft_warnings, ymyl_flags, status, scheduled_date, topic, render_paths",
-      )
+      .select(`${COLS}, premium_tier`)
       .eq("id", params.id)
       .maybeSingle(),
     supabase.from("clinics").select("business_name, area, city").single(),
   ]);
+  const post = postRes.error
+    ? (
+        await supabase
+          .from("social_posts")
+          .select(COLS)
+          .eq("id", params.id)
+          .maybeSingle()
+      ).data
+    : postRes.data;
   if (!post) notFound();
 
   // Signed preview URLs for any existing renders (session client — RLS select).
@@ -58,6 +68,8 @@ export default async function ReviewPage({ params }: { params: { id: string } })
           status: post.status,
           scheduledDate: post.scheduled_date,
           topic: post.topic,
+          premiumTier:
+            (post as { premium_tier?: string | null }).premium_tier ?? null,
         }}
         clinicName={clinic?.business_name ?? "Your clinic"}
         renderUrls={renderUrls}

@@ -2737,3 +2737,72 @@ photo input and contains no medical language.
       moment_capture) lands in pending_approval and flows the SAME review →
       approve → manual-publish (copy/download/share) → posted_manually path,
       counting against the same monthly quota. No parallel workflow anywhere.
+
+## Content Studio — model choice (Claude / ChatGPT / Gemini)
+
+Prereq: migration 045 applied; OPENROUTER_API_KEY set (ChatGPT/Gemini) and
+ANTHROPIC_API_KEY set (Claude).
+
+### Picker & pricing (/generate)
+- [ ] "AI model" picker shows Claude (Recommended, Included), ChatGPT
+      (+1 credit), Gemini (Included); Claude pre-selected; selection sticks
+      when switching post types.
+- [ ] Cost line = type base cost + model surcharge (e.g. Question Answer Page:
+      2 with ChatGPT, 1 with Claude/Gemini) and the correct total is deducted
+      on Generate; failed generation refunds the FULL surcharged amount.
+- [ ] Not-enough-credits block uses the surcharged total (balance between base
+      and total → blocked).
+- [ ] With OPENROUTER_API_KEY unset: ChatGPT/Gemini generate → friendly
+      "not available — try Claude" error, NO credits spent; Claude still works.
+
+### Cross-model output QA (priority types × ChatGPT + Gemini)
+- [ ] Review Response, GBP Q&A Response, Instagram Reel Script — labelled
+      sections present, Hinglish reads naturally, no banned phrases.
+- [ ] WhatsApp Broadcast — MESSAGE extracted cleanly (no WA_ENCODED leakage),
+      {name} token intact, wa.me encoding recomputed.
+- [ ] Question Answer Page + one long type (Service Page) — META lines parsed
+      & trimmed, "SEO Schema" split into the collapsible block as valid JSON,
+      no stray ``` fences in the visible copy (outer-fence strip works).
+
+### Save & history
+- [ ] Result panel shows the model badge; Save stores it; /history card shows
+      a Claude/ChatGPT/Gemini pill (older rows show none).
+- [ ] Regenerate after switching model charges the new model's price and the
+      saved row records the model that actually wrote the SAVED text.
+
+## Social — premium AI visuals (photo backdrop / studio photo)
+
+Prereq: migration 046 applied. Dev default is IMAGE_PROVIDER=mock (gradient);
+live backdrops need IMAGE_PROVIDER=openrouter — both tiers (Gemini image +
+Gemini 3 Pro) bill the single OPENROUTER_API_KEY.
+
+### Pricing & credits
+- [ ] Branded (free) render still costs 0 credits — balance unchanged before/
+      after, and the free button stays first/primary in the UI.
+- [ ] Premium single: photo spends exactly 1, studio exactly 2; carousel:
+      photo 3, studio 5 (one backdrop generated, reused across all 6 slides).
+- [ ] Insufficient balance → 402 with upgrade nudge, nothing spent.
+- [ ] Provider failure (kill network / bad key AFTER spend) → full refund,
+      friendly "nothing was charged" error.
+- [ ] IMAGE_PROVIDER unset → mock gradient backdrop (visibly fake, labelled
+      "mock backdrop") — documented that prod must set gemini.
+
+### Output & safety
+- [ ] Premium image keeps the FULL brand overlay (logo chip, headline, footer)
+      legible over the scrim; it is never a raw AI image.
+- [ ] Generated backdrops contain no people/faces, no before/after, no
+      clinical imagery, no baked-in text (safety block is code-appended; spot-
+      check a few live generations).
+- [ ] npm test → scripts/test-visual-prompt.mjs green (safety block always
+      appended, hostile topic can't displace it, brand colour + negative
+      space present, long inputs clamped).
+
+### Flow & visibility
+- [ ] Review + publish screens show the premium buttons with correct per-
+      format prices; after a premium render the ✨ chip appears and survives
+      reload (post-046).
+- [ ] Premium posts flow through the SAME approval queue (human backstop) —
+      no auto-publish anywhere.
+- [ ] /admin/social shows the ✨ Premium visuals count per clinic.
+- [ ] Moment Capture composer is untouched — no premium/AI option there ever
+      (real patient photos never mix with AI imagery).

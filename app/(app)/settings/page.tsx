@@ -15,7 +15,11 @@ import type { BillingInfo, LedgerRow } from "./billing-tab";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: { setup?: string };
+}) {
   await requireAdmin();
   const supabase = createClient();
 
@@ -30,6 +34,7 @@ export default async function SettingsPage() {
     { data: staffRows },
     { data: sub },
     { data: ledger },
+    { data: kitRow },
   ] = await Promise.all([
       supabase
         .from("clinics")
@@ -67,7 +72,27 @@ export default async function SettingsPage() {
         .select("id, created_at, kind, delta, reason, balance_after")
         .order("created_at", { ascending: false })
         .limit(50),
+      supabase
+        .from("clinic_brand_kits")
+        .select("logo_path, primary_color, secondary_color, font")
+        .maybeSingle(),
     ]);
+
+  // Logo preview for the Settings brand card (bucket is private; the select
+  // policy is clinic-scoped, so the session client can sign its own logo).
+  let logoUrl: string | null = null;
+  if (kitRow?.logo_path) {
+    const { data: signed } = await supabase.storage
+      .from("brand-assets")
+      .createSignedUrl(kitRow.logo_path, 3600);
+    logoUrl = signed?.signedUrl ?? null;
+  }
+  const brandKit = {
+    primary_color: kitRow?.primary_color ?? "#0D9488",
+    secondary_color: kitRow?.secondary_color ?? "#1D1D1F",
+    font: kitRow?.font ?? "inter",
+    hasLogo: !!kitRow?.logo_path,
+  };
 
   const clinicData = (clinic as (Clinic & { booking_slug: string | null }) | null) ?? null;
 
@@ -132,6 +157,19 @@ export default async function SettingsPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-text-primary">Settings</h1>
+      {searchParams?.setup === "1" ? (
+        <div className="mt-4 max-w-2xl rounded-card border border-primary/30 bg-primary/5 p-4">
+          <p className="text-[15px] font-semibold text-text-primary">
+            Finish setting up your clinic
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Fill in the required fields below (marked{" "}
+            <span className="text-danger">*</span>) and save — everything from
+            AI content to WhatsApp messages is built from these details. You
+            can change them any time.
+          </p>
+        </div>
+      ) : null}
       <div className="mt-6">
         <SettingsTabs
           clinic={(clinicData as Clinic) ?? ({} as Clinic)}
@@ -143,6 +181,8 @@ export default async function SettingsPage() {
           billing={billing}
           voiceNotes={voiceNotesInfo}
           vertical={verticalInfo}
+          brandKit={brandKit}
+          logoUrl={logoUrl}
         />
       </div>
     </div>

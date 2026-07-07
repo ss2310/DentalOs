@@ -74,11 +74,12 @@ export function ClinicInfoForm({ clinic }: { clinic: Clinic }) {
           </div>
           <div>
             <label htmlFor="doctor_name" className={labelClass}>
-              Doctor name
+              Doctor name <span className="text-danger">*</span>
             </label>
             <input
               id="doctor_name"
               name="doctor_name"
+              required
               defaultValue={clinic.doctor_name ?? ""}
               className={inputClass}
             />
@@ -103,11 +104,12 @@ export function ClinicInfoForm({ clinic }: { clinic: Clinic }) {
           </div>
           <div>
             <label htmlFor="city" className={labelClass}>
-              City
+              City <span className="text-danger">*</span>
             </label>
             <input
               id="city"
               name="city"
+              required
               defaultValue={clinic.city ?? ""}
               className={inputClass}
             />
@@ -117,11 +119,12 @@ export function ClinicInfoForm({ clinic }: { clinic: Clinic }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="area" className={labelClass}>
-              Area
+              Area <span className="text-danger">*</span>
             </label>
             <input
               id="area"
               name="area"
+              required
               defaultValue={clinic.area ?? ""}
               className={inputClass}
               placeholder="Andheri West"
@@ -143,11 +146,12 @@ export function ClinicInfoForm({ clinic }: { clinic: Clinic }) {
 
         <div>
           <label htmlFor="address" className={labelClass}>
-            Address
+            Address <span className="text-danger">*</span>
           </label>
           <input
             id="address"
             name="address"
+            required
             defaultValue={clinic.address ?? ""}
             className={inputClass}
           />

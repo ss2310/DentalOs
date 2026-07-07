@@ -14,16 +14,26 @@ export default async function PublishPage({ params }: { params: { id: string } }
   if (!isAdminRole(await getUserRole())) redirect("/dashboard");
   const supabase = createClient();
 
-  const [{ data: post }, { data: clinic }] = await Promise.all([
+  const COLS =
+    "id, platform, format, caption, hashtags, gbp_post_type, status, render_paths, posted_at";
+  // premium_tier lands with migration 046; re-query without it if unapplied.
+  const [postRes, { data: clinic }] = await Promise.all([
     supabase
       .from("social_posts")
-      .select(
-        "id, platform, format, caption, hashtags, gbp_post_type, status, render_paths, posted_at",
-      )
+      .select(`${COLS}, premium_tier`)
       .eq("id", params.id)
       .maybeSingle(),
     supabase.from("clinics").select("phone").single(),
   ]);
+  const post = postRes.error
+    ? (
+        await supabase
+          .from("social_posts")
+          .select(COLS)
+          .eq("id", params.id)
+          .maybeSingle()
+      ).data
+    : postRes.data;
   if (!post) notFound();
   if (post.status !== "approved" && post.status !== "posted_manually") {
     redirect(`/social/review/${post.id}`);
@@ -58,6 +68,8 @@ export default async function PublishPage({ params }: { params: { id: string } }
           hashtags: post.hashtags ?? [],
           status: post.status,
           postedAt: post.posted_at,
+          premiumTier:
+            (post as { premium_tier?: string | null }).premium_tier ?? null,
         }}
         renderUrls={renderUrls}
         waSelfNumber={clinic?.phone ? waNumber(clinic.phone) : null}

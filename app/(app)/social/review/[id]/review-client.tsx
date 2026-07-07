@@ -9,7 +9,7 @@ import {
   submitForApproval,
   updatePostCaption,
 } from "../../actions";
-import { PlatformBadge, StatusBadge } from "../../ui";
+import { PlatformBadge, StatusBadge, PremiumChip, RenderChoices } from "../../ui";
 
 type Slide = { title: string; body: string };
 type Post = {
@@ -25,6 +25,7 @@ type Post = {
   status: string;
   scheduledDate: string | null;
   topic: string | null;
+  premiumTier: string | null;
 };
 
 // Platform-true previews: IG card with the rendered image, FB text post, GBP
@@ -44,6 +45,7 @@ export function ReviewClient({
   const [violations, setViolations] = useState<string[] | null>(post.ymylFlags);
   const [rendering, setRendering] = useState(false);
   const [urls, setUrls] = useState(renderUrls);
+  const [premium, setPremium] = useState<string | null>(post.premiumTier);
   const [pending, startTransition] = useTransition();
 
   const act = (fn: () => Promise<{ ok?: boolean; error?: string; violations?: string[] }>, done: string) =>
@@ -73,17 +75,23 @@ export function ReviewClient({
       }
     });
 
-  const render = async () => {
+  const render = async (premium?: string) => {
     setRendering(true);
     try {
       const res = await fetch("/api/social/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId: post.id }),
+        body: JSON.stringify({ postId: post.id, ...(premium ? { premium } : {}) }),
       });
       const data = await res.json();
-      if (!res.ok) toast(data.error ?? "Render failed.");
-      else setUrls(data.urls ?? []);
+      if (!res.ok) {
+        toast(data.error ?? "Render failed.");
+      } else {
+        setUrls(data.urls ?? []);
+        setPremium(data.premium ?? null);
+        if (typeof data.creditsLeft === "number")
+          toast(`Done ✨ — ${data.creditsLeft} credits left.`);
+      }
     } finally {
       setRendering(false);
     }
@@ -142,13 +150,9 @@ export function ReviewClient({
               <p className="text-sm text-text-secondary">
                 {post.format === "carousel" ? "6-slide carousel" : "Post image"} not rendered yet
               </p>
-              <button
-                onClick={render}
-                disabled={rendering}
-                className="flex h-11 items-center rounded-button bg-primary px-4 text-[15px] font-medium text-white disabled:opacity-60"
-              >
-                {rendering ? "Rendering…" : "Render image (free)"}
-              </button>
+              <div className="w-full px-8">
+                <RenderChoices format={post.format} rendering={rendering} onRender={render} />
+              </div>
             </div>
           )}
           {urls.length > 1 ? (
@@ -157,6 +161,22 @@ export function ReviewClient({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img key={u} src={u} alt={`Slide ${i + 1}`} className="h-20 w-20 shrink-0 rounded-md object-cover" />
               ))}
+            </div>
+          ) : null}
+          {igImage ? (
+            <div className="flex flex-col gap-2 border-t border-border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-text-secondary">
+                  {premium ? "Premium backdrop applied" : "Want a photo backdrop instead?"}
+                </p>
+                <PremiumChip tier={premium} />
+              </div>
+              <RenderChoices
+                format={post.format}
+                rendering={rendering}
+                onRender={render}
+                compact
+              />
             </div>
           ) : null}
           <div className="p-3 text-[15px] leading-relaxed">

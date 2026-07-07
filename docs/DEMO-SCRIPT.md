@@ -19,7 +19,7 @@ app is built phone-first.
 ## Major headlines (pick per audience)
 
 **Master headline**
-> **"Aapke clinic ka growth department — ₹2,499/month."**
+> **"Aapke clinic ka growth department — ₹2,999/month."**
 > (Your clinic's growth department, for less than one consultation a day.)
 
 **Money angle** — "Every clinic loses lakhs a year to no-shows, unpaid dues,
@@ -53,7 +53,7 @@ and a branded post tomorrow."
 > [Open Deep Audit report] "And this is the machine's honest report on your
 > whole online presence — including whether ChatGPT recommends you — with a
 > 30-day plan to fix it."
-> "₹2,499 a month. Less than one consultation a day. Shall I run the audit on
+> "₹2,999 a month. Less than one consultation a day. Shall I run the audit on
 > YOUR clinic?"
 
 **The closer that books the next meeting:** run a Deep Audit on their clinic
@@ -86,6 +86,13 @@ live (₹100 of API cost to potentially close a ₹30k/year customer).
 ### 4. The growth engine (3 min) — Social, Map Rank
 - Social weekly planner: answer the 3 questions live → 5 posts appear in the
   queue → open one: branded image with THEIR logo, natural Hinglish caption.
+- **Premium visual moment:** on the rendered post tap "✨ Photo backdrop" —
+  15 seconds later the same branded card sits on a warm studio photo.
+  **Line:** "Free branded images are included forever. When you want the
+  magazine look, one credit upgrades any post — see the difference yourself."
+- **Model choice (Content Studio):** show the Claude / ChatGPT / Gemini
+  picker. **Line:** "You're not locked to one AI. Don't like what ChatGPT
+  wrote? Regenerate with Claude — pick whichever sounds like you."
 - Approve one → publish screen: copy, download, share. **Line:** "Ten minutes
   on Monday, and your clinic posts all week. Nothing goes out without you."
 - Map Rank heatmap on their keyword. Pause. Let the red sink in.
@@ -94,6 +101,9 @@ live (₹100 of API cost to potentially close a ₹30k/year customer).
 - Open the prepared report: score vs top rival, the AI-visibility verdict,
   the 30-day plan. **Line:** "This is the plan a ₹50,000 agency would sell
   you. It's included. Shall we start your trial today — first audit free?"
+- Pricing close: "₹2,999 a month includes 100 AI credits, 10 map scans, a
+  full Deep Audit and 30 social posts. Use more? Top-ups start at ₹549 —
+  you only pay more when it's already working."
 
 ---
 

@@ -383,7 +383,8 @@ export const HELP_SECTIONS: HelpSection[] = [
     details: [
       "Set your Brand Personality once (a 2-minute wizard: who you are, tone, language per platform, facts you're proud of). Every post is written in that voice; a fact without a source is never used.",
       "'Plan my week' asks 3 questions and creates 5 posts across platforms for your approval. 'New post' makes one topic into Instagram, Facebook, and Google Business versions in one go. Each post costs 1 content credit.",
-      "Post images and 6-slide carousels are composed from your logo and brand colours — they're FREE (no credits) and no AI-generated images are ever used.",
+      "Post images and 6-slide carousels are composed from your logo and brand colours — the branded look is FREE (no credits), always.",
+      "Optional premium visuals put an AI-generated photo backdrop behind the same branded overlay: Photo backdrop costs 1 content credit for a single image (3 for a carousel), Studio photo costs 2 (5 for a carousel). AI backdrops never show people, faces, or treatment results — real patient photos come only from Moments with recorded consent.",
       "Every post waits in the approval queue: preview it exactly as the platform shows it, then Approve, Edit (safety checks re-run), or Reject. After approving: copy the caption, download the image, post it yourself in the app, and tap 'Mark as posted'. GrowthOS never posts automatically.",
       "Your plan includes a monthly post quota (30 on Growth). A built-in safety check blocks made-up statistics, prices, or medical promises before anything reaches the queue.",
     ],

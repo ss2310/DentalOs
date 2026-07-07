@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/toast";
 import { markPosted } from "../../actions";
-import { PlatformBadge, PLATFORM_LABEL } from "../../ui";
+import { PlatformBadge, PLATFORM_LABEL, PremiumChip, RenderChoices } from "../../ui";
 
 type Post = {
   id: string;
@@ -14,6 +14,7 @@ type Post = {
   hashtags: string[];
   status: string;
   postedAt: string | null;
+  premiumTier: string | null;
 };
 
 // Copy → download → share → mark as posted. Phone-first: big tap targets,
@@ -32,6 +33,7 @@ export function PublishClient({
   const [copied, setCopied] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [urls, setUrls] = useState(renderUrls);
+  const [premium, setPremium] = useState<string | null>(post.premiumTier);
 
   const fullCaption =
     post.hashtags.length > 0
@@ -49,17 +51,26 @@ export function PublishClient({
     }
   };
 
-  const render = async () => {
+  const render = async (premiumId?: string) => {
     setRendering(true);
     try {
       const res = await fetch("/api/social/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId: post.id }),
+        body: JSON.stringify({
+          postId: post.id,
+          ...(premiumId ? { premium: premiumId } : {}),
+        }),
       });
       const data = await res.json();
-      if (!res.ok) toast(data.error ?? "Render failed.");
-      else setUrls(data.urls ?? []);
+      if (!res.ok) {
+        toast(data.error ?? "Render failed.");
+      } else {
+        setUrls(data.urls ?? []);
+        setPremium(data.premium ?? null);
+        if (typeof data.creditsLeft === "number")
+          toast(`Done ✨ — ${data.creditsLeft} credits left.`);
+      }
     } finally {
       setRendering(false);
     }
@@ -155,9 +166,12 @@ export function PublishClient({
 
       {/* Step 2 — image(s) */}
       <div className="rounded-card border border-border bg-white p-4 shadow-card">
-        <p className="text-sm font-semibold uppercase tracking-[0.08em] text-text-secondary">
-          2 · {post.format === "carousel" ? "Slides" : "Image"}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold uppercase tracking-[0.08em] text-text-secondary">
+            2 · {post.format === "carousel" ? "Slides" : "Image"}
+          </p>
+          <PremiumChip tier={premium} />
+        </div>
         {urls.length > 0 ? (
           <>
             <div className="mt-3 flex gap-2 overflow-x-auto">
@@ -177,15 +191,22 @@ export function PublishClient({
             >
               Download {urls.length > 1 ? `all ${urls.length} slides` : "image"}
             </button>
+            <div className="mt-3">
+              <p className="mb-2 text-xs text-text-secondary">
+                {premium ? "Premium backdrop applied" : "Want a photo backdrop instead?"}
+              </p>
+              <RenderChoices
+                format={post.format}
+                rendering={rendering}
+                onRender={render}
+                compact
+              />
+            </div>
           </>
         ) : needsImage ? (
-          <button
-            onClick={render}
-            disabled={rendering}
-            className="mt-3 flex h-12 w-full items-center justify-center rounded-button border border-border bg-white text-[15px] font-medium disabled:opacity-60"
-          >
-            {rendering ? "Rendering…" : "Render image (free)"}
-          </button>
+          <div className="mt-3">
+            <RenderChoices format={post.format} rendering={rendering} onRender={render} compact={false} />
+          </div>
         ) : (
           <p className="mt-3 text-sm text-text-secondary">
             Text-only post — no image needed.

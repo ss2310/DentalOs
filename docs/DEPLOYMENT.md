@@ -16,7 +16,7 @@ clone to a working production deploy.
    in India). **Use the Pro plan ($25/mo) for production** — daily backups +
    no auto-pausing; this app stores patient data.
 2. **Apply migrations in order.** In the SQL Editor, run every file in
-   `supabase/migrations/` by number: `001 → 043` (no gaps, no skips). After
+   `supabase/migrations/` by number: `001 → 047` (no gaps, no skips). After
    the batch, run:
    ```sql
    notify pgrst, 'reload schema';
@@ -68,8 +68,9 @@ Set in Vercel → Project → Settings → Environment Variables (Production).
 | `CRON_SECRET` | Bearer token guarding the three cron routes |
 | `SERPER_API_KEY` | Map Rank grid scans, Deep Audit discovery + AI-visibility searches |
 | `SERP_PROVIDER` | **Set `serper` explicitly.** ⚠ The code DEFAULT is `mock` — deterministic FAKE rankings with no error. Unset in production = fabricated rank data shown to paying clinics. |
+| `IMAGE_PROVIDER` | **Set `openrouter` explicitly.** ⚠ Same footgun as SERP_PROVIDER: the code DEFAULT is `mock` — paid premium visuals would render as gradient placeholders. Both tiers bill the one `OPENROUTER_API_KEY`. |
 | `GOOGLE_MAPS_API_KEY` | Places details in Deep Audit (Text Search + Details enabled) |
-| `OPENROUTER_API_KEY` | Deep Audit stage 4 (Perplexity/ChatGPT visibility queries) |
+| `OPENROUTER_API_KEY` | Deep Audit stage 4, Content Studio ChatGPT/Gemini models, Studio premium visuals |
 | `CASHFREE_APP_ID` / `CASHFREE_SECRET_KEY` | Payments (plans, packs) |
 | `CASHFREE_ENV` | **Set `production` explicitly** — defaults to SANDBOX otherwise (orders silently go to the wrong environment) |
 
@@ -88,6 +89,7 @@ Set in Vercel → Project → Settings → Environment Variables (Production).
 | `SERP_MONTHLY_SCAN_CAP`, `SERP_DEBUG` | Scan budget guard / logging |
 | `VOICE_NOTES_DAILY_CAP`, `DEEP_AUDIT_MONTHLY_LIMIT`, `AGENCY_MONTHLY_AUDIT_CAP` | Abuse caps (sane defaults) |
 | `NOTES_AGENT_MODEL`, `AUDIT_SYNTH_MODEL`, `AUDIT_CLASSIFY_MODEL`, `AUDIT_GEMINI_MODEL`, `AUDIT_SONAR_MODEL`, `AUDIT_CHATGPT_MODEL`, `AUDIT_SYNTH_MAX_TOKENS` | Model overrides (leave unset) |
+| `IMAGE_MODEL`, `IMAGE_STUDIO_MODEL`, `CONTENT_CHATGPT_MODEL`, `CONTENT_GEMINI_MODEL` | Premium-visual / Content Studio model overrides (leave unset) |
 
 ## 4. Third-party service setup
 
@@ -106,16 +108,16 @@ Set in Vercel → Project → Settings → Environment Variables (Production).
 - [ ] **Delete the dev scaffolding** (dev-only guarded, but don't ship it):
       `app/api/dev/` (all routes), `scripts/inspect-run.mjs`, and the
       `/api/dev` exemption in `middleware.ts`.
-- [ ] `npm test` green (99 tests) and `npx tsc --noEmit` clean.
+- [ ] `npm test` green (103 tests) and `npx tsc --noEmit` clean.
 - [ ] `npm run build` locally once (never while `next dev` is running — they
       share `.next/`).
-- [ ] Migrations 001–043 applied; `select * from applied_migrations` shows 043.
-- [ ] In `/admin` (as super-admin): confirm plan prices (Growth ₹2,499),
+- [ ] Migrations 001–047 applied; `select * from applied_migrations` shows 047.
+- [ ] In `/admin` (as super-admin): confirm plan prices (Growth ₹2,999 — migration 047),
       pack prices, and that your own account has `is_super_admin`.
 
 ## 6. Post-deploy smoke test (15 minutes)
 
-1. Sign up a fresh test clinic → trial starts, 50 content credits visible.
+1. Sign up a fresh test clinic → trial starts, 30 content credits visible.
 2. Settings → fill clinic info **including the Google review link**.
 3. Generate one piece of content (credits decrement) and one Social post
    (image renders, approval → publish screen works).
@@ -133,7 +135,7 @@ Set in Vercel → Project → Settings → Environment Variables (Production).
 ## 7. Operational notes
 
 - **Costs per active clinic/month (full usage):** ≈ ₹500 content + ₹100 audit
-  + ₹200–300 maps ≈ ₹800–900 against ₹2,499 revenue (~65% floor margin).
+  + ₹200–300 maps ≈ ₹700–800 against ₹2,999 revenue (~75% floor margin; credit packs sell at ₹8.5–11/credit vs ≤₹6 worst-case COGS).
 - **Logs**: Vercel function logs are the first stop (every catch logs
   server-side); Supabase logs cover RLS/storage denials.
 - **Backups**: Supabase Pro does daily backups; before risky SQL, take a

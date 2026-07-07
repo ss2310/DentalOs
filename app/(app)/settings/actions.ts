@@ -45,6 +45,7 @@ export async function updateClinic(
   const phoneRaw = String(formData.get("phone") ?? "").trim();
 
   if (!business_name) return { error: "Clinic name is required." };
+  if (!doctor_name) return { error: "Doctor name is required." };
 
   const phone = normalizeIndianPhone(phoneRaw);
   if (!phone) return { error: "Enter a valid 10-digit clinic phone number." };
@@ -53,6 +54,15 @@ export async function updateClinic(
     const v = String(formData.get(k) ?? "").trim();
     return v || null;
   };
+
+  // City / area / address are part of the required profile (lib/clinic-profile
+  // gate): generation, wa.me copy, and local SEO all assume they exist.
+  const city = str("city");
+  const area = str("area");
+  const address = str("address");
+  if (!city) return { error: "City is required." };
+  if (!area) return { error: "Area is required (e.g. Vaishali Nagar)." };
+  if (!address) return { error: "Address is required." };
 
   // Clinic location (map-scan centre). Set once here; blank = not set. Require
   // both or neither so we never store a half-coordinate.
@@ -86,11 +96,11 @@ export async function updateClinic(
     .from("clinics")
     .update({
       business_name,
-      doctor_name: doctor_name || null,
+      doctor_name,
       phone,
-      address: str("address"),
-      city: str("city"),
-      area: str("area"),
+      address,
+      city,
+      area,
       google_review_url: str("google_review_url"),
       instagram_handle: str("instagram_handle"),
       website_url: str("website_url"),

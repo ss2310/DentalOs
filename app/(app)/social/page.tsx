@@ -88,6 +88,12 @@ export default async function SocialPage() {
         action={
           <div className="flex flex-wrap gap-2">
             <Link
+              href="/social/brand"
+              className="flex h-11 items-center rounded-button border border-border bg-white px-4 text-[15px] font-medium text-text-primary hover:border-primary/40"
+            >
+              Brand &amp; logo
+            </Link>
+            <Link
               href="/social/plan-week"
               className="flex h-11 items-center rounded-button border border-border bg-white px-4 text-[15px] font-medium text-text-primary hover:border-primary/40"
             >

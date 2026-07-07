@@ -9,8 +9,10 @@ import {
   enforceLimits,
   splitSchema,
   extractWhatsAppMessage,
+  stripOuterCodeFence,
   SCHEMA_TYPES,
 } from "@/lib/generate";
+import { contentModel, type ContentModel } from "@/lib/models";
 import {
   resolveForVertical,
   verticalDirective,
@@ -23,11 +25,73 @@ import { SHARED_SYSTEM_PROMPT, AI_CITABLE_BLOCK } from "@/lib/prompts";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MODEL = "claude-sonnet-4-6";
-
 // The four long web types need room; 1,500 truncates them. Everything else fits.
 function maxTokensFor(platform: string): number {
   return platform === "Website" ? 4000 : 1500;
+}
+
+// Non-Anthropic HTTP failure carrying the upstream status (so the catch below
+// can map 429 → "busy" the same way it does for Anthropic.APIError).
+class ProviderError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+// ChatGPT / Gemini run through OpenRouter (OpenAI-compatible), reusing the
+// account the Deep Audit engines already bill against. Same posture as
+// lib/audit/engines/openrouter.ts: key server-side only, 200-with-error-body
+// surfaced, hard timeout so a hung model can't run up serverless duration.
+async function callOpenRouter(
+  model: ContentModel,
+  apiKey: string,
+  system: string,
+  prompt: string,
+  maxTokens: number,
+): Promise<string> {
+  const base = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+  // Slugs drift as vendors ship new versions — overridable without a deploy.
+  const slug =
+    (model.id === "chatgpt"
+      ? process.env.CONTENT_CHATGPT_MODEL
+      : process.env.CONTENT_GEMINI_MODEL) || model.model;
+
+  const res = await fetch(`${base}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://growthos.app",
+      "X-Title": "GrowthOS Content Studio",
+    },
+    body: JSON.stringify({
+      model: slug,
+      max_tokens: maxTokens,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) {
+    throw new ProviderError(res.status, `OpenRouter ${slug} failed (${res.status})`);
+  }
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+    error?: { message?: string; code?: number };
+  };
+  if (data.error) {
+    throw new ProviderError(
+      typeof data.error.code === "number" ? data.error.code : 502,
+      `OpenRouter ${slug} error: ${data.error.message ?? "unknown"}`,
+    );
+  }
+  return (data.choices?.[0]?.message?.content ?? "").trim();
 }
 
 export async function POST(req: Request) {
@@ -38,6 +102,7 @@ export async function POST(req: Request) {
     context?: string;
     extras?: Record<string, string>;
     citable?: boolean;
+    model?: string;
   };
   try {
     body = await req.json();
@@ -203,10 +268,21 @@ export async function POST(req: Request) {
   const system = fillTemplate(systemTemplate, vars);
   const prompt = fillTemplate(post.prompt_template, vars);
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // Model choice (lib/models.ts). Unknown/absent ids resolve to the default
+  // (Claude), so old clients keep working unchanged.
+  const model = contentModel(body.model);
+  const apiKey =
+    model.provider === "anthropic"
+      ? process.env.ANTHROPIC_API_KEY
+      : process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "AI is not configured on the server yet." },
+      {
+        error:
+          model.provider === "anthropic"
+            ? "AI is not configured on the server yet."
+            : `${model.label} is not available right now — try Claude instead.`,
+      },
       { status: 500 },
     );
   }
@@ -214,8 +290,8 @@ export async function POST(req: Request) {
   // Spend content credits ATOMICALLY before the paid call (SEC-H1/L1). The RPC
   // charges in one row-locked statement, so concurrent requests can't all slip
   // through and get billed as one. `insufficient` = not enough credits; we never
-  // reach Claude. Refunded below if the generation then fails.
-  const cost = post.credits_cost;
+  // reach the model. Refunded below if the generation then fails.
+  const cost = post.credits_cost + model.surcharge;
   const spend = await spendCredits("content", cost, "generation");
   if (!spend.ok) {
     if ("insufficient" in spend) {
@@ -234,23 +310,35 @@ export async function POST(req: Request) {
   const refund = () => refundCredit(spend.ledgerId);
 
   try {
-    // SEC-M2: cap wall-clock and retries so a hung/slow model can't run up
-    // billed duration on a serverless invocation.
-    const client = new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
-    // Sonnet 4.6, single-shot generation. No thinking config so the full
-    // token budget goes to the content itself.
-    const message = await client.messages.create({
-      model: MODEL,
-      max_tokens: maxTokensFor(post.platform),
-      system,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const raw = message.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("")
-      .trim();
+    let raw: string;
+    if (model.provider === "anthropic") {
+      // SEC-M2: cap wall-clock and retries so a hung/slow model can't run up
+      // billed duration on a serverless invocation.
+      const client = new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
+      // Single-shot generation. No thinking config so the full token budget
+      // goes to the content itself.
+      const message = await client.messages.create({
+        model: model.model,
+        max_tokens: maxTokensFor(post.platform),
+        system,
+        messages: [{ role: "user", content: prompt }],
+      });
+      raw = message.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("")
+        .trim();
+    } else {
+      raw = await callOpenRouter(
+        model,
+        apiKey,
+        system,
+        prompt,
+        maxTokensFor(post.platform),
+      );
+    }
+    // Gemini/GPT sometimes fence the whole result; the parsers below need it bare.
+    raw = stripOuterCodeFence(raw);
 
     if (!raw) {
       await refund();
@@ -283,14 +371,26 @@ export async function POST(req: Request) {
 
     // Credits were already reserved atomically before the call, so there is
     // nothing to deduct here — just report the post-reserve balance.
-    return NextResponse.json({ content, schema, encoded, creditsLeft, citable });
+    return NextResponse.json({
+      content,
+      schema,
+      encoded,
+      creditsLeft,
+      citable,
+      model: model.id,
+      creditsSpent: cost,
+    });
   } catch (err) {
     // Generation failed after the reserve — refund so the clinic isn't charged.
     await refund();
     // Friendly, retryable message. Log the real error server-side only.
-    console.error("Claude generation failed:", err);
+    console.error(`${model.label} generation failed:`, err);
     const status =
-      err instanceof Anthropic.APIError ? err.status ?? 502 : 502;
+      err instanceof Anthropic.APIError
+        ? err.status ?? 502
+        : err instanceof ProviderError
+          ? err.status
+          : 502;
     const message =
       status === 429
         ? "The AI is busy right now. Please wait a moment and try again."
