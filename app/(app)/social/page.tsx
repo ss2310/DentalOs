@@ -131,7 +131,7 @@ export default async function SocialPage() {
           hint={
             quota.used >= quota.limit
               ? "Monthly limit reached"
-              : "1 credit per post · images free"
+              : "1 credit per post · branded images free · ✨ premium backdrops from 1 credit"
           }
           hero
         />

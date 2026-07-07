@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GrowthOS by The Masked Marketers — Your dental clinic's growth department</title>
+<meta name="description" content="Patients, payments, reviews, and AI marketing for Indian dental clinics — one app, ₹2,999/month. 30-day free trial, no card required." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎭</text></svg>" />
+<style>
+  :root{
+    --teal:#0D9488; --teal-dark:#0B7C72; --ink:#1D1D1F; --muted:#6E6E73;
+    --line:#E8EAED; --subtle:#F5F5F7; --danger:#DC2626; --success:#059669;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:var(--ink);background:#fff;line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;border-radius:10px;font-weight:600;font-size:16px;transition:all .15s;cursor:pointer;border:none}
+  .btn-primary{background:var(--teal);color:#fff}
+  .btn-primary:hover{background:var(--teal-dark);transform:translateY(-1px)}
+  .btn-ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn-ghost:hover{background:var(--subtle)}
+  .btn-lg{min-height:56px;padding:0 32px;font-size:17px}
+  .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600}
+  .eyebrow{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--teal)}
+  h1,h2,h3{letter-spacing:-0.02em;line-height:1.15}
+  section{padding:88px 0}
+  .muted{color:var(--muted)}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:68px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;letter-spacing:-0.01em}
+  .brand .mark{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:rgba(13,148,136,.12);font-size:18px}
+  .nav-links{display:none;gap:28px;font-size:15px;font-weight:500;color:var(--muted)}
+  .nav-links a:hover{color:var(--ink)}
+  .nav-cta{display:flex;gap:10px}
+  .nav-cta .btn{min-height:42px;padding:0 18px;font-size:15px}
+  @media(min-width:860px){.nav-links{display:flex}}
+
+  /* hero */
+  .hero{padding:96px 0 72px;background:
+    radial-gradient(1000px 480px at 85% -10%, rgba(13,148,136,.10), transparent 60%),
+    radial-gradient(700px 420px at 0% 10%, rgba(13,148,136,.05), transparent 55%)}
+  .hero-grid{display:grid;gap:56px;align-items:center}
+  @media(min-width:960px){.hero-grid{grid-template-columns:1.05fr .95fr}}
+  .hero h1{font-size:clamp(34px,5.5vw,54px);font-weight:800}
+  .hero h1 em{font-style:normal;color:var(--teal)}
+  .hero p.lede{margin-top:20px;font-size:19px;color:var(--muted);max-width:34em}
+  .hero-cta{margin-top:32px;display:flex;flex-wrap:wrap;gap:12px}
+  .hero-trust{margin-top:18px;font-size:14px;color:var(--muted)}
+  .hero-trust b{color:var(--ink)}
+
+  /* mock dashboard */
+  .mock{border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 24px 60px -24px rgba(29,29,31,.18);overflow:hidden}
+  .mock-bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--subtle)}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--line)}
+  .mock-body{padding:20px;display:grid;gap:12px}
+  .mock-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .stat{border:1px solid var(--line);border-radius:12px;padding:14px}
+  .stat .k{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .stat .v{margin-top:4px;font-size:22px;font-weight:800;letter-spacing:-0.02em}
+  .stat.hero-stat{background:var(--teal);border-color:var(--teal)}
+  .stat.hero-stat .k{color:rgba(255,255,255,.75)}
+  .stat.hero-stat .v{color:#fff}
+  .mock-row{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px}
+  .mock-row .tag{font-size:12px;font-weight:600;color:var(--teal);background:rgba(13,148,136,.1);border-radius:999px;padding:3px 10px}
+  .mock-row.sent .tag{color:var(--success);background:rgba(5,150,105,.1)}
+
+  /* stats band */
+  .band{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--subtle);padding:36px 0}
+  .band-grid{display:grid;gap:24px;grid-template-columns:repeat(2,1fr);text-align:center}
+  @media(min-width:760px){.band-grid{grid-template-columns:repeat(4,1fr)}}
+  .band .n{font-size:26px;font-weight:800;letter-spacing:-0.02em}
+  .band .t{margin-top:2px;font-size:13.5px;color:var(--muted)}
+
+  /* features */
+  .sec-head{max-width:620px}
+  .sec-head h2{font-size:clamp(28px,4vw,38px);font-weight:800}
+  .sec-head p{margin-top:14px;font-size:17px;color:var(--muted)}
+  .feat-grid{margin-top:48px;display:grid;gap:18px}
+  @media(min-width:700px){.feat-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(min-width:1000px){.feat-grid{grid-template-columns:repeat(3,1fr)}}
+  .feat{border:1px solid var(--line);border-radius:16px;padding:26px;background:#fff;transition:border-color .15s}
+  .feat:hover{border-color:rgba(13,148,136,.45)}
+  .feat .ic{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;background:rgba(13,148,136,.1);font-size:21px}
+  .feat h3{margin-top:16px;font-size:17.5px;font-weight:700}
+  .feat p{margin-top:8px;font-size:15px;color:var(--muted)}
+
+  /* steps */
+  .steps{display:grid;gap:18px;margin-top:48px}
+  @media(min-width:800px){.steps{grid-template-columns:repeat(3,1fr)}}
+  .step{border:1px solid var(--line);border-radius:16px;padding:26px;background:#fff}
+  .step .no{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--teal);color:#fff;font-weight:700;font-size:15px}
+  .step h3{margin-top:14px;font-size:17px;font-weight:700}
+  .step p{margin-top:6px;font-size:15px;color:var(--muted)}
+
+  /* pricing */
+  #pricing{background:var(--subtle);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .price-grid{margin-top:48px;display:grid;gap:20px;align-items:stretch}
+  @media(min-width:860px){.price-grid{grid-template-columns:1fr 1.15fr}}
+  .price-card{border:1px solid var(--line);border-radius:16px;background:#fff;padding:32px;display:flex;flex-direction:column}
+  .price-card.featured{border:2px solid var(--teal);position:relative;box-shadow:0 20px 50px -24px rgba(13,148,136,.35)}
+  .price-card .plan{font-size:14px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .price-card.featured .plan{color:var(--teal)}
+  .price{margin-top:12px;font-size:44px;font-weight:800;letter-spacing:-0.03em}
+  .price small{font-size:16px;font-weight:500;color:var(--muted);letter-spacing:0}
+  .price-note{margin-top:4px;font-size:14px;color:var(--muted)}
+  .plist{margin-top:22px;display:grid;gap:11px;font-size:15px}
+  .plist li{list-style:none;display:flex;gap:10px;align-items:flex-start}
+  .plist .tick{color:var(--teal);font-weight:700;flex:0 0 auto}
+  .price-card .btn{margin-top:28px;width:100%}
+  .ribbon{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--teal);color:#fff;font-size:12px;font-weight:700;letter-spacing:.05em;padding:4px 14px;border-radius:999px;white-space:nowrap}
+  .packs{margin-top:28px;border:1px solid var(--line);border-radius:16px;background:#fff;overflow:hidden}
+  .packs .ph{padding:18px 24px;border-bottom:1px solid var(--line);font-weight:700;font-size:15.5px}
+  .packs table{width:100%;border-collapse:collapse;font-size:15px}
+  .packs td{padding:13px 24px;border-top:1px solid var(--line)}
+  .packs tr:first-child td{border-top:none}
+  .packs td:last-child{text-align:right;font-weight:700}
+  .packs .per{font-size:12.5px;color:var(--muted);font-weight:400}
+
+  /* faq */
+  .faq{max-width:760px;margin:48px auto 0}
+  details{border:1px solid var(--line);border-radius:12px;background:#fff;padding:0 22px;margin-bottom:12px}
+  summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:60px;font-weight:600;font-size:16px}
+  summary::-webkit-details-marker{display:none}
+  summary:after{content:"+";font-size:22px;color:var(--muted);font-weight:400;transition:transform .15s}
+  details[open] summary:after{transform:rotate(45deg)}
+  details p{padding:0 0 20px;color:var(--muted);font-size:15px}
+
+  /* final cta */
+  .final{background:var(--teal);color:#fff;text-align:center;padding:80px 20px}
+  .final h2{font-size:clamp(28px,4.5vw,40px);font-weight:800}
+  .final p{margin-top:14px;font-size:17px;color:rgba(255,255,255,.85);max-width:36em;margin-left:auto;margin-right:auto}
+  .final .btn{margin-top:32px;background:#fff;color:var(--teal)}
+  .final .btn:hover{background:var(--subtle)}
+  .final .sub{margin-top:14px;font-size:14px;color:rgba(255,255,255,.75)}
+
+  footer{padding:48px 0;border-top:1px solid var(--line)}
+  .foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;font-size:14px;color:var(--muted)}
+  .foot a:hover{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">
+      <span class="mark">🎭</span>
+      <span>The Masked Marketers</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div class="nav-cta">
+      <a class="btn btn-ghost" href="https://app.themaskedmarketers.com">Log in</a>
+      <a class="btn btn-primary" href="https://app.themaskedmarketers.com/signup">Start free trial</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="pill" style="background:rgba(13,148,136,.1);color:var(--teal)">GrowthOS · built for Indian dental clinics</span>
+      <h1>Your clinic's <em>growth department</em> — in one app.</h1>
+      <p class="lede">
+        Appointments, payments, recalls, reviews — plus an AI marketing engine
+        that writes your posts, builds your images, and shows exactly where you
+        rank on Google Maps. Run it from the front desk, on any phone.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary btn-lg" href="https://app.themaskedmarketers.com/signup">Start your 30-day free trial</a>
+        <a class="btn btn-ghost btn-lg" href="https://app.themaskedmarketers.com">Log in</a>
+      </div>
+      <p class="hero-trust">
+        <b>Free for 30 days</b> · no card required · then <b>₹2,999/month</b> — cancel anytime
+      </p>
+    </div>
+    <div class="mock" aria-hidden="true">
+      <div class="mock-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      <div class="mock-body">
+        <div class="mock-stats">
+          <div class="stat hero-stat"><div class="k">Appointments today</div><div class="v">14</div></div>
+          <div class="stat"><div class="k">Plan value</div><div class="v">₹1.4L</div></div>
+          <div class="stat"><div class="k">Recovered</div><div class="v">₹38,500</div></div>
+        </div>
+        <div class="mock-row"><span>📩 6 patients need 24-hour reminders</span><span class="tag">Send on WhatsApp</span></div>
+        <div class="mock-row sent"><span>⭐ Review request — Arjun S.</span><span class="tag">✓ Sent</span></div>
+        <div class="mock-row"><span>✨ Diwali post ready for approval</span><span class="tag">Review</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="band">
+  <div class="wrap band-grid">
+    <div><div class="n">97%</div><div class="t">of patients read reviews before choosing a dentist</div></div>
+    <div><div class="n">60–70%</div><div class="t">of new patients come from Google local search</div></div>
+    <div><div class="n">35%</div><div class="t">fewer no-shows with WhatsApp reminders</div></div>
+    <div><div class="n">₹50,000+</div><div class="t">what an agency charges for what's included here</div></div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Everything, one login</p>
+      <h2>The whole patient journey — from "found you on Google" to "left a 5-star review".</h2>
+      <p>No agency retainers, no five different tools, no WhatsApp Business API headaches.</p>
+    </div>
+    <div class="feat-grid">
+      <div class="feat">
+        <div class="ic">📅</div>
+        <h3>Front desk that runs itself</h3>
+        <p>Appointments, patient records, billing with UPI links, treatment plans, and check-up recalls — with one-tap Hinglish WhatsApp reminders your receptionist sends in seconds.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">🤖</div>
+        <h3>Choose your AI writer</h3>
+        <p>Blog articles, service pages, review replies, WhatsApp broadcasts — written by <b>Claude, ChatGPT, or Gemini</b>. Don't like one's style? Regenerate with another.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">📱</div>
+        <h3>A month of social in 10 minutes</h3>
+        <p>Answer 3 questions → a week of Instagram, Facebook &amp; Google posts in your clinic's voice, with branded images (free, always) or ✨ premium AI photo backdrops.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">🗺️</div>
+        <h3>See your Google Maps rank — literally</h3>
+        <p>A heat-map of your real ranking across your neighbourhood, keyword by keyword. Watch it turn green as your profile improves.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">🔍</div>
+        <h3>Deep Audit vs your rivals</h3>
+        <p>A full digital audit — Google profile, website, reviews, and whether ChatGPT &amp; Gemini recommend you — scored against your top competitor, with a 30-day fix-it plan.</p>
+      </div>
+      <div class="feat">
+        <div class="ic">⭐</div>
+        <h3>Reviews &amp; reputation on autopilot</h3>
+        <p>Post-visit surveys catch unhappy patients privately; happy ones get a one-tap Google review ask. AI drafts the perfect reply to every review.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">How it works</p>
+      <h2>Live before your next patient sits down.</h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="no">1</div>
+        <h3>Sign up &amp; set your brand</h3>
+        <p>2 minutes: clinic details, your logo, and a short brand quiz so every post sounds like <i>your</i> clinic — not a template.</p>
+      </div>
+      <div class="step">
+        <div class="no">2</div>
+        <h3>Run your free Deep Audit</h3>
+        <p>See exactly where you stand vs the clinic down the road — included free in your trial.</p>
+      </div>
+      <div class="step">
+        <div class="no">3</div>
+        <h3>Approve &amp; grow</h3>
+        <p>AI drafts, you approve, nothing goes out without you. Reminders, reviews, posts, and recalls start compounding from day one.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Pricing</p>
+      <h2>Free for 30 days. Then one simple plan.</h2>
+      <p>Start free today — you only pay from month two. Less than the revenue from one filling a week.</p>
+    </div>
+
+    <div class="price-grid">
+      <div class="price-card">
+        <div class="plan">Free trial</div>
+        <div class="price">₹0 <small>for 30 days</small></div>
+        <p class="price-note">No card required. Full app access.</p>
+        <ul class="plist">
+          <li><span class="tick">✓</span> 30 AI content credits</li>
+          <li><span class="tick">✓</span> 1 full Deep Audit (₹599 value)</li>
+          <li><span class="tick">✓</span> 2 Map Rank scans</li>
+          <li><span class="tick">✓</span> 5 social posts with branded images</li>
+          <li><span class="tick">✓</span> Unlimited patients, appointments &amp; billing</li>
+        </ul>
+        <a class="btn btn-ghost" href="https://app.themaskedmarketers.com/signup">Start free — no card</a>
+      </div>
+
+      <div class="price-card featured">
+        <div class="ribbon">AFTER YOUR TRIAL</div>
+        <div class="plan">Growth</div>
+        <div class="price">₹2,999 <small>/month</small></div>
+        <p class="price-note">or ₹29,990/year — two months free</p>
+        <ul class="plist">
+          <li><span class="tick">✓</span> <b>100 AI content credits</b> every month</li>
+          <li><span class="tick">✓</span> <b>30 social posts</b>/month — branded images always free</li>
+          <li><span class="tick">✓</span> <b>1 Deep Audit</b> every month (₹599 value)</li>
+          <li><span class="tick">✓</span> <b>10 Map Rank scans</b>/month</li>
+          <li><span class="tick">✓</span> Claude, ChatGPT &amp; Gemini — your choice</li>
+          <li><span class="tick">✓</span> ✨ Premium AI visuals from 1 credit</li>
+          <li><span class="tick">✓</span> Unlimited patients, staff logins &amp; WhatsApp tools</li>
+        </ul>
+        <a class="btn btn-primary" href="https://app.themaskedmarketers.com/signup">Start your free trial</a>
+      </div>
+    </div>
+
+    <div class="packs">
+      <div class="ph">Need more? Top up any time — credits never interrupt your plan.</div>
+      <table>
+        <tr><td>50 content credits <span class="per">· ₹11/credit</span></td><td>₹549</td></tr>
+        <tr><td>200 content credits <span class="per">· ₹8.5/credit</span></td><td>₹1,699</td></tr>
+        <tr><td>10 Map Rank scans</td><td>₹449</td></tr>
+        <tr><td>Extra Deep Audit</td><td>₹599</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">FAQ</p>
+      <h2>Questions clinics actually ask.</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>Do I need the WhatsApp Business API?</summary>
+        <p>No — and that's deliberate. Every message opens in your own WhatsApp with the text pre-filled, sent from your clinic's number with one tap. No API approval process, no per-message fees, no risk to your number from bulk sending.</p>
+      </details>
+      <details>
+        <summary>Will AI post things without my approval?</summary>
+        <p>Never. Every post, reply, and message waits in an approval queue until you tap Approve. A built-in safety check also blocks made-up statistics, prices, or medical promises before they ever reach you.</p>
+      </details>
+      <details>
+        <summary>What exactly is a credit?</summary>
+        <p>One credit ≈ one short piece of AI content (a review reply, a WhatsApp broadcast, a social post). Bigger jobs cost more — a full SEO blog article is 3, a ✨ premium AI image is 1–2. Your plan includes 100 every month, and packs top you up from ₹549.</p>
+      </details>
+      <details>
+        <summary>What happens when my trial ends?</summary>
+        <p>Nothing scary — your data stays safe. Upgrade to Growth (₹2,999/month) to keep going; if you don't, the app pauses until you do. No card is taken during the trial, so nothing is charged automatically.</p>
+      </details>
+      <details>
+        <summary>Is my patient data safe?</summary>
+        <p>Yes. Every clinic's data is isolated at the database level (row-level security) — no other clinic can ever see your patients. Patient photos are stored privately and shared only with recorded consent.</p>
+      </details>
+      <details>
+        <summary>My receptionist isn't technical. Will she manage?</summary>
+        <p>It's built for the front desk first: big buttons, plain language, works on any Android phone, and the risky stuff (marketing, money, settings) is only visible to the owner and doctors.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<div class="final">
+  <h2>The clinic down the road is already posting.</h2>
+  <p>Start your 30-day free trial today — your first Deep Audit will show you exactly what they're doing that you're not.</p>
+  <a class="btn btn-lg" href="https://app.themaskedmarketers.com/signup">Start free — see your audit today</a>
+  <p class="sub">No card required · full access · ₹2,999/month only after 30 days</p>
+</div>
+
+<footer>
+  <div class="wrap foot">
+    <span>© 2026 The Masked Marketers · GrowthOS</span>
+    <span>
+      <a href="https://app.themaskedmarketers.com">Log in</a>
+      &nbsp;·&nbsp;
+      <a href="https://app.themaskedmarketers.com/signup">Start free trial</a>
+    </span>
+  </div>
+</footer>
+
+</body>
+</html>

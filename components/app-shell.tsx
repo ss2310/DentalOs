@@ -98,6 +98,9 @@ const NAV: NavEntry[] = [
       { label: "Deep Audit", href: "/audit", Icon: SearchIcon },
     ],
   },
+  // Pricing must be findable without knowing /upgrade exists — plans, credit
+  // balances, and top-up packs all live there.
+  { label: "Plans & Credits", href: "/upgrade", Icon: UpgradeIcon, adminOnly: true },
   { label: "Settings", href: "/settings", Icon: SettingsIcon, adminOnly: true },
 ];
 

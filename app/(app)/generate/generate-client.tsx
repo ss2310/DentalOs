@@ -332,6 +332,12 @@ export function GenerateClient({
             >
               {creditsLeft}
             </p>
+            <Link
+              href="/upgrade"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Top up →
+            </Link>
           </div>
           <Link
             href="/history"
