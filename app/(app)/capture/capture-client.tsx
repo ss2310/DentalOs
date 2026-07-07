@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "@/components/toast";
 import { waLink } from "@/lib/whatsapp";
@@ -25,7 +24,6 @@ export function CaptureClient({
   treatments: string[];
   reviewUrl: string | null;
 }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   const [afterFile, setAfterFile] = useState<File | null>(null);
