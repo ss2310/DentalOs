@@ -7,15 +7,21 @@ import { PLATFORM_LABEL } from "../ui";
 
 const PLATFORMS = ["instagram", "facebook", "gbp"] as const;
 
+const OTHER = "__other__";
+
 export function NewPostClient({
+  topicGroups,
   suggestions,
   repurpose,
 }: {
-  suggestions: { social: string[]; seasonal: string[] };
+  topicGroups: Record<string, string[]>;
+  suggestions: { seasonal: string[] };
   repurpose: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const [topic, setTopic] = useState("");
+  const [group, setGroup] = useState("");
+  const [picked, setPicked] = useState(""); // dropdown-2 value ("" | topic | OTHER)
   const [sourceContentId, setSourceContentId] = useState("");
   const [platforms, setPlatforms] = useState<string[]>(["instagram", "facebook"]);
   const [carousel, setCarousel] = useState(false);
@@ -88,28 +94,69 @@ export function NewPostClient({
   return (
     <div className="mt-6 space-y-6">
       <div>
-        <label className="text-sm font-medium text-text-primary">Topic</label>
-        <input
-          value={topic}
+        <label className="text-sm font-medium text-text-primary">
+          What&apos;s the post about?
+        </label>
+
+        {/* Level 1: treatment / theme */}
+        <select
+          value={group}
           onChange={(e) => {
-            setTopic(e.target.value);
+            setGroup(e.target.value);
+            setPicked("");
+            setTopic("");
             setSourceContentId("");
           }}
-          placeholder="e.g. Winter teeth sensitivity"
-          className="mt-2 h-12 w-full rounded-button border border-border px-4 text-[15px] focus:outline-none"
-        />
-        {suggestions.social.length > 0 ? (
-          <>
-            <p className="mt-3 text-xs font-medium uppercase tracking-[0.08em] text-text-secondary">
-              Ideas
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {suggestions.social.slice(0, 5).map((s) =>
-                chip(s, topic === s, () => setTopic(s)),
-              )}
-            </div>
-          </>
+          className="mt-2 h-12 w-full rounded-button border border-border bg-white px-3 text-[15px] focus:outline-none"
+        >
+          <option value="">— pick a treatment or theme —</option>
+          {Object.keys(topicGroups).map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+          <option value={OTHER}>Other — my own topic</option>
+        </select>
+
+        {/* Level 2: curated topics within the treatment */}
+        {group && group !== OTHER ? (
+          <select
+            value={picked}
+            onChange={(e) => {
+              setPicked(e.target.value);
+              setTopic(e.target.value === OTHER ? "" : e.target.value);
+              setSourceContentId("");
+            }}
+            className="mt-2 h-12 w-full rounded-button border border-border bg-white px-3 text-[15px] focus:outline-none"
+          >
+            <option value="">— pick a topic —</option>
+            {(topicGroups[group] ?? []).map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+            <option value={OTHER}>Other — type my own</option>
+          </select>
         ) : null}
+
+        {/* Free text when "Other" at either level */}
+        {group === OTHER || picked === OTHER ? (
+          <input
+            value={topic}
+            onChange={(e) => {
+              setTopic(e.target.value);
+              setSourceContentId("");
+            }}
+            placeholder={
+              group !== OTHER && group
+                ? `Your own ${group} topic`
+                : "e.g. Winter teeth sensitivity"
+            }
+            autoFocus
+            className="mt-2 h-12 w-full rounded-button border border-border px-4 text-[15px] focus:outline-none"
+          />
+        ) : null}
+
         {suggestions.seasonal.length > 0 ? (
           <>
             <p className="mt-3 text-xs font-medium uppercase tracking-[0.08em] text-text-secondary">
@@ -117,7 +164,11 @@ export function NewPostClient({
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {suggestions.seasonal.slice(0, 5).map((s) =>
-                chip(s, topic === s, () => setTopic(s)),
+                chip(s, topic === s, () => {
+                  setTopic(s);
+                  setGroup("");
+                  setPicked("");
+                }),
               )}
             </div>
           </>

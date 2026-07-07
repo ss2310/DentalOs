@@ -25,10 +25,13 @@ export default async function NewSocialPostPage() {
 
   // "Use a captured moment": ONLY consent_type='review_and_social' moments are
   // queried — a review_only moment never reaches this page's props at all.
-  const [{ data: topics }, { data: recent }, { data: moments }] = await Promise.all([
+  // group_label arrives with migration 044; degrade to the flat list if it
+  // isn't applied yet (house fallback pattern).
+  const TOPIC_COLS = "bank, label, vertical, sort_order";
+  const [topicsRes, { data: recent }, { data: moments }] = await Promise.all([
     supabase
       .from("topic_suggestions")
-      .select("bank, label, vertical, sort_order")
+      .select(`${TOPIC_COLS}, group_label`)
       .in("bank", ["social", "occasion"])
       .eq("is_active", true)
       .is("clinic_id", null)
@@ -46,11 +49,37 @@ export default async function NewSocialPostPage() {
       .limit(6),
   ]);
 
+  const topics = topicsRes.error
+    ? (
+        await supabase
+          .from("topic_suggestions")
+          .select(TOPIC_COLS)
+          .in("bank", ["social", "occasion"])
+          .eq("is_active", true)
+          .is("clinic_id", null)
+          .order("sort_order")
+      ).data
+    : topicsRes.data;
+
+  type TopicRow = {
+    bank: string;
+    label: string;
+    vertical?: string | null;
+    group_label?: string | null;
+  };
   const resolved = resolveForVertical(
-    (topics ?? []) as { bank: string; label: string; vertical?: string | null }[],
+    (topics ?? []) as TopicRow[],
     vertical,
     (t) => `${t.bank}:${t.label}`,
   );
+
+  // Treatment → topics for the two-level picker (ungrouped rows fall under
+  // "General & Seasonal" so pre-044 data still renders).
+  const topicGroups: Record<string, string[]> = {};
+  for (const t of resolved.filter((r) => r.bank === "social")) {
+    const g = t.group_label ?? "General & Seasonal";
+    (topicGroups[g] ??= []).push(t.label);
+  }
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -87,8 +116,8 @@ export default async function NewSocialPostPage() {
       ) : null}
 
       <NewPostClient
+        topicGroups={topicGroups}
         suggestions={{
-          social: resolved.filter((t) => t.bank === "social").map((t) => t.label).slice(0, 8),
           seasonal: resolved.filter((t) => t.bank === "occasion").map((t) => t.label).slice(0, 8),
         }}
         repurpose={(recent ?? []).map((r) => ({
