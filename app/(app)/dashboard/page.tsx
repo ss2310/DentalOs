@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole, type UserRole } from "@/lib/roles";
 import {
   formatINR,
   formatDate,
@@ -10,7 +11,13 @@ import {
 } from "@/lib/format";
 import { POSITIVE_OUTCOMES } from "@/lib/recovery-badges";
 import { APPT_STATUS } from "@/app/(app)/appointments/status";
-import type { AppointmentStatus } from "@/lib/types";
+import type {
+  AppointmentStatus,
+  PatientOption,
+  RateCardOption,
+} from "@/lib/types";
+import { DashboardBookButton } from "./book-button";
+import { StatCard, StatGrid } from "@/components/page";
 
 export const dynamic = "force-dynamic";
 
@@ -38,28 +45,6 @@ function firstOfNextMonth(dateStr: string): string {
   const [y, m] = dateStr.split("-").map(Number);
   const d = new Date(Date.UTC(y, m, 1)); // m is 1-based → month index m = next month
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function StatCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div className="rounded-card border border-border bg-white p-5">
-      <p className="text-sm text-text-secondary">{label}</p>
-      <p
-        className="mt-1 text-2xl font-semibold text-text-primary"
-        style={color ? { color } : undefined}
-      >
-        {value}
-      </p>
-    </div>
-  );
 }
 
 type ActionRow = {
@@ -119,6 +104,14 @@ type ActivityRow = {
   patient: { full_name: string } | null;
 };
 
+type FollowupRow = {
+  id: string;
+  description: string;
+  due_date: string | null;
+  patient_id: string | null;
+  patient: { full_name: string } | null;
+};
+
 export default async function DashboardPage() {
   const supabase = createClient();
   const {
@@ -148,10 +141,14 @@ export default async function DashboardPage() {
     thinkingRes,
     scheduleRes,
     activityRes,
+    patientRes,
+    rateCardRes,
+    satisfactionRes,
+    followupRes,
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("full_name")
+      .select("full_name, role")
       .eq("id", user?.id ?? "")
       .maybeSingle(),
     supabase.from("clinics").select("business_name, doctor_name").single(),
@@ -224,6 +221,36 @@ export default async function DashboardPage() {
       .select("id, type, sent_at, patient:patient_id(full_name)")
       .order("sent_at", { ascending: false })
       .limit(5),
+    // For the Book Appointment quick action
+    supabase
+      .from("patients")
+      .select("id, full_name, whatsapp_number, phone")
+      .order("full_name", { ascending: true }),
+    supabase
+      .from("rate_cards")
+      .select("id, treatment_name")
+      .eq("is_active", true)
+      .order("treatment_name", { ascending: true }),
+    // Patient satisfaction: answered surveys over the last ~60 days. This month's
+    // rows drive the average + count; any unhandled 1–3 across the window is the
+    // red flag that a complaint still needs a call.
+    supabase
+      .from("survey_responses")
+      .select("score, responded_at, notification:notification_id(status)")
+      .not("responded_at", "is", null)
+      .gte("responded_at", `${addDays(today, -60)}T00:00:00`),
+    // Open follow-up tasks that are due (materialized from confirmed voice
+    // notes). Surfaced in the morning briefing so this is the ONE place staff
+    // act on them — there's no separate follow-ups page to duplicate.
+    supabase
+      .from("followup_tasks")
+      .select(
+        "id, description, due_date, patient_id, patient:patient_id(full_name)",
+      )
+      .eq("status", "open")
+      .or(`due_date.lte.${today},due_date.is.null`)
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .limit(50),
   ]);
 
   // Prefer the logged-in user's own name; fall back to the clinic's doctor
@@ -234,6 +261,13 @@ export default async function DashboardPage() {
   const firstName =
     nameSource.replace(/^dr\.?\s+/i, "").split(" ")[0] || "there";
   const clinicName = clinicRes.data?.business_name ?? "";
+  const doctorName = clinicRes.data?.doctor_name ?? "";
+  // Owner/doctor see the money headlines; receptionists get the operational two.
+  const showBusiness = isAdminRole(
+    (profileRes.data?.role as UserRole | undefined) ?? null,
+  );
+  const patients = (patientRes.data as PatientOption[]) ?? [];
+  const rateCards = (rateCardRes.data as RateCardOption[]) ?? [];
 
   const apptToday = apptTodayRes.count ?? 0;
   const pipelineValue = ((pipelineRes.data as { plan_value: string }[]) ?? []).reduce(
@@ -256,6 +290,28 @@ export default async function DashboardPage() {
   const followUps = thinkingRows.length;
   const followUpValue = thinkingRows.reduce((s, r) => s + Number(r.plan_value), 0);
 
+  // Patient satisfaction (last ~60 days of answered surveys).
+  const surveyRows =
+    (satisfactionRes.data as unknown as {
+      score: number | null;
+      responded_at: string | null;
+      notification: { status: string } | null;
+    }[]) ?? [];
+  const monthScores = surveyRows
+    .filter((r) => (r.responded_at ?? "").slice(0, 7) === today.slice(0, 7))
+    .map((r) => r.score)
+    .filter((n): n is number => n != null);
+  const avgSatisfaction =
+    monthScores.length > 0
+      ? (monthScores.reduce((a, b) => a + b, 0) / monthScores.length).toFixed(1)
+      : null;
+  const unhandledLow = surveyRows.filter(
+    (r) =>
+      r.score != null &&
+      r.score <= 3 &&
+      r.notification?.status !== "acted_on",
+  ).length;
+
   const actions: ActionRow[] = [
     {
       emoji: "📩",
@@ -268,8 +324,8 @@ export default async function DashboardPage() {
       emoji: "⭐",
       count: reviewPending,
       text: `${reviewPending} review requests pending`,
-      href: "/appointments",
-      color: "#2563EB",
+      href: "/reviews",
+      color: "#0D9488",
     },
     {
       emoji: "🔄",
@@ -290,9 +346,9 @@ export default async function DashboardPage() {
     {
       emoji: "📅",
       count: recallsDue,
-      text: `${recallsDue} recalls due this week`,
+      text: `${recallsDue} check-ups due this week`,
       href: "/recalls",
-      color: "#2563EB",
+      color: "#0D9488",
     },
     {
       emoji: "💼",
@@ -303,38 +359,112 @@ export default async function DashboardPage() {
     },
   ];
 
+  const followupTasks = (followupRes.data as unknown as FollowupRow[]) ?? [];
+  const followupsDue = followupTasks.length;
+  if (followupsDue > 0) {
+    actions.push({
+      emoji: "📝",
+      count: followupsDue,
+      text: `${followupsDue} follow-up${followupsDue === 1 ? "" : "s"} due`,
+      href: "/dashboard#followups",
+      color: "#0D9488",
+    });
+  }
+
   const schedule = (scheduleRes.data as unknown as ScheduleRow[]) ?? [];
   const activity = (activityRes.data as unknown as ActivityRow[]) ?? [];
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-text-primary">
-        {greetingFor(hour)}, {firstName}
-      </h1>
-      <p className="mt-1 text-sm text-text-secondary">
-        {clinicName ? `${clinicName} · ` : ""}
-        {formatDate(today)}
-      </p>
-
-      {/* Stat cards */}
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Appointments Today" value={String(apptToday)} />
-        <StatCard
-          label="Pipeline Value"
-          value={formatINR(pipelineValue)}
-          color="#059669"
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-[26px] font-semibold tracking-tight text-text-primary">
+            {greetingFor(hour)}, {firstName}
+          </h1>
+          <p className="mt-1 text-sm text-text-secondary">
+            {clinicName ? `${clinicName} · ` : ""}
+            {formatDate(today)}
+          </p>
+        </div>
+        <DashboardBookButton
+          patients={patients}
+          rateCards={rateCards}
+          defaultDate={today}
+          defaultDoctor={doctorName}
         />
+      </div>
+
+      {/* Stat cards — the day's headline metric leads in solid brand teal */}
+      <StatGrid cols={4}>
+        <StatCard label="Appointments Today" value={String(apptToday)} hero />
+        {showBusiness ? (
+          <StatCard
+            label="Plan Value"
+            value={formatINR(pipelineValue)}
+            tone="success"
+          />
+        ) : null}
         <StatCard
           label="Outstanding"
           value={formatINR(outstandingTotal)}
-          color={outstandingTotal > 0 ? "#DC2626" : undefined}
+          tone={outstandingTotal > 0 ? "danger" : "default"}
         />
-        <StatCard
-          label="Recovered This Month"
-          value={formatINR(recoveredMonth)}
-          color="#059669"
-        />
-      </div>
+        {showBusiness ? (
+          <StatCard
+            label="Recovered This Month"
+            value={formatINR(recoveredMonth)}
+            tone="success"
+          />
+        ) : null}
+        <Link
+          href="/reviews"
+          className={`block rounded-card border bg-white p-5 shadow-card transition-colors hover:bg-subtle ${
+            unhandledLow > 0 ? "border-danger/40" : "border-border"
+          }`}
+        >
+          <p className="text-sm font-medium text-text-secondary">
+            Patient Satisfaction
+          </p>
+          <p
+            className={`mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.02em] ${
+              unhandledLow > 0 ? "text-danger" : "text-text-primary"
+            }`}
+          >
+            {avgSatisfaction ? `${avgSatisfaction} ★` : "—"}
+          </p>
+          <p
+            className={`mt-2 text-sm ${
+              unhandledLow > 0 ? "font-medium text-danger" : "text-text-secondary"
+            }`}
+          >
+            {unhandledLow > 0
+              ? `${unhandledLow} unhappy — call now`
+              : `${monthScores.length} response${
+                  monthScores.length === 1 ? "" : "s"
+                } this month`}
+          </p>
+        </Link>
+      </StatGrid>
+
+      {/* Deep Audit entry — owner/doctor only */}
+      {showBusiness ? (
+        <Link
+          href="/audit"
+          className="mt-6 flex items-center justify-between gap-3 rounded-card border border-border bg-white p-5 shadow-card transition-colors hover:bg-subtle"
+        >
+          <div className="min-w-0">
+            <p className="text-[15px] font-medium text-text-primary">
+              Deep Audit — beat your local competitors
+            </p>
+            <p className="mt-0.5 text-sm text-text-secondary">
+              See what your top rivals do better and get a 30-day catch-up plan.
+            </p>
+          </div>
+          <span aria-hidden className="shrink-0 text-primary">
+            →
+          </span>
+        </Link>
+      ) : null}
 
       {/* Actions needed */}
       <h2 className="mt-8 text-sm font-medium uppercase tracking-wide text-text-secondary">
@@ -343,6 +473,54 @@ export default async function DashboardPage() {
       <div className="mt-3">
         <ActionsNeeded rows={actions} />
       </div>
+
+      {/* Follow-ups due — materialized from confirmed voice notes. Only shown
+          when there's something to act on, so non-voice clinics see nothing. */}
+      {followupsDue > 0 ? (
+        <div id="followups" className="mt-8 scroll-mt-20">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
+              Follow-ups Due
+            </h2>
+            <Link
+              href="/notes"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              All notes →
+            </Link>
+          </div>
+          <div className="mt-3 rounded-card border border-border bg-white">
+            {followupTasks.slice(0, 6).map((f, i) => {
+              const overdue = Boolean(f.due_date && f.due_date < today);
+              return (
+                <Link
+                  key={f.id}
+                  href={f.patient_id ? `/patients/${f.patient_id}` : "/notes"}
+                  className={`flex items-center gap-3 px-4 py-3 hover:bg-subtle ${
+                    i > 0 ? "border-t border-border" : ""
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] text-text-primary">
+                      {f.description}
+                    </p>
+                    <p className="truncate text-sm text-text-secondary">
+                      {f.patient?.full_name ?? "General note"}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 text-sm ${
+                      overdue ? "font-medium text-danger" : "text-text-secondary"
+                    }`}
+                  >
+                    {f.due_date ? formatDate(f.due_date) : "No date"}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Mini schedule */}

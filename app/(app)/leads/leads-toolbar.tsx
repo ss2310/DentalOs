@@ -60,7 +60,7 @@ export function LeadsToolbar() {
 
   return (
     <div className="flex items-center justify-between gap-3">
-      <h1 className="text-2xl font-semibold text-text-primary">Leads</h1>
+      <h1 className="text-2xl font-semibold text-text-primary">Enquiries</h1>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -135,7 +135,7 @@ export function LeadsToolbar() {
               value={interest}
               onChange={(e) => setInterest(e.target.value)}
               className={inputClass}
-              placeholder="e.g. Braces, Implant"
+              placeholder="e.g. their main treatment of interest"
             />
           </div>
 

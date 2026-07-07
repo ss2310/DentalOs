@@ -45,7 +45,6 @@ export function buildWaActions(
   const number = a.patient?.whatsapp_number ?? "";
   const time = formatTime(a.appointment_time);
   const clinicPhone = clinic.phone ? `+91 ${clinic.phone}` : "";
-  const reviewUrl = clinic.google_review_url ?? "";
 
   const activeStatus = a.status === "scheduled" || a.status === "confirmed";
   const isTomorrow = a.appointment_date === tomorrow;
@@ -119,22 +118,8 @@ export function buildWaActions(
     out.push({ kind: "recover_noshow", label: "Recovery", state: "sent" });
   }
 
-  // 5. Request review — completed visit.
-  if (a.status === "completed") {
-    if (a.review_requested) {
-      out.push({ kind: "review", label: "Request Review", state: "sent" });
-    } else if (number) {
-      out.push({
-        kind: "review",
-        label: "Request Review",
-        state: "available",
-        url: waLink(
-          number,
-          `Hi ${name} ji, aapka visit accha raha 😊\nAgar experience accha laga, toh 30 seconds mein review dein:\n🔗 ${reviewUrl}\nShukriya! 🙏`,
-        ),
-      });
-    }
-  }
+  // Review requests are handled entirely on the dedicated /reviews page, not on
+  // appointment cards (kept off here to reduce clutter).
 
   return out;
 }

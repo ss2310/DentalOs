@@ -26,5 +26,13 @@ export function createAdminClient() {
       autoRefreshToken: false,
       persistSession: false,
     },
+    // Next.js caches `fetch` GETs by default, which makes PostgREST SELECTs
+    // return stale snapshots when the same row is re-read within a request
+    // (e.g. the audit pipeline re-reading a run between stages). Force no-store
+    // so every read hits the DB — this client is server-only trusted code.
+    global: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+        fetch(input, { ...init, cache: "no-store" }),
+    },
   });
 }

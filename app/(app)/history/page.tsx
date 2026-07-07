@@ -7,13 +7,25 @@ export const dynamic = "force-dynamic";
 export default async function HistoryPage() {
   const supabase = createClient();
 
-  const { data } = await supabase
+  const BASE =
+    "id, topic, tone_used, generated_copy, schema_markup, status, published_date, created_at, post:post_type_id(name, platform)";
+
+  // citable_mode lands with migration 009; fall back gracefully if it isn't
+  // applied yet so /history never breaks.
+  const primary = await supabase
     .from("generated_content")
-    .select(
-      "id, topic, tone_used, generated_copy, schema_markup, status, published_date, created_at, post:post_type_id(name, platform)",
-    )
+    .select(`${BASE}, citable_mode`)
     .order("created_at", { ascending: false })
     .limit(100);
+  const data = primary.error
+    ? (
+        await supabase
+          .from("generated_content")
+          .select(BASE)
+          .order("created_at", { ascending: false })
+          .limit(100)
+      ).data
+    : primary.data;
 
   const rows = (data as unknown as HistoryRow[]) ?? [];
 

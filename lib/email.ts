@@ -5,7 +5,20 @@ import { Resend } from "resend";
 // component. Sending is best-effort: if the keys aren't set (e.g. local dev)
 // or the send fails, we log and move on so it never blocks the user's flow.
 
-const BRAND = "#2563EB";
+const BRAND = "#0D9488";
+
+// SEC-H3: user-supplied names (clinic / doctor) are interpolated into the
+// email HTML — escape them so a name like `<img onerror=…>` can't inject
+// markup into the message. The subject is a plain-text header, not HTML, so
+// it doesn't need this.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 export async function sendWelcomeEmail(opts: {
   to: string;
@@ -20,9 +33,10 @@ export async function sendWelcomeEmail(opts: {
   }
 
   const { to, clinicName, doctorName } = opts;
-  const greetingName = doctorName?.trim()
-    ? doctorName.replace(/^dr\.?\s+/i, "").trim()
-    : "there";
+  const greetingName = escapeHtml(
+    doctorName?.trim() ? doctorName.replace(/^dr\.?\s+/i, "").trim() : "there",
+  );
+  const safeClinicName = escapeHtml(clinicName ?? "");
 
   // Link to the real app when configured; omit the button otherwise (a link
   // whose domain doesn't match the sender hurts deliverability).
@@ -39,7 +53,7 @@ export async function sendWelcomeEmail(opts: {
     <div style="border:1px solid #E5E7EB;border-radius:12px;padding:24px">
       <h1 style="font-size:20px;margin:0 0 12px">Welcome, Dr. ${greetingName}! 🦷</h1>
       <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 12px">
-        Your clinic <strong>${clinicName}</strong> is all set up on GrowthOS — your all-in-one
+        Your clinic <strong>${safeClinicName}</strong> is all set up on GrowthOS — your all-in-one
         system for appointments, billing, recalls, revenue recovery, and AI marketing content.
       </p>
       <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 20px">

@@ -1,113 +1,142 @@
-# GrowthOS — Handoff
+# HANDOFF — GrowthOS
 
-Snapshot of the project so a new session (or person) can pick up without this
-chat. Read `CLAUDE.md` first (permanent rules), then this, then `TESTING.md`
-(manual test checklists per feature).
+Read `CLAUDE.md` first (permanent rules), then this, then `TESTING.md` (manual
+checklists per feature).
 
-_Last updated: 2026-07-03._
+Last updated: **end of the subscriptions + lifecycle + super-admin session**.
+Branch: **`growth-features-serp`** (not pushed, not merged to `main`).
 
 ---
 
-## 1. What GrowthOS is
-Multi-tenant SaaS for Indian dental clinics: (1) practice management — patients,
-appointments, billing, treatment pipeline, recalls, leads, revenue recovery; and
-(2) AI marketing content generation. Users are clinic receptionists/doctors on
-Android Chrome + desktop. Stack: Next.js 14 (App Router) + TypeScript + Tailwind,
-Supabase (Postgres + Auth + RLS), Claude API (server-side only), Vercel hosting.
+## 0. TL;DR — what this arc shipped
 
-Every table has `clinic_id`; every query is clinic-scoped and enforced by
-Supabase RLS. See `CLAUDE.md` for the design system and non-negotiable rules.
+The whole **billing / subscription / admin** layer, on top of the earlier
+schema (019). All `tsc --noEmit` + `next lint` clean; dev server boots; admin
+routes 404 correctly when unauthenticated.
 
-## 2. Where the code lives
-- GitHub: **https://github.com/ss2310/DentalOs** (branch `main`).
-- Not yet deployed to Vercel.
-- Local: `C:\Users\Utsav Goyal\Documents\GrowthOS`.
+1. **Credit engine (020)** — atomic spend/refund/grant over
+   `content_credits_balance` / `map_credits_balance` + `credit_ledger`.
+2. **Trial init on signup** + **all paid paths rewired** onto the balance model.
+3. **Access gating** (deactivated→/upgrade, expired-trial→past_due banner) +
+   **/upgrade** page + **Settings→Billing** tab + **manual checkout** provider.
+4. **Lifecycle automation (021)** — daily pg_cron `run_subscription_lifecycle()`
+   (trial reminders → past_due → deactivated) + admin dunning list.
+5. **Super-admin dashboard (022)** — overview, rich clinics table, clinic detail
+   with audited admin actions (activate / grant / extend / change plan /
+   deactivate-reactivate).
 
-## 3. Features built (high level)
-Auth + app shell; Patients; Appointments (+ 5 WhatsApp actions, inline
-new-patient, cancelled/rescheduled hiding); Visit Log; Billing; Pipeline;
-Recalls; Leads. Then, this build phase:
-- **Notifications** — header bell + `/notifications` (per-user unread counter),
-  every creation point increments the counter via `create_notification()`.
-- **Scheduled jobs (pg_cron, in-database)** — morning briefing (7 AM IST) and
-  weekly maintenance (Sun 00:00 IST). NOT Edge Functions; they run inside
-  Supabase Postgres, independent of Vercel.
-- **Operations dashboard** (`/dashboard`) and **Revenue Recovery dashboard**
-  (`/recovery`, in sidebar).
-- **Content Studio** (`/generate` + `/history`) — 10 post types, Claude called
-  ONLY from `app/api/generate/route.ts` (model `claude-sonnet-4-6`), server-only
-  key. Credits charged **per generation**; hard char limits enforced in code.
-- **Settings** (`/settings`) — Clinic Info + Rate Card management.
-- **Treatment Plan Presenter** — on patient detail; build a plan, send via
-  WhatsApp (`treatment_plans` table).
-- **Password reset** (`/forgot-password`, `/reset-password`, `/auth/callback`)
-  and **Resend welcome email** on signup.
+---
 
-## 4. Database — migrations to run (Supabase SQL Editor, in order)
-1. `001_init.sql` — schema + RLS + triggers.
-2. `002_log_visit.sql` — `log_visit()` (review-notification block removed; re-run
-   if you applied an older copy).
-3. `003_record_payment.sql` — `record_payment()`.
-4. `004_notifications.sql` — notification/read helpers + `run_morning_briefing()`
-   / `run_weekly_maintenance()` + pg_cron schedules. **Enable the `pg_cron`
-   extension first** (Database → Extensions), then run this file.
-5. `005_seed_post_types.sql` — seeds the 10 Content Studio templates (upsert;
-   safe to re-run to refresh templates).
-6. `006_treatment_plans.sql` — `treatment_plans` table + RLS.
+## 1. ⚠️ CRITICAL — migration + commit state
 
-Optional: `supabase/seed_demo.sql` — realistic demo data for ONE clinic (set the
-clinic UUID or owner email at the top; run once).
+**Migrations are applied MANUALLY in the Supabase SQL editor, in order, idempotent.**
 
-## 5. Environment variables
-Local `.env.local` (git-ignored) and Vercel → Settings → Environment Variables:
+| # | File | Applied? | Notes |
+|---|---|---|---|
+| 014 | `014_profile_escalation_lockdown.sql` | ❌ **NOT applied** | **BREAKS NEW SIGNUPS** — see §2. |
+| 016–019 | survey / upi / admin / subs schema | ✅ | |
+| 020 | `020_credit_engine.sql` | ✅ | credit engine |
+| 021 | `021_subscription_lifecycle.sql` | ✅ | pg_cron lifecycle |
+| 022 | `022_admin_dashboard.sql` | ❓ **verify** | admin functions — apply if not done |
 
-| Var | Purpose | Exposure |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | public |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key | public |
-| `SUPABASE_SERVICE_ROLE_KEY` | signup admin writes | server only |
-| `ANTHROPIC_API_KEY` | Content Studio | server only |
-| `RESEND_API_KEY` | transactional email | server only |
-| `RESEND_FROM` | e.g. `GrowthOS <no-reply@yourdomain.com>` (verified domain) | server only |
-| `APP_URL` | your public URL, for the welcome-email button | server only |
+**Commits on `growth-features-serp`:**
+- `0f6de2f` — subscriptions & credit engine + prior branch bundle
+- `25ca3c3` — trial/subscription lifecycle automation (021)
+- **UNCOMMITTED:** the entire **super-admin dashboard** (022 + `/admin` overview,
+  clinics table, clinic detail + actions, sidebar link). Commit when ready.
 
-After editing `.env.local`, **restart `npm run dev`** — env is read only at boot.
+---
 
-## 6. Supabase dashboard config (one-time)
-- **pg_cron**: Database → Extensions → enable, then run `004`. Verify:
-  `select jobname, schedule from cron.job;` → `morning-briefing` `30 1 * * *`,
-  `weekly-maintenance` `30 18 * * 6` (UTC).
-- **Email SMTP** (for password-reset emails, sent by Supabase): Authentication →
-  Emails → SMTP → host `smtp.resend.com`, port `465`, user `resend`, password =
-  Resend API key, sender on the verified domain.
-- **Redirect URLs**: Authentication → URL Configuration → add
-  `http://localhost:3000/auth/callback` and `https://<vercel-domain>/auth/callback`;
-  set Site URL.
+## 2. ⚠️ TWO OPEN BUGS (do these first)
 
-## 7. Deploy to Vercel (not done yet)
-1. vercel.com → Sign up with GitHub → New Project → import `ss2310/DentalOs`.
-2. Add all env vars from §5 (before first deploy).
-3. Deploy → get `*.vercel.app` URL → add it to Supabase Redirect URLs + Site URL
-   + set `APP_URL`.
-Production branch is `main`. pg_cron jobs run regardless of Vercel.
+1. **Migration 014 is not applied → every new signup becomes a `receptionist`
+   with `home_clinic_id = null`**, so they see none of the `adminOnly` nav
+   (Marketing/Settings). The app already passes role via `app_metadata`, but the
+   live `handle_new_user` trigger still reads `user_metadata`. **Fix: run
+   `014_profile_escalation_lockdown.sql`.** (Verified by test: an app_metadata-only
+   user comes out `receptionist`.)
+2. **One already-broken account** — clinic `Dr. Mahima's Dental Care`
+   (`f3fdaf45-1b8b-4315-b4ff-e4c49c89b0bd`), owner profile
+   `41fad936-a65a-4042-a0c3-ac1981ac819b` — needs a one-line repair:
+   ```sql
+   update profiles set role='clinic_owner',
+     home_clinic_id='f3fdaf45-1b8b-4315-b4ff-e4c49c89b0bd'
+   where id='41fad936-a65a-4042-a0c3-ac1981ac819b';
+   ```
 
-## 8. Known issues / caveats
-- **Emails land in spam** — add a DMARC DNS record and confirm SPF/DKIM are green
-  in Resend; new-domain reputation improves with time. (SPF/DKIM auto-set on
-  domain verify; DMARC is manual.)
-- **Signup pre-confirms email** (`email_confirm: true` in
-  `app/signup/actions.ts`) so test clinics are instant. Before real launch: turn
-  ON "Confirm email" in Supabase AND remove that flag (dashboard toggle alone
-  won't enforce it for admin-created users). See TESTING.md "Deploy checklist".
-- **No payments/billing system** — so no billing/subscription emails. That's a
-  separate feature (Stripe/Razorpay) if/when needed.
-- **Lead "Contact"** doesn't write an interaction row (`interactions.patient_id`
-  is NOT NULL and a lead has no patient yet).
-- Many authenticated write flows are verified by type-check + code review, not
-  all clicked through live. `npx tsc --noEmit` is clean.
+Super-admin account for testing: **dashingdude2310@gmail.com** (`is_super_admin=true`).
+Reach the panel at the **absolute** URL `/admin` (a relative `admin` from
+`/dashboard` 404s — now also fixed by the sidebar link).
 
-## 9. Suggested next steps
-1. Deploy to Vercel (§7) and wire the production URL into Supabase + `APP_URL`.
-2. Fix email deliverability (DMARC).
-3. Walk the TESTING.md checklists on the live site, top to bottom.
-4. Decide on payments (enables billing emails) when ready.
+---
+
+## 3. Key architecture / gotchas
+
+- **Ledger naming:** the balance-model ledger is **`credit_ledger`** (019/020).
+  015's `credit_transactions` (reserve/refund) is a DIFFERENT, older table, left
+  untouched. Prompts often say "credit_transactions" meaning the new ledger.
+- **Credit spend** (`lib/credits.ts` → `spend_credits` RPC): atomic, clinic
+  derived server-side from `current_clinic_id()` (never a client-passed id).
+  Spend-before + refund-on-failure. Content paths → `content` credits; rank scan
+  + prospect audit → `map` credits (1 per scan, in addition to the 015 SERP cap).
+- **Admin security model:** `is_super_admin` checked server-side on every request
+  (`lib/admin/auth.ts`: `requireSuperAdmin`/`requireAdminContext`), middleware
+  404s `/admin` + `/api/admin` for non-admins, service-role client handed out
+  ONLY after re-check, all cross-tenant writes go through **service-role-only
+  SECURITY DEFINER `admin_*` functions** (022) that each write `billing_events`
+  with `actor`, plus a `writeAudit()` → `admin_audit` row. Normal clinic RLS is
+  never loosened. Admin accent is **indigo** (`#4F46E5`), not teal.
+- **Lifecycle (021):** pg_cron SQL (NOT an Edge Function), `45 1 * * *` UTC =
+  7:15 AM IST. Tunables (reminder offsets `[7,2,0]`, `GRACE_DAYS=3`) are
+  constants atop `run_subscription_lifecycle()`. WhatsApp can't be sent from
+  cron → owner outreach is one-tap `wa.me` links in the admin dunning list.
+- **MRR** = Σ active clinics' plan `price_inr`. Plans seed at **₹0**, so MRR reads
+  ₹0 until prices are set (see §4). All the math is already correct.
+- **Windows/Git Bash:** quote paths with `(app)` and `[id]`. One dev server per
+  repo (shared `.next`). Preview server: use `.claude/launch.json` `dev`.
+
+---
+
+## 4. What's NEXT (suggested)
+
+- **Run migration 014 + repair the broken profile** (§2). Highest priority.
+- **Commit** the super-admin dashboard; verify 022 is applied.
+- **Admin: set plan + pack prices** (the `plans`/`credit_packs` catalogs; RLS
+  already allows super-admin writes) — unblocks real MRR + checkout amounts.
+- **Billing provider integration** (razorpay/cashfree) — adapters stub-ready in
+  `lib/billing/`; wire `startCheckout` redirect + a webhook that calls
+  `confirm_billing_event`. Then flip a clinic's `billing_provider`.
+- **Email**: Resend seams are marked per stage in `run_subscription_lifecycle()`
+  and could also attach to the admin actions. Currently WhatsApp + in-app only.
+- **Feature flags** are stored (`clinics.feature_flags`) but NOT enforced anywhere.
+- Carried-forward infra: leaked-password protection + disable public email
+  sign-ups (Supabase Auth toggles); `place_id` capture for Map-Rank; touch-drag
+  on the pipeline board; shared-store rate limiter (Upstash).
+
+---
+
+## 5. Verification status
+
+- ✅ `tsc --noEmit` + `next lint` clean across the whole arc.
+- ✅ Admin routes 404 unauthenticated (middleware gate); all routes compile.
+- ❌ **No logged-in click-through of the admin actions** in this env — needs a
+  real super-admin pass once 022 is applied. `TESTING.md` has the security-first
+  checklist (deny cases before happy paths) for every admin action + lifecycle
+  transition + credit path.
+
+---
+
+## 6. File map (this arc, by area)
+
+- **Credits/subs:** `lib/credits.ts`, `lib/subscription.ts`,
+  `lib/subscription-messages.ts`, `lib/billing/*`, `app/(app)/upgrade/*`,
+  `app/(app)/settings/billing-tab.tsx`, migrations `020`/`021`/`022`.
+- **Admin:** `lib/admin/*`, `app/admin/*` (overview `page.tsx`, `admin-nav.tsx`,
+  `clinics/{page,clinics-table}.tsx`, `clinics/[id]/{page,admin-actions}.tsx`,
+  `clinics/actions.ts`, `subscriptions/*`).
+- **Shared/gating:** `lib/supabase/middleware.ts`, `app/(app)/layout.tsx`,
+  `components/app-shell.tsx` (Upgrade + past_due banner + super-admin Admin link),
+  `components/icons.tsx`, `app/signup/*`.
+- Paid-path rewires: `app/api/generate/route.ts`,
+  `app/(app)/generate/landing-actions.ts`, `app/(app)/campaigns/actions.ts`,
+  `app/(app)/reviews/actions.ts`, `app/(app)/rank/*`, `app/(app)/prospect/actions.ts`.

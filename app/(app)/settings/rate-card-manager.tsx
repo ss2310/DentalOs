@@ -284,7 +284,7 @@ export function RateCardManager({ rateCards }: { rateCards: RateCard[] }) {
               onChange={(e) =>
                 setForm((f) => ({ ...f, treatment_name: e.target.value }))
               }
-              placeholder="e.g. Root Canal (Single Sitting)"
+              placeholder="e.g. Consultation"
             />
           </div>
           <div>
@@ -295,7 +295,7 @@ export function RateCardManager({ rateCards }: { rateCards: RateCard[] }) {
               onChange={(e) =>
                 setForm((f) => ({ ...f, category: e.target.value }))
               }
-              placeholder="e.g. Endodontics"
+              placeholder="e.g. category (optional)"
             />
           </div>
           <div>

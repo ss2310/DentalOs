@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getUserRole, isAdminRole } from "@/lib/roles";
 
 export type SaveState = { ok?: boolean; error?: string };
 
@@ -17,10 +18,17 @@ export async function saveContent(input: {
   toneUsed: string;
   content: string;
   schema: string | null;
+  citable?: boolean;
 }): Promise<SaveState> {
   const content = input.content.trim();
   if (!input.postTypeId || !content) {
     return { error: "Nothing to save." };
+  }
+
+  // SEC-M5: content generation is owner/doctor only. The page hides it from
+  // receptionists; guard the action too so a crafted request can't slip past.
+  if (!isAdminRole(await getUserRole())) {
+    return { error: "This action requires an owner or doctor account." };
   }
 
   const supabase = createClient();
@@ -43,16 +51,31 @@ export async function saveContent(input: {
 
   const cost = post.credits_cost ?? 0;
 
-  const { error: insertError } = await supabase.from("generated_content").insert({
+  const base = {
     clinic_id: profile.home_clinic_id,
     post_type_id: input.postTypeId,
     topic: input.topic.trim() || null,
     tone_used: input.toneUsed || null,
     generated_copy: content,
     schema_markup: input.schema,
-    status: "draft",
+    status: "draft" as const,
     credits_deducted: cost,
-  });
+  };
+
+  // citable_mode arrives with migration 009; if it isn't applied yet, retry the
+  // insert without it so saving never breaks.
+  let { error: insertError } = await supabase
+    .from("generated_content")
+    .insert({ ...base, citable_mode: input.citable ?? false });
+  if (
+    insertError &&
+    (insertError.code === "PGRST204" ||
+      /citable_mode/i.test(insertError.message ?? ""))
+  ) {
+    ({ error: insertError } = await supabase
+      .from("generated_content")
+      .insert(base));
+  }
   if (insertError) return { error: "Could not save. Please try again." };
 
   revalidatePath("/history");

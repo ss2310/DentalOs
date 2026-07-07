@@ -7,6 +7,7 @@ import { toast } from "@/components/toast";
 import { WhatsAppIcon } from "@/components/icons";
 import { formatDate } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
+import { upiMessage } from "@/lib/upi";
 import { createTreatmentPlan, markPlanSent } from "./treatment-plan-actions";
 
 type PlanRateCard = { id: string; treatment_name: string; base_price: string };
@@ -42,6 +43,7 @@ export function TreatmentPlans({
   doctorName,
   clinicName,
   clinicPhone,
+  upiId,
   rateCards,
   plans,
 }: {
@@ -51,6 +53,7 @@ export function TreatmentPlans({
   doctorName: string;
   clinicName: string;
   clinicPhone: string;
+  upiId: string | null;
   rateCards: PlanRateCard[];
   plans: SavedPlan[];
 }) {
@@ -58,6 +61,8 @@ export function TreatmentPlans({
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [planName, setPlanName] = useState("");
+  // Editable advance amount per plan (defaults to the plan total).
+  const [advance, setAdvance] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<ItemRow[]>([
     { key: 1, treatmentId: "", cost: "" },
   ]);
@@ -130,6 +135,32 @@ export function TreatmentPlans({
     );
   }
 
+  // Advance amount for a plan — the user's edit, or the plan total by default.
+  function advanceValue(plan: SavedPlan): string {
+    return advance[plan.id] ?? String(Math.round(Number(plan.total_cost) || 0));
+  }
+
+  function requestUpi(plan: SavedPlan) {
+    if (!upiId) return;
+    if (!patientWhatsapp) {
+      toast("This patient has no WhatsApp number.");
+      return;
+    }
+    const amount = Number(advanceValue(plan));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast("Enter a valid amount.");
+      return;
+    }
+    window.open(
+      waLink(
+        patientWhatsapp,
+        upiMessage({ name: patientName, amount, upiId, clinicName }),
+      ),
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }
+
   function send(plan: SavedPlan) {
     if (!patientWhatsapp) {
       toast("This patient has no WhatsApp number.");
@@ -191,7 +222,7 @@ export function TreatmentPlans({
                 ))}
               </div>
 
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 {plan.sent_to_patient ? (
                   <span className="inline-flex h-11 items-center text-sm font-medium text-success">
                     ✓ Sent
@@ -207,6 +238,37 @@ export function TreatmentPlans({
                     Send to Patient
                   </button>
                 )}
+
+                {/* Advance collection via UPI — only when the clinic has a UPI id. */}
+                {upiId ? (
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-text-secondary">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        inputMode="numeric"
+                        value={advanceValue(plan)}
+                        onChange={(e) =>
+                          setAdvance((a) => ({ ...a, [plan.id]: e.target.value }))
+                        }
+                        aria-label="Advance amount"
+                        className="h-11 w-24 rounded-button border border-border pl-6 pr-2 text-[15px] text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className={`${btnBase} gap-1.5 border border-success/30 bg-success/5 text-success hover:bg-success/10`}
+                      disabled={!patientWhatsapp}
+                      onClick={() => requestUpi(plan)}
+                    >
+                      <WhatsAppIcon width={16} height={16} />
+                      Request via UPI
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}
@@ -224,7 +286,7 @@ export function TreatmentPlans({
               className={inputClass}
               value={planName}
               onChange={(e) => setPlanName(e.target.value)}
-              placeholder="e.g. Full mouth rehabilitation"
+              placeholder="e.g. Treatment plan"
             />
           </div>
 

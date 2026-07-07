@@ -30,6 +30,12 @@ export type PostType = {
   credits_cost: number;
   schema_template: string | null;
   extra_fields: ExtraFields | null;
+  // Which topic_suggestions bank feeds this type's Topic dropdown (migration
+  // 012). null / undefined = no suggestions (free-text topic only).
+  topic_bank?: string | null;
+  // Vertical this type is scoped to (migration 026). null/undefined = applies to
+  // all verticals. Resolved via lib/vertical → resolveForVertical.
+  vertical?: string | null;
 };
 
 export const TONES = ["Professional", "Friendly", "Warm"] as const;
@@ -60,11 +66,18 @@ export function fillTemplate(
 // Models can't count characters reliably, so we enforce the hard limits in
 // code after generation (see the spec's cheat-sheet).
 
-/** Web types that emit an inline JSON-LD schema block ("PART B — SCHEMA"). */
+/** Web types that emit an inline JSON-LD schema block ("PART B — SCHEMA").
+ *  Note: in AI-Citable mode the route also splits schema for any Website type,
+ *  since the citable block instructs schema emission for all of them. */
 export const SCHEMA_TYPES = new Set([
   "Service Page",
   "Geo Landing Page",
   "Blog Article with FAQ",
+  "City Dental Stats",
+  "Treatment Comparison",
+  "Clinician Guide (YMYL)",
+  "Dental Update / What's New",
+  "Question Answer Page",
 ]);
 
 /** Trims a string to `max` chars on a word boundary (no mid-word cuts). */

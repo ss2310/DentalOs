@@ -7,7 +7,11 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  // SEC-L3: only allow a same-site absolute PATH. Must start with a single "/"
+  // and not "//" (which would be protocol-relative → open redirect to another
+  // host). Anything else falls back to the dashboard.
+  const rawNext = searchParams.get("next") ?? "/dashboard";
+  const next = /^\/(?!\/)/.test(rawNext) ? rawNext : "/dashboard";
 
   if (code) {
     const supabase = createClient();

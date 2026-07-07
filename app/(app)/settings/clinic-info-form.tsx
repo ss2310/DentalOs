@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFormState } from "react-dom";
 import { useRouter } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
 import { toast } from "@/components/toast";
+import { LocationPicker } from "@/components/location-picker";
 import { updateClinic, type SettingsState } from "./actions";
 
 export type Clinic = {
@@ -17,6 +18,9 @@ export type Clinic = {
   google_review_url: string | null;
   instagram_handle: string | null;
   website_url: string | null;
+  upi_id: string | null;
+  default_lat: number | null;
+  default_lng: number | null;
 };
 
 const inputClass =
@@ -28,6 +32,12 @@ const initialState: SettingsState = {};
 export function ClinicInfoForm({ clinic }: { clinic: Clinic }) {
   const [state, formAction] = useFormState(updateClinic, initialState);
   const router = useRouter();
+  const [lat, setLat] = useState(
+    clinic.default_lat != null ? String(clinic.default_lat) : "",
+  );
+  const [lng, setLng] = useState(
+    clinic.default_lng != null ? String(clinic.default_lng) : "",
+  );
 
   useEffect(() => {
     if (state.ok) {
@@ -169,6 +179,45 @@ export function ClinicInfoForm({ clinic }: { clinic: Clinic }) {
             className={inputClass}
             placeholder="https://…"
           />
+        </div>
+
+        <div>
+          <label htmlFor="upi_id" className={labelClass}>
+            UPI ID
+          </label>
+          <input
+            id="upi_id"
+            name="upi_id"
+            defaultValue={clinic.upi_id ?? ""}
+            className={inputClass}
+            placeholder="clinicname@okhdfcbank"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <p className="mt-1.5 text-sm text-text-secondary">
+            Used to send patients a UPI payment link on WhatsApp from Payments.
+            Leave blank to hide the &quot;Request via UPI&quot; button.
+          </p>
+        </div>
+
+        {/* Clinic location — the single source of truth for Map Rank scans. */}
+        <div className="border-t border-border pt-4">
+          <label className={labelClass}>Clinic location</label>
+          <p className="mb-2 -mt-1 text-sm text-text-secondary">
+            Set this once — Map Rank scans centre on it, so you never enter
+            coordinates per keyword.
+          </p>
+          <LocationPicker
+            lat={lat}
+            lng={lng}
+            onChange={(a, b) => {
+              setLat(a);
+              setLng(b);
+            }}
+          />
+          <input type="hidden" name="default_lat" value={lat} />
+          <input type="hidden" name="default_lng" value={lng} />
         </div>
       </div>
 

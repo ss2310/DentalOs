@@ -48,6 +48,34 @@ export function PatientsIcon(p: IconProps) {
   );
 }
 
+export function SendIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M6 12L3.75 4.5l16.5 7.5-16.5 7.5L6 12zm0 0h6" />
+    </Base>
+  );
+}
+
+// Megaphone / bullhorn for the Campaigns nav item.
+export function CampaignsIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M3.75 9.75v4.5a1.5 1.5 0 001.5 1.5h2.086a1.5 1.5 0 011.06.44l3.354 3.353c.63.63 1.71.184 1.71-.707V6.164c0-.89-1.08-1.337-1.71-.707L8.396 8.81a1.5 1.5 0 01-1.06.44H5.25a1.5 1.5 0 00-1.5 1.5z" />
+      <path d="M18 9a3 3 0 010 6" />
+    </Base>
+  );
+}
+
+// Chat/assistant bubble mark for the floating help button.
+export function ChatIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M4.5 5.25h15A1.5 1.5 0 0121 6.75v8.5A1.5 1.5 0 0119.5 16.75H12l-4.5 3.5v-3.5H4.5A1.5 1.5 0 013 15.25v-8.5A1.5 1.5 0 014.5 5.25z" />
+      <path d="M7.75 9.5h8.5M7.75 12.5h5.5" />
+    </Base>
+  );
+}
+
 export function BillingIcon(p: IconProps) {
   return (
     <Base {...p}>
@@ -160,6 +188,92 @@ export function PlusIcon(p: IconProps) {
   );
 }
 
+export function ChevronDownIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M6 9l6 6 6-6" />
+    </Base>
+  );
+}
+
+// Upward arrow into a tray — the "Upgrade" header action + /upgrade CTA.
+export function UpgradeIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M12 20V8m0 0l-4 4m4-4l4 4M5 4h14" />
+    </Base>
+  );
+}
+
+// Shield — the super-admin-only "Admin" sidebar entry.
+export function ShieldIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+    </Base>
+  );
+}
+
+export function MapPinIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M12 21s-6.5-5.4-6.5-10.5a6.5 6.5 0 1113 0C18.5 15.6 12 21 12 21z" />
+      <circle cx="12" cy="10.5" r="2.25" />
+    </Base>
+  );
+}
+
+// Robot head — AI Visibility (the "🤖" nav item).
+export function AiVisibilityIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <rect x="4.5" y="8" width="15" height="11" rx="2.5" />
+      <path d="M12 4.75V8M9 12.5h.01M15 12.5h.01M9.75 16h4.5M2.75 12.5v2M21.25 12.5v2" />
+    </Base>
+  );
+}
+
+export function HelpIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.75 9.6a2.25 2.25 0 113.4 1.93c-.72.46-1.15.9-1.15 1.72" />
+      <path d="M12 16.5h.01" />
+    </Base>
+  );
+}
+
+// Tooth — GrowthOS brand mark.
+export function ToothIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M12 5.5c-1.6-1.2-3-1.8-4.6-1.8C5.1 3.7 3.5 5.4 3.5 8c0 1.7.5 3.6 1.1 5.6.5 1.7.7 4.9 2.2 4.9 1.4 0 1.2-2.8 1.8-4.4.3-.9.7-1.3 1.4-1.3s1.1.4 1.4 1.3c.6 1.6.4 4.4 1.8 4.4 1.5 0 1.7-3.2 2.2-4.9.6-2 1.1-3.9 1.1-5.6 0-2.6-1.6-4.3-3.9-4.3-1.6 0-3 .6-4.6 1.8z" />
+    </Base>
+  );
+}
+
+// Crossed swords — Competitor Intelligence (the "⚔" nav item).
+export function SwordsIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M14.5 17.5 3 6V3h3l11.5 11.5" />
+      <path d="m13 19 6-6M16 16l4 4M19 21l2-2" />
+      <path d="M14.5 6.5 18 3h3v3l-3.5 3.5" />
+      <path d="m5 14 4 4M7 17l-3 3M3 19l2 2" />
+    </Base>
+  );
+}
+
+// Microphone — the Voice Notes recorder trigger.
+export function MicIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21M8.5 21h7" />
+    </Base>
+  );
+}
+
 // Filled brand-style glyph — uses fill (not stroke), so it doesn't use Base.
 export function WhatsAppIcon(p: IconProps) {
   return (
@@ -173,5 +287,14 @@ export function WhatsAppIcon(p: IconProps) {
     >
       <path d="M17.6 6.3A7.85 7.85 0 004.8 15.9L4 20l4.2-1.1a7.85 7.85 0 003.75.96h.003A7.86 7.86 0 0017.6 6.3zM12 18.5a6.5 6.5 0 01-3.3-.9l-.24-.14-2.45.64.65-2.39-.16-.25a6.53 6.53 0 1110.16.15A6.5 6.5 0 0112 18.5zm3.6-4.87c-.2-.1-1.17-.58-1.35-.64-.18-.07-.31-.1-.44.1-.13.2-.5.64-.62.77-.11.13-.23.15-.43.05a5.3 5.3 0 01-1.56-.96 5.86 5.86 0 01-1.08-1.34c-.11-.2-.01-.3.09-.4.09-.09.2-.23.3-.35.1-.12.13-.2.2-.34.06-.13.03-.25-.02-.35-.05-.1-.44-1.07-.6-1.46-.16-.38-.32-.33-.44-.34l-.37-.01c-.13 0-.34.05-.52.25-.18.2-.68.67-.68 1.63 0 .96.7 1.89.8 2.02.1.13 1.38 2.1 3.34 2.95.47.2.83.32 1.11.41.47.15.9.13 1.23.08.38-.06 1.17-.48 1.33-.94.16-.46.16-.86.11-.94-.05-.08-.18-.13-.38-.23z" />
     </svg>
+  );
+}
+
+export function CameraIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+      <path d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+    </Base>
   );
 }

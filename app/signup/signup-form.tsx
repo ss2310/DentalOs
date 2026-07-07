@@ -17,7 +17,13 @@ const errInputClass = "border-danger focus:border-danger focus:ring-danger/20";
 const labelClass = "mb-1.5 block text-sm font-medium text-text-primary";
 const fieldErrClass = "mt-1 text-sm text-danger";
 
-export function SignupForm() {
+export function SignupForm({
+  verticals = null,
+}: {
+  // Non-null only when ENABLE_MULTI_VERTICAL is on (the page decides). Null ⇒ no
+  // vertical dropdown, exactly as production looks today.
+  verticals?: { id: string; display_name: string }[] | null;
+}) {
   const [state, formAction] = useFormState(signUpAction, initialState);
 
   const [email, setEmail] = useState("");
@@ -63,7 +69,7 @@ export function SignupForm() {
           type="text"
           required
           className={inputClass(false)}
-          placeholder="Smile Dental Care"
+          placeholder="Your clinic's name"
         />
       </div>
 
@@ -80,6 +86,28 @@ export function SignupForm() {
           placeholder="Dr. Priya Sharma"
         />
       </div>
+
+      {verticals && verticals.length > 0 ? (
+        <div>
+          <label htmlFor="vertical" className={labelClass}>
+            Clinic type
+          </label>
+          <select
+            id="vertical"
+            name="vertical"
+            defaultValue={
+              verticals.some((v) => v.id === "dental") ? "dental" : verticals[0].id
+            }
+            className={`${baseInputClass} ${okInputClass} bg-white`}
+          >
+            {verticals.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.display_name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       <div>
         <label htmlFor="email" className={labelClass}>
@@ -111,9 +139,9 @@ export function SignupForm() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={6}
+          minLength={8}
           className={inputClass(false)}
-          placeholder="At least 6 characters"
+          placeholder="At least 8 characters"
         />
       </div>
 
@@ -152,14 +180,25 @@ export function SignupForm() {
         </div>
       </div>
 
-      <SubmitButton pendingText="Creating account…" disabled={!emailOk || !phoneOk}>
-        Create account
+      <SubmitButton pendingText="Starting your trial…" disabled={!emailOk || !phoneOk}>
+        Start your 30-day free trial
       </SubmitButton>
+
+      <p className="text-center text-xs text-text-secondary">
+        Free for 30 days — 50 content credits &amp; 4 map scans included. No card
+        required.
+      </p>
 
       <p className="pt-1 text-center text-sm text-text-secondary">
         Already have an account?{" "}
         <Link href="/" className="font-medium text-primary hover:underline">
           Sign in
+        </Link>
+      </p>
+
+      <p className="text-center text-sm text-text-secondary">
+        <Link href="/tour" className="font-medium text-primary hover:underline">
+          See how it works →
         </Link>
       </p>
     </form>

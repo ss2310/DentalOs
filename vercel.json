@@ -1,0 +1,7 @@
+{
+  "crons": [
+    { "path": "/api/cron/deep-audit", "schedule": "30 2 * * *" },
+    { "path": "/api/cron/deep-audit-runner", "schedule": "*/2 * * * *" },
+    { "path": "/api/cron/purge-voice-audio", "schedule": "0 21 * * *" }
+  ]
+}

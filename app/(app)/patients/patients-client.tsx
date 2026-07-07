@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SearchIcon, PlusIcon } from "@/components/icons";
 import { formatDate, formatINR } from "@/lib/format";
 import type { Patient } from "@/lib/types";
+import { SectionHeader, EmptyState } from "@/components/page";
 import { PatientFormModal } from "./patient-form-modal";
 
 export function PatientsClient({ patients }: { patients: Patient[] }) {
@@ -52,18 +53,22 @@ export function PatientsClient({ patients }: { patients: Patient[] }) {
         />
       </div>
 
+      <SectionHeader hint="Newest first">
+        {query.trim()
+          ? `${filtered.length} result${filtered.length === 1 ? "" : "s"}`
+          : "All Patients"}
+      </SectionHeader>
+
       {filtered.length === 0 ? (
-        <div className="mt-6 rounded-card border border-border bg-white p-10 text-center">
-          <p className="text-[15px] text-text-secondary">
-            {patients.length === 0
-              ? "No patients yet. Add your first patient."
-              : "No patients match your search."}
-          </p>
-        </div>
+        <EmptyState>
+          {patients.length === 0
+            ? "No patients yet. Add your first patient."
+            : "No patients match your search."}
+        </EmptyState>
       ) : (
         <>
           {/* Desktop table */}
-          <div className="mt-5 hidden overflow-hidden rounded-card border border-border bg-white md:block">
+          <div className="hidden overflow-hidden rounded-card border border-border bg-white md:block">
             <table className="w-full text-left text-[15px]">
               <thead>
                 <tr className="border-b border-border text-xs uppercase tracking-wide text-text-secondary">
@@ -116,7 +121,7 @@ export function PatientsClient({ patients }: { patients: Patient[] }) {
           </div>
 
           {/* Mobile cards */}
-          <div className="mt-5 space-y-3 md:hidden">
+          <div className="space-y-3 md:hidden">
             {filtered.map((p) => {
               const outstanding = Number(p.total_outstanding) || 0;
               return (

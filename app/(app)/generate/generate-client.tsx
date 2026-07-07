@@ -11,8 +11,14 @@ import {
   type ExtraInput,
 } from "@/lib/generate";
 import { saveContent } from "./actions";
+import { PublishHostedPage } from "./publish-hosted-page";
 
-type Result = { content: string; schema: string | null; encoded: string | null };
+type Result = {
+  content: string;
+  schema: string | null;
+  encoded: string | null;
+  citable: boolean;
+};
 
 const inputClass =
   "h-11 w-full rounded-button border border-border px-3 text-[15px] text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
@@ -50,12 +56,29 @@ function Spinner({ className }: { className?: string }) {
   );
 }
 
+// The topic dropdown feeds a different template variable per bank: comparison →
+// {{treatments}}, question → {{question}}, occasion → {{occasion}}; every other
+// bank (social / article / guide / update / service) feeds {{topic}}.
+type PickerTarget = { kind: "topic" } | { kind: "extra"; name: string };
+
+function bankTarget(bank: string | null | undefined): PickerTarget | null {
+  if (!bank) return null;
+  if (bank === "comparison") return { kind: "extra", name: "treatments" };
+  if (bank === "question") return { kind: "extra", name: "question" };
+  if (bank === "occasion") return { kind: "extra", name: "occasion" };
+  return { kind: "topic" };
+}
+
 export function GenerateClient({
   postTypes,
   remaining,
+  topicBanks,
+  rateCards,
 }: {
   postTypes: PostType[];
   remaining: number;
+  topicBanks: Record<string, string[]>;
+  rateCards: string[];
 }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -63,9 +86,14 @@ export function GenerateClient({
   const [tone, setTone] = useState<string>(TONES[0]);
   const [context, setContext] = useState("");
   const [extras, setExtras] = useState<Record<string, string>>({});
+  // "✏️ Something else…" switches the curated picker to a free-text box.
+  const [pickCustom, setPickCustom] = useState(false);
+  // AI-Citable Mode — defaults ON, shown only for web-crawlable (Website) types.
+  const [citable, setCitable] = useState(true);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savePending, startSave] = useTransition();
   // Client-tracked credits balance (updated from each generation's response).
@@ -82,6 +110,96 @@ export function GenerateClient({
   const topicRequired = topicShown && topicCfg.required !== false;
   const inputs: ExtraInput[] = ef?.inputs ?? [];
 
+  // Curated-topic picker for this type's bank. Options come from the bank,
+  // except Service/Geo (bank 'service') which prefer the clinic's own active
+  // rate_cards and fall back to the 'service' bank only when there are none.
+  const pickerTarget = useMemo(() => bankTarget(selected?.topic_bank), [selected]);
+  const pickerOptions = useMemo(() => {
+    const bank = selected?.topic_bank;
+    if (!bank) return [];
+    if (bank === "service" && rateCards.length > 0) return rateCards;
+    return topicBanks[bank] ?? [];
+  }, [selected, topicBanks, rateCards]);
+  const topicPickerLabel =
+    topicCfg.label ??
+    (selected?.topic_bank === "service" ? "Treatment / service" : "Topic");
+
+  // Renders the curated dropdown (+ "Something else…") for whichever variable
+  // this type's bank feeds, or a free-text box once the user picks "Something
+  // else". `target` decides which value it reads/writes.
+  const renderPicker = (
+    target: PickerTarget,
+    options: string[],
+    labelText: string,
+    required: boolean,
+  ) => {
+    const value = target.kind === "topic" ? topic : extras[target.name] ?? "";
+    const setValue = (v: string) =>
+      target.kind === "topic"
+        ? setTopic(v)
+        : setExtras((x) => ({ ...x, [target.name]: v }));
+    return (
+      <>
+        <label className={labelClass}>
+          {labelText}
+          {required ? (
+            <span className="text-danger"> *</span>
+          ) : (
+            <span className="text-text-secondary"> (optional)</span>
+          )}
+        </label>
+        {pickCustom ? (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="Type your own…"
+              maxLength={500}
+              className={inputClass}
+            />
+            <button
+              type="button"
+              className="text-sm font-medium text-primary hover:underline"
+              onClick={() => {
+                setPickCustom(false);
+                setValue("");
+              }}
+            >
+              ↩ Back to suggestions
+            </button>
+          </div>
+        ) : (
+          <select
+            className={inputClass}
+            value={options.includes(value) ? value : ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "__custom__") {
+                setPickCustom(true);
+                setValue("");
+              } else {
+                setValue(v);
+              }
+            }}
+          >
+            <option value="">Select…</option>
+            {options.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+            <option value="__custom__">✏️ Something else…</option>
+          </select>
+        )}
+      </>
+    );
+  };
+
+  // Web-crawlable types (all platform "Website") get the AI-Citable toggle;
+  // GBP / Instagram / Reel / WhatsApp / review types never see it.
+  const isWebCrawlable = selected?.platform === "Website";
+
   const cost = selected?.credits_cost ?? 0;
   const canAfford = creditsLeft >= cost;
 
@@ -93,6 +211,8 @@ export function GenerateClient({
     setSelectedId(id);
     setTopic("");
     setExtras({});
+    setPickCustom(false);
+    setCitable(true); // default ON for each new selection
     setResult(null);
     setError(null);
     setSaved(false);
@@ -102,6 +222,14 @@ export function GenerateClient({
     if (!selected) return;
     setLoading(true);
     setError(null);
+    setNeedsUpgrade(false);
+    // Geo Landing's template consumes {{target_area}} + {{context}} but not
+    // {{topic}}, so fold the chosen focus treatment into the context it sees —
+    // otherwise the service picker would have no effect on the output.
+    const effectiveContext =
+      selected.name === "Geo Landing Page" && topic.trim()
+        ? `${context ? `${context}\n` : ""}Focus treatment to feature: ${topic.trim()}`
+        : context;
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -110,19 +238,22 @@ export function GenerateClient({
           postTypeId: selected.id,
           tone,
           topic,
-          context,
+          context: effectiveContext,
           extras,
+          citable: isWebCrawlable ? citable : false,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data?.error ?? "Something went wrong. Please try again.");
+        setNeedsUpgrade(data?.upgrade === true);
         return;
       }
       setResult({
         content: data.content,
         schema: data.schema ?? null,
         encoded: data.encoded ?? null,
+        citable: data.citable === true,
       });
       setCreditsLeft(
         typeof data.creditsLeft === "number"
@@ -153,6 +284,7 @@ export function GenerateClient({
         toneUsed: tone,
         content: result.content,
         schema: result.schema,
+        citable: result.citable,
       });
       if (res?.error) {
         toast(res.error);
@@ -194,6 +326,20 @@ export function GenerateClient({
             History →
           </Link>
         </div>
+      </div>
+
+      {/* Instagram & GBP posts moved to the Social Content Engine. */}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-card border border-primary/30 bg-primary/5 p-4">
+        <p className="text-[15px] text-text-primary">
+          <span className="font-semibold">Instagram &amp; Google Business posts moved to Social</span>{" "}
+          — with branded images, your Brand Personality, and an approval queue.
+        </p>
+        <Link
+          href="/social"
+          className="flex h-11 items-center rounded-button bg-primary px-4 text-[15px] font-medium text-white hover:bg-primary/90"
+        >
+          Open Social →
+        </Link>
       </div>
 
       {/* Post-type grid */}
@@ -254,7 +400,20 @@ export function GenerateClient({
           </h2>
 
           <div className="mt-4 space-y-4">
-            {topicShown ? (
+            {/* Topic field: curated dropdown when this type's bank feeds
+                {{topic}} (incl. Service/Geo service picker), else free-text. */}
+            {pickerTarget &&
+            pickerTarget.kind === "topic" &&
+            pickerOptions.length > 0 ? (
+              <div>
+                {renderPicker(
+                  pickerTarget,
+                  pickerOptions,
+                  topicPickerLabel,
+                  topicRequired,
+                )}
+              </div>
+            ) : topicShown ? (
               <div>
                 <label className={labelClass}>
                   {topicCfg.label ?? "Topic"}
@@ -269,55 +428,112 @@ export function GenerateClient({
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
                   placeholder={topicCfg.placeholder ?? ""}
+                  maxLength={500}
                   className={inputClass}
                 />
               </div>
             ) : null}
 
-            {inputs.map((i) => (
-              <div key={i.name}>
-                <label className={labelClass}>
-                  {i.label}
-                  {i.required ? <span className="text-danger"> *</span> : null}
-                </label>
-                {i.type === "select" ? (
-                  <select
-                    value={extras[i.name] ?? ""}
-                    onChange={(e) =>
-                      setExtras((x) => ({ ...x, [i.name]: e.target.value }))
-                    }
-                    className={inputClass}
+            {inputs.map((i) => {
+              // When the picker feeds this specific extra input (comparison →
+              // treatments, question → question, occasion → occasion), render
+              // the dropdown here instead of a plain box.
+              if (
+                pickerTarget &&
+                pickerTarget.kind === "extra" &&
+                pickerTarget.name === i.name &&
+                pickerOptions.length > 0
+              ) {
+                return (
+                  <div key={i.name}>
+                    {renderPicker(
+                      pickerTarget,
+                      pickerOptions,
+                      i.label,
+                      !!i.required,
+                    )}
+                  </div>
+                );
+              }
+              return (
+                <div key={i.name}>
+                  <label className={labelClass}>
+                    {i.label}
+                    {i.required ? <span className="text-danger"> *</span> : null}
+                  </label>
+                  {i.type === "select" ? (
+                    <select
+                      value={extras[i.name] ?? ""}
+                      onChange={(e) =>
+                        setExtras((x) => ({ ...x, [i.name]: e.target.value }))
+                      }
+                      className={inputClass}
+                    >
+                      <option value="">Select…</option>
+                      {(i.options ?? []).map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  ) : i.type === "textarea" ? (
+                    <textarea
+                      rows={3}
+                      value={extras[i.name] ?? ""}
+                      onChange={(e) =>
+                        setExtras((x) => ({ ...x, [i.name]: e.target.value }))
+                      }
+                      placeholder={i.placeholder ?? ""}
+                      maxLength={500}
+                      className={areaClass}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={extras[i.name] ?? ""}
+                      onChange={(e) =>
+                        setExtras((x) => ({ ...x, [i.name]: e.target.value }))
+                      }
+                      placeholder={i.placeholder ?? ""}
+                      maxLength={500}
+                      className={inputClass}
+                    />
+                  )}
+                </div>
+              );
+            })}
+
+            {isWebCrawlable ? (
+              <div className="rounded-button border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-medium text-text-primary">
+                      ✨ AI-Citable Mode
+                    </p>
+                    <p className="mt-0.5 text-sm text-text-secondary">
+                      Structures the page so ChatGPT, Gemini &amp; Perplexity can
+                      quote it.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={citable}
+                    aria-label="AI-Citable Mode"
+                    onClick={() => setCitable((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-pill transition-colors ${
+                      citable ? "bg-primary" : "bg-border"
+                    }`}
                   >
-                    <option value="">Select…</option>
-                    {(i.options ?? []).map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </select>
-                ) : i.type === "textarea" ? (
-                  <textarea
-                    rows={3}
-                    value={extras[i.name] ?? ""}
-                    onChange={(e) =>
-                      setExtras((x) => ({ ...x, [i.name]: e.target.value }))
-                    }
-                    placeholder={i.placeholder ?? ""}
-                    className={areaClass}
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    value={extras[i.name] ?? ""}
-                    onChange={(e) =>
-                      setExtras((x) => ({ ...x, [i.name]: e.target.value }))
-                    }
-                    placeholder={i.placeholder ?? ""}
-                    className={inputClass}
-                  />
-                )}
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        citable ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
-            ))}
+            ) : null}
 
             <div>
               <label className={labelClass}>Tone</label>
@@ -344,6 +560,7 @@ export function GenerateClient({
                 value={context}
                 onChange={(e) => setContext(e.target.value)}
                 placeholder="Anything specific to mention — an offer, a doctor's name, timings…"
+                maxLength={4000}
                 className={areaClass}
               />
             </div>
@@ -383,9 +600,17 @@ export function GenerateClient({
             </p>
           ) : null}
           {error ? (
-            <p className="mt-2 rounded-button border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
-              {error}
-            </p>
+            <div className="mt-2 rounded-button border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+              <p>{error}</p>
+              {needsUpgrade ? (
+                <Link
+                  href="/upgrade"
+                  className="mt-2 inline-flex h-9 items-center rounded-button bg-primary px-3 text-sm font-medium text-white hover:bg-primary/90"
+                >
+                  ⬆ Upgrade
+                </Link>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : postTypes.length > 0 ? (
@@ -489,6 +714,15 @@ export function GenerateClient({
             >
               {saved ? "✓ Saved" : savePending ? "Saving…" : "Save"}
             </button>
+            {/* Any web-crawlable (Website) page can be published as a hosted page. */}
+            {selected?.platform === "Website" ? (
+              <PublishHostedPage
+                content={result.content}
+                schema={result.schema}
+                suggestedArea={extras["target_area"] || topic}
+                onPublished={(left) => setCreditsLeft(left)}
+              />
+            ) : null}
           </div>
         </div>
       ) : null}
