@@ -126,7 +126,12 @@ export async function signUpAction(
       trial_ends_at: trialEndsAt.toISOString(),
       content_credits_balance: TRIAL_CONTENT,
       map_credits_balance: TRIAL_MAP,
-      billing_provider: "manual",
+      // Self-serve clinics pay through the live gateway (Cashfree hosted
+      // checkout). 'manual' is an admin-only escape hatch for hand-onboarding,
+      // set per-clinic from /admin — never the signup default, or the in-app
+      // Buy buttons just file a silent pending order instead of opening
+      // checkout. (lib/billing/provider.ts documents 'cashfree' as the default.)
+      billing_provider: "cashfree",
       // Omitted when null → DB default 'dental' (today's behavior).
       ...(vertical ? { vertical } : {}),
     })
