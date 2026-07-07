@@ -97,6 +97,12 @@ function PatientCombobox({
   );
 }
 
+// One line of the plan being built. Price is editable per line (discounts /
+// case-specific quotes); it prefills from the rate card on treatment pick.
+type PlanLine = { treatment_id: string; qty: string; price: string };
+
+const EMPTY_LINE: PlanLine = { treatment_id: "", qty: "1", price: "" };
+
 export function AddCaseModal({
   open,
   onClose,
@@ -111,29 +117,43 @@ export function AddCaseModal({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [patientId, setPatientId] = useState("");
-  const [treatmentId, setTreatmentId] = useState("");
-  const [planValue, setPlanValue] = useState("");
+  const [lines, setLines] = useState<PlanLine[]>([EMPTY_LINE]);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setPatientId("");
-      setTreatmentId("");
-      setPlanValue("");
+      setLines([EMPTY_LINE]);
       setNotes("");
       setError(null);
     }
   }, [open]);
 
-  function onTreatmentChange(id: string) {
-    setTreatmentId(id);
-    const price = rateCards.find((r) => r.id === id)?.base_price;
-    if (price !== undefined) setPlanValue(String(Number(price)));
+  function setLine(i: number, patch: Partial<PlanLine>) {
+    setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
 
-  const valid =
-    !!patientId && !!treatmentId && Number(planValue) >= 0 && planValue !== "";
+  function pickTreatment(i: number, id: string) {
+    const price = rateCards.find((r) => r.id === id)?.base_price;
+    setLine(i, {
+      treatment_id: id,
+      ...(price !== undefined ? { price: String(Number(price)) } : {}),
+    });
+  }
+
+  const lineValid = (l: PlanLine) =>
+    !!l.treatment_id &&
+    Number.isInteger(Number(l.qty)) &&
+    Number(l.qty) >= 1 &&
+    l.price !== "" &&
+    Number(l.price) >= 0;
+
+  const total = lines.reduce(
+    (s, l) => s + (lineValid(l) ? Number(l.qty) * Number(l.price) : 0),
+    0,
+  );
+  const valid = !!patientId && lines.length > 0 && lines.every(lineValid);
 
   function save() {
     if (!valid) return;
@@ -141,22 +161,25 @@ export function AddCaseModal({
     startTransition(async () => {
       const res = await addCase({
         patient_id: patientId,
-        treatment_id: treatmentId,
-        plan_value: Number(planValue),
+        items: lines.map((l) => ({
+          treatment_id: l.treatment_id,
+          qty: Number(l.qty),
+          price: Number(l.price),
+        })),
         notes,
       });
       if (res.error) {
         setError(res.error);
         return;
       }
-      toast("Case added ✓");
+      toast("Treatment plan added ✓");
       onClose();
       router.refresh();
     });
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Case">
+    <Modal open={open} onClose={onClose} title="Add Treatment Plan">
       <div className="space-y-4">
         {error ? (
           <p className="rounded-button border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
@@ -172,37 +195,77 @@ export function AddCaseModal({
         </div>
 
         <div>
-          <label htmlFor="case_treatment" className={labelClass}>
-            Treatment <span className="text-danger">*</span>
+          <label className={labelClass}>
+            Treatments <span className="text-danger">*</span>
           </label>
-          <select
-            id="case_treatment"
-            value={treatmentId}
-            onChange={(e) => onTreatmentChange(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">Select treatment…</option>
-            {rateCards.map((rc) => (
-              <option key={rc.id} value={rc.id}>
-                {rc.treatment_name}
-              </option>
+          <div className="space-y-2">
+            {lines.map((l, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <select
+                  value={l.treatment_id}
+                  onChange={(e) => pickTreatment(i, e.target.value)}
+                  className={`${inputClass} min-w-0 flex-1`}
+                  aria-label={`Treatment ${i + 1}`}
+                >
+                  <option value="">Select treatment…</option>
+                  {rateCards.map((rc) => (
+                    <option key={rc.id} value={rc.id}>
+                      {rc.treatment_name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  step={1}
+                  value={l.qty}
+                  onChange={(e) => setLine(i, { qty: e.target.value })}
+                  className={`${inputClass} w-16 shrink-0 px-2 text-center`}
+                  aria-label={`Quantity ${i + 1}`}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step="1"
+                  value={l.price}
+                  onChange={(e) => setLine(i, { price: e.target.value })}
+                  placeholder="₹"
+                  className={`${inputClass} w-24 shrink-0 px-2`}
+                  aria-label={`Price ${i + 1}`}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLines((ls) =>
+                      ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls,
+                    )
+                  }
+                  disabled={lines.length === 1}
+                  aria-label={`Remove line ${i + 1}`}
+                  className="flex h-11 w-9 shrink-0 items-center justify-center rounded-button text-text-secondary hover:bg-subtle hover:text-danger disabled:opacity-30"
+                >
+                  ✕
+                </button>
+              </div>
             ))}
-          </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLines((ls) => [...ls, EMPTY_LINE])}
+            className="mt-2 text-sm font-medium text-primary hover:underline"
+          >
+            + Add another treatment
+          </button>
         </div>
 
-        <div>
-          <label htmlFor="case_plan_value" className={labelClass}>
-            Plan Value (₹)
-          </label>
-          <input
-            id="case_plan_value"
-            type="number"
-            min={0}
-            step="1"
-            value={planValue}
-            onChange={(e) => setPlanValue(e.target.value)}
-            className={inputClass}
-          />
+        <div className="flex items-center justify-between rounded-button bg-subtle px-3 py-2.5">
+          <span className="text-sm font-medium text-text-secondary">
+            Plan total
+          </span>
+          <span className="text-lg font-semibold tracking-[-0.02em] text-text-primary">
+            ₹{total.toLocaleString("en-IN")}
+          </span>
         </div>
 
         <div>
@@ -232,7 +295,7 @@ export function AddCaseModal({
             disabled={!valid || pending}
             className="flex h-11 flex-1 items-center justify-center rounded-button bg-primary px-4 text-[15px] font-medium text-white hover:bg-primary/90 disabled:opacity-60"
           >
-            {pending ? "Saving…" : "Add Case"}
+            {pending ? "Saving…" : "Add Plan"}
           </button>
         </div>
       </div>

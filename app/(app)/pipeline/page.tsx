@@ -23,21 +23,31 @@ type CaseRow = {
   plan_value: string;
   stage: PipelineStage;
   follow_up_date: string | null;
+  // Itemized plan (migration 049); null = legacy single-treatment case.
+  plan_items?: { name: string; qty: number; price: number }[] | null;
   patient: { full_name: string; whatsapp_number: string | null } | null;
   treatment: { treatment_name: string } | null;
 };
+
+/** "Root Canal Treatment + 2 more" for itemized plans; the join name otherwise. */
+function treatmentLabel(c: CaseRow): string {
+  const items = c.plan_items ?? [];
+  const first = items[0]?.name ?? c.treatment?.treatment_name ?? "Treatment";
+  return items.length > 1 ? `${first} + ${items.length - 1} more` : first;
+}
 
 export default async function PipelinePage() {
   const supabase = createClient();
   const today = nowIST().date;
 
-  // All RLS-scoped to the caller's clinic.
+  // All RLS-scoped to the caller's clinic. plan_items lands with migration
+  // 049 — the cascade below re-queries without it if unapplied.
+  const CASE_COLS =
+    "id, patient_id, treatment_id, plan_value, stage, follow_up_date, patient:patient_id(full_name, whatsapp_number), treatment:treatment_id(treatment_name)";
   const [caseRes, patientRes, rateCardRes, clinicRes] = await Promise.all([
     supabase
       .from("case_pipeline")
-      .select(
-        "id, patient_id, treatment_id, plan_value, stage, follow_up_date, patient:patient_id(full_name, whatsapp_number), treatment:treatment_id(treatment_name)",
-      )
+      .select(`${CASE_COLS}, plan_items`)
       .order("follow_up_date", { ascending: true, nullsFirst: false }),
     supabase
       .from("patients")
@@ -51,7 +61,14 @@ export default async function PipelinePage() {
     supabase.from("clinics").select("doctor_name").single(),
   ]);
 
-  const cases = (caseRes.data as unknown as CaseRow[]) ?? [];
+  const cases = caseRes.error
+    ? (((
+        await supabase
+          .from("case_pipeline")
+          .select(CASE_COLS)
+          .order("follow_up_date", { ascending: true, nullsFirst: false })
+      ).data as unknown as CaseRow[]) ?? [])
+    : ((caseRes.data as unknown as CaseRow[]) ?? []);
   const patients = (patientRes.data as PatientOption[]) ?? [];
   const rateCards = (rateCardRes.data as RateCard[]) ?? [];
   const doctorName = clinicRes.data?.doctor_name ?? "";
@@ -91,7 +108,7 @@ export default async function PipelinePage() {
     patientId: c.patient_id,
     patientName: c.patient?.full_name ?? "Unknown",
     patientWhatsapp: c.patient?.whatsapp_number ?? null,
-    treatmentName: c.treatment?.treatment_name ?? "Treatment",
+    treatmentName: treatmentLabel(c),
     planValue: Number(c.plan_value),
     stage: c.stage,
     followUpDate: c.follow_up_date,
@@ -99,7 +116,7 @@ export default async function PipelinePage() {
 
   const renderCase = (c: CaseRow) => {
     const name = c.patient?.full_name ?? "Unknown";
-    const treatmentName = c.treatment?.treatment_name ?? "Treatment";
+    const treatmentName = treatmentLabel(c);
     const badge = PIPELINE_STAGE[c.stage];
     const followUpPast = !!c.follow_up_date && c.follow_up_date < today;
     const followUpDue =

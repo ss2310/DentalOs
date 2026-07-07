@@ -53,16 +53,36 @@ async function currentUserId(supabase: SupabaseClient): Promise<string | null> {
 
 // --- Add case ------------------------------------------------------------
 
+export type PlanItemInput = {
+  treatment_id: string;
+  qty: number;
+  price: number; // per-unit, editable in the UI (discounts / case-specific)
+};
+
+/**
+ * Creates ONE case that carries the WHOLE treatment plan (migration 049):
+ * every line is validated against the clinic's own rate card, the total is
+ * summed server-side (never trusted from the client), plan_items stores the
+ * itemization, and treatment_id keeps pointing at the first item so all
+ * existing displays and follow-up messages keep working.
+ */
 export async function addCase(input: {
   patient_id: string;
-  treatment_id: string;
-  plan_value: number;
+  items: PlanItemInput[];
   notes?: string;
 }): Promise<CaseActionState> {
   if (!input.patient_id) return { error: "Select a patient." };
-  if (!input.treatment_id) return { error: "Select a treatment." };
-  if (!Number.isFinite(input.plan_value) || input.plan_value < 0) {
-    return { error: "Enter a valid plan value." };
+  const items = Array.isArray(input.items) ? input.items : [];
+  if (items.length === 0) return { error: "Add at least one treatment." };
+  if (items.length > 20) return { error: "A plan can have at most 20 lines." };
+  for (const it of items) {
+    if (!it.treatment_id) return { error: "Every line needs a treatment." };
+    if (!Number.isInteger(it.qty) || it.qty < 1 || it.qty > 99) {
+      return { error: "Quantity must be a whole number from 1 to 99." };
+    }
+    if (!Number.isFinite(it.price) || it.price < 0) {
+      return { error: "Enter a valid price on every line." };
+    }
   }
 
   const supabase = createClient();
@@ -78,18 +98,53 @@ export async function addCase(input: {
     .single();
   if (!profile?.home_clinic_id) return { error: "No clinic found for user." };
 
-  const { data: created, error } = await supabase
+  // RLS-scoped rate-card lookup = the treatments must belong to THIS clinic,
+  // and gives us the names to denormalize into plan_items.
+  const { data: cards } = await supabase
+    .from("rate_cards")
+    .select("id, treatment_name")
+    .in("id", Array.from(new Set(items.map((i) => i.treatment_id))));
+  const nameById = new Map((cards ?? []).map((c) => [c.id, c.treatment_name]));
+  for (const it of items) {
+    if (!nameById.has(it.treatment_id)) {
+      return { error: "One of the treatments isn't in your rate card." };
+    }
+  }
+
+  const planItems = items.map((it) => ({
+    treatment_id: it.treatment_id,
+    name: nameById.get(it.treatment_id) ?? "Treatment",
+    qty: it.qty,
+    price: it.price,
+  }));
+  const planValue = planItems.reduce((s, it) => s + it.qty * it.price, 0);
+
+  const base = {
+    clinic_id: profile.home_clinic_id,
+    patient_id: input.patient_id,
+    treatment_id: planItems[0].treatment_id,
+    plan_value: planValue,
+    stage: "identified",
+    notes: input.notes?.trim() || null,
+  };
+
+  // plan_items lands with migration 049 — retry without it if unapplied, so
+  // adding cases never breaks mid-rollout (the plan saves as its first line).
+  let { data: created, error } = await supabase
     .from("case_pipeline")
-    .insert({
-      clinic_id: profile.home_clinic_id,
-      patient_id: input.patient_id,
-      treatment_id: input.treatment_id,
-      plan_value: input.plan_value,
-      stage: "identified",
-      notes: input.notes?.trim() || null,
-    })
+    .insert({ ...base, plan_items: planItems })
     .select("id")
     .single();
+  if (
+    error &&
+    (error.code === "PGRST204" || /plan_items/i.test(error.message ?? ""))
+  ) {
+    ({ data: created, error } = await supabase
+      .from("case_pipeline")
+      .insert(base)
+      .select("id")
+      .single());
+  }
 
   if (error || !created) {
     return { error: "Could not add case. Please try again." };

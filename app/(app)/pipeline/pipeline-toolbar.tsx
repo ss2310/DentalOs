@@ -23,7 +23,7 @@ export function PipelineToolbar({
         className="flex h-11 items-center gap-1.5 rounded-button bg-primary px-4 text-[15px] font-medium text-white hover:bg-primary/90"
       >
         <PlusIcon />
-        <span className="hidden sm:inline">Add Case</span>
+        <span className="hidden sm:inline">Add Plan</span>
         <span className="sm:hidden">Add</span>
       </button>
 
