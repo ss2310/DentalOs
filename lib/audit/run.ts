@@ -60,10 +60,28 @@ export async function runNextStage(
   const stage = STAGES[idx];
 
   // Mark in-progress so a poller sees movement even mid-stage.
-  await admin
+  // stage_started_at (migration 048) is the liveness heartbeat the rescue
+  // cron uses to tell an ACTIVE run (stamp < 8 min old — a stage can't run
+  // longer than the 5-min function cap) from an ABANDONED one (tab closed).
+  // Retry without it if 048 isn't applied yet, so runs never break mid-rollout.
+  const inProgress = {
+    status: stage.status,
+    stage_detail: `Running: ${stage.key}`,
+    stage_started_at: new Date().toISOString(),
+  };
+  const { error: markErr } = await admin
     .from("audit_runs")
-    .update({ status: stage.status, stage_detail: `Running: ${stage.key}` })
+    .update(inProgress)
     .eq("id", run.id);
+  if (
+    markErr &&
+    (markErr.code === "PGRST204" || /stage_started_at/i.test(markErr.message ?? ""))
+  ) {
+    await admin
+      .from("audit_runs")
+      .update({ status: stage.status, stage_detail: `Running: ${stage.key}` })
+      .eq("id", run.id);
+  }
 
   const result = await stage.run({ admin, run }); // may throw
 

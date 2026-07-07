@@ -2806,3 +2806,22 @@ Gemini 3 Pro) bill the single OPENROUTER_API_KEY.
 - [ ] /admin/social shows the ✨ Premium visuals count per clinic.
 - [ ] Moment Capture composer is untouched — no premium/AI option there ever
       (real patient photos never mix with AI imagery).
+
+## Deep Audit — background rescue (safe to close the tab)
+
+Prereq: migration 048 applied; deep-audit-runner cron live (Vercel Pro + CRON_SECRET).
+
+- [ ] Run a manual audit and CLOSE THE TAB after the first stage label appears.
+      Within ~10-15 min (cron advances one stage per 2-min tick) the run reaches
+      "complete" and the report opens from the audit page's run list.
+- [ ] While a manual audit is actively running in an open tab, the cron never
+      touches it (stage_started_at refreshes each stage; the 8-min staleness
+      guard fails). Verify: runner responses show idle/auto work, not this runId.
+- [ ] Runner still prioritises auto re-audits over rescues (rescued:true only
+      appears when no auto run is in flight).
+- [ ] A manual run stalled >24h is marked failed ("Abandoned — expired after
+      24h."); if it never passed discovery, the audit credit is refunded.
+- [ ] Pre-048 (column missing): runner returns idle instead of erroring; manual
+      runs still work from the browser.
+- [ ] Run panel copy says the tab can be closed; MAX_STEPS overrun toasts the
+      "keeps running in the background" message instead of a dead end.

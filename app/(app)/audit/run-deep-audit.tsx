@@ -71,17 +71,26 @@ export function RunDeepAudit({
       }
     }
 
-    // Ran out of steps without completing — surface it rather than hang.
+    // Ran out of steps without completing — the background runner (cron) will
+    // pick the run up within a few minutes, so it finishes either way.
     setRunning(false);
     setLabel(null);
-    toast("The audit is taking longer than expected. Please try again.");
+    toast(
+      "Taking longer than usual — it'll keep running in the background. Check back in a few minutes.",
+    );
   }
 
   if (running) {
     return (
-      <div className="flex items-center gap-3 rounded-card border border-border bg-white px-5 py-4 shadow-card">
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <span className="text-[15px] text-text-primary">{label}</span>
+      <div className="rounded-card border border-border bg-white px-5 py-4 shadow-card">
+        <div className="flex items-center gap-3">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span className="text-[15px] text-text-primary">{label}</span>
+        </div>
+        <p className="mt-2 text-xs text-text-secondary">
+          Takes 5–8 minutes. You can leave this page — the audit keeps running
+          in the background and the report will be waiting here.
+        </p>
       </div>
     );
   }

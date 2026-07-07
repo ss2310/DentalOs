@@ -74,3 +74,52 @@ export async function nextAutoRunId(admin: SupabaseClient): Promise<string | nul
     .maybeSingle();
   return (data?.id as string | undefined) ?? null;
 }
+
+// A live browser stage can never be older than the 5-minute function cap, so a
+// stamp this old means the tab is gone and nothing will finish the run.
+const STALL_MINUTES = 8;
+// Past this, stop burning API money on retries — mark it failed instead.
+const EXPIRE_HOURS = 24;
+
+/**
+ * The oldest MANUAL run whose liveness stamp (stage_started_at, migration 048)
+ * is stale — i.e. the user closed the tab mid-audit — so the runner cron can
+ * finish it server-side instead of stranding the run AND the consumed credit.
+ * The staleness guard guarantees the cron never races an active foreground
+ * run. Runs stalled past EXPIRE_HOURS are marked failed here (refunding the
+ * credit when discovery never delivered — the advanceOneStage policy), so a
+ * permanently wedged run can't be retried forever.
+ *
+ * Returns null (rescue inactive) until migration 048 adds the stamp column.
+ */
+export async function nextStalledManualRunId(
+  admin: SupabaseClient,
+): Promise<string | null> {
+  const staleBefore = new Date(Date.now() - STALL_MINUTES * 60_000).toISOString();
+  const { data, error } = await admin
+    .from("audit_runs")
+    .select("id, created_at, stage_cursor")
+    .eq("trigger", "manual")
+    .not("status", "in", "(complete,failed)")
+    .lt("stage_started_at", staleBefore)
+    .order("created_at", { ascending: true })
+    .limit(5);
+  // Pre-048 (column missing) → rescue quietly inactive.
+  if (error) return null;
+
+  const expireBefore = Date.now() - EXPIRE_HOURS * 3_600_000;
+  for (const run of data ?? []) {
+    if (new Date(run.created_at as string).getTime() < expireBefore) {
+      await admin
+        .from("audit_runs")
+        .update({ status: "failed", error: "Abandoned — expired after 24h." })
+        .eq("id", run.id);
+      if (!run.stage_cursor) {
+        await admin.rpc("release_deep_audit_run", { p_run_id: run.id });
+      }
+      continue;
+    }
+    return run.id as string;
+  }
+  return null;
+}
