@@ -6,7 +6,11 @@ import { isAdminRole, type UserRole } from "@/lib/roles";
 import { spendCredits, refundCredit } from "@/lib/credits";
 import { RENDER_BUCKET } from "@/lib/social/render";
 import { tierCost } from "@/lib/visuals/tiers";
-import { validateImageRequest, runImageProvider } from "@/lib/visuals/generate";
+import {
+  validateImageRequest,
+  runImageProvider,
+  sniffImageMime,
+} from "@/lib/visuals/generate";
 
 // Content Studio image generation — a relevant hero image for an article / page.
 // Produces a CLEAN standalone photo (no text baked in) from the piece's subject
@@ -88,10 +92,20 @@ export async function POST(req: Request) {
     });
 
     const admin = createAdminClient();
-    const path = `content/${clinic.id}/${randomUUID()}.png`;
-    const { error: upErr } = await admin.storage
+    // Providers return png OR jpeg regardless of the ask — sniff the real type.
+    const mime = sniffImageMime(img) ?? "image/png";
+    let path = `content/${clinic.id}/${randomUUID()}.${mime === "image/jpeg" ? "jpg" : "png"}`;
+    let { error: upErr } = await admin.storage
       .from(RENDER_BUCKET)
-      .upload(path, img, { contentType: "image/png", upsert: true });
+      .upload(path, img, { contentType: mime, upsert: true });
+    if (upErr && mime === "image/jpeg") {
+      // Pre-051 bucket allows only image/png — legacy fallback (browsers sniff
+      // the real bytes) so a mid-rollout deploy never breaks the paid path.
+      path = `content/${clinic.id}/${randomUUID()}.png`;
+      ({ error: upErr } = await admin.storage
+        .from(RENDER_BUCKET)
+        .upload(path, img, { contentType: "image/png", upsert: true }));
+    }
     if (upErr) throw new Error(`Image upload failed: ${upErr.message}`);
 
     const { data: signed } = await admin.storage

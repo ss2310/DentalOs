@@ -2861,7 +2861,15 @@ Upload your own photo + consent:
       checkbox; Add photo stays disabled until it's ticked. The server ALSO
       rejects a patient upload without consent (422) — the checkbox isn't the
       only gate.
-- [ ] Only PNG/JPG under 8 MB are accepted.
+- [ ] Only PNG/JPG under 8 MB are accepted. A file with a spoofed extension
+      (e.g. a .txt renamed to .png) is rejected with a clear message — magic
+      bytes are sniffed server-side, the declared MIME is never trusted.
+
+Release-review hardening (migration 051):
+- [ ] Run 051, then a premium single render whose provider returns JPEG stores a
+      .jpg with contentType image/jpeg (check the social-renders bucket). Before
+      051, the same render still succeeds via the declare-as-png fallback.
+- [ ] A large (>5 MB) AI image uploads fine post-051 (bucket limit now 10 MB).
 
 ## Content Studio — relevant image on Website types
 

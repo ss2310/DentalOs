@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole, type UserRole } from "@/lib/roles";
 import { renderPostImages, RENDER_BUCKET } from "@/lib/social/render";
+import { sniffImageMime } from "@/lib/visuals/generate";
 import type { CarouselSlide } from "@/lib/social/generate";
 
 // Upload-your-own-photo → a well-designed branded post image. The clinic's own
@@ -92,7 +93,17 @@ export async function POST(req: Request) {
 
   try {
     const buf = Buffer.from(await file.arrayBuffer());
-    const dataUri = `data:${file.type};base64,${buf.toString("base64")}`;
+    // Never trust the declared MIME — sniff the magic bytes. A spoofed file
+    // gets a clear rejection here instead of a downstream renderer 500, and the
+    // data URI carries the REAL type so satori/resvg decode reliably.
+    const realMime = sniffImageMime(buf);
+    if (!realMime) {
+      return NextResponse.json(
+        { error: "That file isn't a valid PNG or JPG photo — please re-export it and try again." },
+        { status: 400 },
+      );
+    }
+    const dataUri = `data:${realMime};base64,${buf.toString("base64")}`;
 
     const admin = createAdminClient();
     // premiumBg = the uploaded photo → composed under the brand overlay (logo,

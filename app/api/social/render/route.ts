@@ -5,7 +5,11 @@ import { isAdminRole, type UserRole } from "@/lib/roles";
 import { spendCredits, refundCredit } from "@/lib/credits";
 import { renderPostImages, RENDER_BUCKET } from "@/lib/social/render";
 import { tierCost } from "@/lib/visuals/tiers";
-import { validateImageRequest, runImageProvider } from "@/lib/visuals/generate";
+import {
+  validateImageRequest,
+  runImageProvider,
+  sniffImageMime,
+} from "@/lib/visuals/generate";
 import type { CarouselSlide } from "@/lib/social/generate";
 
 // Image rendering for a social post. Three outcomes:
@@ -131,12 +135,24 @@ export async function POST(req: Request) {
       if (useOverlay) {
         premiumBg = toDataUri(img);
       } else {
-        // Clean single image — store the raw AI PNG directly (no overlay).
+        // Clean single image — store the raw AI output directly (no overlay).
+        // Providers return png OR jpeg regardless of the ask; sniff the real
+        // type so the stored object is honest.
         const admin = createAdminClient();
-        const p = `${post.clinic_id}/${post.id}/1.png`;
-        const { error } = await admin.storage
+        const mime = sniffImageMime(img) ?? "image/png";
+        let p = `${post.clinic_id}/${post.id}/1.${mime === "image/jpeg" ? "jpg" : "png"}`;
+        let { error } = await admin.storage
           .from(RENDER_BUCKET)
-          .upload(p, img, { contentType: "image/png", upsert: true });
+          .upload(p, img, { contentType: mime, upsert: true });
+        if (error && mime === "image/jpeg") {
+          // Pre-051 bucket allows only image/png — fall back to the legacy
+          // declared type (browsers sniff the real bytes) so a mid-rollout
+          // deploy never breaks the paid path.
+          p = `${post.clinic_id}/${post.id}/1.png`;
+          ({ error } = await admin.storage
+            .from(RENDER_BUCKET)
+            .upload(p, img, { contentType: "image/png", upsert: true }));
+        }
         if (error) throw new Error(`Render upload failed: ${error.message}`);
         rawPaths = [p];
       }

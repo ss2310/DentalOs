@@ -11,6 +11,24 @@ import { buildVisualPrompt } from "./prompt";
 // step (build the safety-railed prompt, generate). Credits + storage stay in
 // each route — this only owns "is this allowed, and make the pixels".
 
+/**
+ * Sniff the real image type from magic bytes — never trust a declared MIME.
+ * Used for provider output (models return png OR jpeg regardless of what we
+ * ask) and for clinic uploads (a spoofed extension must not reach the renderer).
+ */
+export function sniffImageMime(buf: Buffer): "image/png" | "image/jpeg" | null {
+  if (
+    buf.length > 8 &&
+    buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
+    return "image/jpeg";
+  }
+  return null;
+}
+
 export type ImageValidation =
   | { ok: true; tier: PremiumTier; provider: ImageProvider }
   | { ok: false; error: string; status: number };
