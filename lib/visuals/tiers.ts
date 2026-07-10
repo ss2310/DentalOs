@@ -4,7 +4,7 @@
 // never called "basic" in UI copy (they're "branded"; premium is a "photo
 // backdrop"). Pricing decided 07 Jul 2026: photo +1/+3, studio +2/+5.
 
-export type PremiumTierId = "photo" | "studio";
+export type PremiumTierId = "photo" | "studio" | "studio-pro";
 
 export type PremiumTier = {
   id: PremiumTierId;
@@ -19,6 +19,10 @@ export type PremiumTier = {
 export const PREMIUM_TIERS: PremiumTier[] = [
   { id: "photo", label: "Photo backdrop", singleCredits: 1, carouselCredits: 3 },
   { id: "studio", label: "Studio photo", singleCredits: 2, carouselCredits: 5 },
+  // Top tier — GPT-Image via OpenRouter (approved 10 Jul 2026). Best quality,
+  // higher COGS (~₹5–8). Latency ~52s runs tight under the 120s render budget,
+  // so it stays on the fast GPT-image slug; the slower variant is NOT defaulted.
+  { id: "studio-pro", label: "Studio Pro", singleCredits: 3, carouselCredits: 7 },
 ];
 
 /** Resolves an untrusted tier id (null for anything unknown — free render). */

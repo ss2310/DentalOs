@@ -95,3 +95,15 @@ export const studioImageProvider = createOpenRouterImageProvider(
   "google/gemini-3-pro-image",
   "IMAGE_STUDIO_MODEL",
 );
+
+/**
+ * Studio Pro (top) tier — GPT-Image via OpenRouter. Best quality; ~52s latency
+ * runs tight under the 120s render route budget, so it defaults to the fast
+ * gpt-5-image slug. Do NOT point IMAGE_STUDIOPRO_MODEL at the ~169s variant —
+ * it exceeds the route timeout (see latency notes above).
+ */
+export const studioProImageProvider = createOpenRouterImageProvider(
+  "openrouter:gpt-image",
+  "openai/gpt-5-image",
+  "IMAGE_STUDIOPRO_MODEL",
+);

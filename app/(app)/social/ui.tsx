@@ -63,24 +63,64 @@ export function PremiumChip({ tier }: { tier: string | null | undefined }) {
   );
 }
 
+// Free-render styles → the render.ts single-post layouts. This is what makes
+// the brand colour actually show: "Clean" (hero) is the near-white card where
+// the colour only tints the logo/footer; "Colour band" (band) puts a brand-
+// colour header band on top; "Bold" (inverse) is a full brand-colour card.
+// Carousels auto-compose their own colour mix, so the picker is single-only.
+export type StyleId = "hero" | "band" | "inverse";
+export const STYLE_OPTIONS: { id: StyleId; label: string }[] = [
+  { id: "hero", label: "Clean" },
+  { id: "band", label: "Colour band" },
+  { id: "inverse", label: "Bold" },
+];
+
 /**
- * The render choice stack: free branded render (the default, first, primary)
- * plus the premium backdrop tiers. Copy rule: the free tier is "branded",
- * never "basic" — it must not feel nerfed.
+ * The render choice stack: an optional style picker (Clean / Colour band /
+ * Bold — how much of the brand colour shows), the free branded render (the
+ * default, first, primary), plus the premium backdrop tiers. Copy rule: the
+ * free tier is "branded", never "basic" — it must not feel nerfed.
  */
 export function RenderChoices({
   format,
   rendering,
   onRender,
   compact,
+  layout,
+  onLayout,
 }: {
   format: string;
   rendering: boolean;
   onRender: (premium?: string) => void;
   compact?: boolean;
+  /** Selected single-post style; enables the picker when paired with onLayout. */
+  layout?: StyleId;
+  onLayout?: (l: StyleId) => void;
 }) {
+  const showStyles = format !== "carousel" && !!onLayout;
   return (
     <div className="flex w-full flex-col gap-2">
+      {showStyles ? (
+        <div className="flex w-full rounded-button border border-border bg-white p-0.5">
+          {STYLE_OPTIONS.map((s) => {
+            const active = (layout ?? "hero") === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => onLayout?.(s.id)}
+                disabled={rendering}
+                aria-pressed={active}
+                className={`flex min-h-[40px] flex-1 items-center justify-center rounded-[8px] px-2 text-[13px] font-medium transition-colors disabled:opacity-60 ${
+                  active ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       {!compact ? (
         <button
           onClick={() => onRender()}
@@ -90,7 +130,7 @@ export function RenderChoices({
           {rendering ? "Rendering…" : "Render branded image (free)"}
         </button>
       ) : null}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {PREMIUM_TIERS.map((t) => {
           const cost = tierCost(t, format);
           return (

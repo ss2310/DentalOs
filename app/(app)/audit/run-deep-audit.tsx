@@ -28,9 +28,11 @@ const MAX_STEPS = 20;
 
 export function RunDeepAudit({
   balance,
+  onTrial,
   extraAuditPackId,
 }: {
   balance: number;
+  onTrial?: boolean;
   extraAuditPackId: string | null;
 }) {
   const router = useRouter();
@@ -108,7 +110,9 @@ export function RunDeepAudit({
       <p className="mt-2 text-xs text-text-secondary">
         {balance > 0
           ? `${balance} audit${balance === 1 ? "" : "s"} available · 1 included each plan period`
-          : "1 audit included each plan period · extra audits ₹599"}
+          : onTrial
+            ? "Not included in the free trial · upgrade to Growth (1/period) or buy one for ₹599"
+            : "1 audit included each plan period · extra audits ₹599"}
       </p>
       {upsell ? (
         <div className="mt-3 rounded-card border border-warning/30 bg-warning/5 p-3">

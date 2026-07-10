@@ -608,6 +608,10 @@ export function GenerateClient({
                           <span className="ml-1.5 text-xs font-medium text-primary">
                             Recommended
                           </span>
+                        ) : m.tier === "premium" ? (
+                          <span className="ml-1.5 text-xs font-medium text-primary">
+                            ✨ Top tier
+                          </span>
                         ) : null}
                       </span>
                       <span className="text-xs text-text-secondary">

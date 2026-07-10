@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/toast";
 import { markPosted } from "../../actions";
-import { PlatformBadge, PLATFORM_LABEL, PremiumChip, RenderChoices } from "../../ui";
+import { PlatformBadge, PLATFORM_LABEL, PremiumChip, RenderChoices, type StyleId } from "../../ui";
 
 type Post = {
   id: string;
@@ -34,6 +34,7 @@ export function PublishClient({
   const [rendering, setRendering] = useState(false);
   const [urls, setUrls] = useState(renderUrls);
   const [premium, setPremium] = useState<string | null>(post.premiumTier);
+  const [layout, setLayout] = useState<StyleId>("hero");
 
   const fullCaption =
     post.hashtags.length > 0
@@ -60,6 +61,7 @@ export function PublishClient({
         body: JSON.stringify({
           postId: post.id,
           ...(premiumId ? { premium: premiumId } : {}),
+          ...(!premiumId && post.format !== "carousel" ? { layout } : {}),
         }),
       });
       const data = await res.json();
@@ -200,12 +202,21 @@ export function PublishClient({
                 rendering={rendering}
                 onRender={render}
                 compact
+                layout={layout}
+                onLayout={setLayout}
               />
             </div>
           </>
         ) : needsImage ? (
           <div className="mt-3">
-            <RenderChoices format={post.format} rendering={rendering} onRender={render} compact={false} />
+            <RenderChoices
+              format={post.format}
+              rendering={rendering}
+              onRender={render}
+              compact={false}
+              layout={layout}
+              onLayout={setLayout}
+            />
           </div>
         ) : (
           <p className="mt-3 text-sm text-text-secondary">

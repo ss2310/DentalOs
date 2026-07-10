@@ -64,9 +64,17 @@ export async function startDeepAudit(): Promise<AuditActionState> {
     return { error: "Could not start the audit. Please try again." };
   }
   if (!runId) {
+    // Tailor the message: a trial clinic never had a free audit (migration 050),
+    // so "you've used your included audit" would be wrong for them.
+    const { data: c } = await supabase
+      .from("clinics")
+      .select("subscription_status")
+      .single();
+    const onTrial = c?.subscription_status === "trial";
     return {
-      error:
-        "You've used your included audit. Buy an extra audit for ₹599, or it refreshes when your plan renews.",
+      error: onTrial
+        ? "Deep Audit isn't part of the free trial. Upgrade to Growth to include one, or buy a single audit for ₹599."
+        : "You've used your included audit. Buy an extra audit for ₹599, or it refreshes when your plan renews.",
       limit: true,
     };
   }

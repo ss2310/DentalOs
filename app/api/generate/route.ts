@@ -53,11 +53,9 @@ async function callOpenRouter(
   maxTokens: number,
 ): Promise<string> {
   const base = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
-  // Slugs drift as vendors ship new versions — overridable without a deploy.
-  const slug =
-    (model.id === "chatgpt"
-      ? process.env.CONTENT_CHATGPT_MODEL
-      : process.env.CONTENT_GEMINI_MODEL) || model.model;
+  // Slugs drift as vendors ship new versions — each OpenRouter model carries its
+  // own override env var (lib/models.ts), so a new premium model is tunable too.
+  const slug = (model.envVar ? process.env[model.envVar] : undefined) || model.model;
 
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",

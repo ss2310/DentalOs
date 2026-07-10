@@ -2825,3 +2825,46 @@ Prereq: migration 048 applied; deep-audit-runner cron live (Vercel Pro + CRON_SE
       runs still work from the browser.
 - [ ] Run panel copy says the tab can be closed; MAX_STEPS overrun toasts the
       "keeps running in the background" message instead of a dead end.
+
+## Brand-colour Style picker (single-post renders)
+
+- [ ] On /social review & publish, a single (non-carousel) Instagram post shows
+      a Clean / Colour band / Bold segmented control above the render buttons.
+- [ ] Set a distinctive brand colour in /social/brand (e.g. hot pink). "Bold"
+      renders a full brand-colour card; "Colour band" a colour header band;
+      "Clean" the white card (colour only on logo chip + footer). Colour visibly
+      changes between the three.
+- [ ] The style control is HIDDEN for carousels (they auto-compose their own
+      colour mix) — verify a 6-slide post shows no picker but still uses colour.
+- [ ] Premium (Photo/Studio/Studio Pro) renders ignore the style (AI backdrop
+      layout) — the picker doesn't break the paid path; nothing is charged for a
+      style change alone (only the free render re-runs).
+
+## Premium models across content surfaces
+
+- [ ] Content Studio (/generate) model picker shows 5 options: Claude
+      (Recommended), ChatGPT, Gemini Flash, Claude Opus (✨ Top tier, +2), Gemini
+      3 Pro (✨ Top tier, +1). Selecting one updates the "This will use N credits"
+      line = base cost + surcharge.
+- [ ] Generating with Opus charges base+2 and the result badge reads "Claude
+      Opus"; with Gemini 3 Pro charges base+1. A failed generation refunds fully.
+- [ ] Social render offers a third tier "✨ Studio Pro" (3 credits single / 7
+      carousel) alongside Photo and Studio; it spends before the provider call
+      and refunds if the backdrop fails (IMAGE_PROVIDER=openrouter).
+- [ ] With IMAGE_PROVIDER=mock (default/dev) all three image tiers return the
+      deterministic gradient — no key needed, no real charge to us.
+- [ ] Studio Pro finishes within the 120s render budget (gpt-5-image ~52s); do
+      NOT point IMAGE_STUDIOPRO_MODEL at the ~169s variant.
+
+## Deep Audit — not included in the free trial
+
+Prereq: migration 050 applied (column default → 0); signup sets deep_audit_credits=0.
+
+- [ ] A NEW trial signup has 0 audit credits. /audit sub-copy reads "Not included
+      in the free trial · upgrade to Growth (1/period) or buy one for ₹599".
+- [ ] Clicking Run Deep Audit on a 0-credit trial shows the trial-specific upsell
+      (upgrade or ₹599), NOT "you've used your included audit", and the ₹599
+      Buy button appears.
+- [ ] Upgrading to Growth grants 1 audit (apply_plan_purchase) and the run works;
+      buying the ₹599 Deep Audit Top-up also grants 1 and the run works.
+- [ ] Existing paid/active clinics are unaffected (still 1 included per period).

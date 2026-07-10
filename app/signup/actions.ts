@@ -126,6 +126,12 @@ export async function signUpAction(
       trial_ends_at: trialEndsAt.toISOString(),
       content_credits_balance: TRIAL_CONTENT,
       map_credits_balance: TRIAL_MAP,
+      // Deep Audit is NOT included in the free trial — each run costs us ~₹100
+      // in API spend. Trials start with 0 audit credits; the clinic gets one by
+      // upgrading to Growth (grants 1/period) or buying the ₹599 top-up. This
+      // overrides the clinics.deep_audit_credits column default (migration 050
+      // moves that default to 0 too, so both paths agree).
+      deep_audit_credits: 0,
       // Self-serve clinics pay through the live gateway (Cashfree hosted
       // checkout). 'manual' is an admin-only escape hatch for hand-onboarding,
       // set per-clinic from /admin — never the signup default, or the in-app

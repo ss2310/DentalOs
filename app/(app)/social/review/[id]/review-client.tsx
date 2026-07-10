@@ -9,7 +9,7 @@ import {
   submitForApproval,
   updatePostCaption,
 } from "../../actions";
-import { PlatformBadge, StatusBadge, PremiumChip, RenderChoices } from "../../ui";
+import { PlatformBadge, StatusBadge, PremiumChip, RenderChoices, type StyleId } from "../../ui";
 
 type Slide = { title: string; body: string };
 type Post = {
@@ -46,6 +46,7 @@ export function ReviewClient({
   const [rendering, setRendering] = useState(false);
   const [urls, setUrls] = useState(renderUrls);
   const [premium, setPremium] = useState<string | null>(post.premiumTier);
+  const [layout, setLayout] = useState<StyleId>("hero");
   const [pending, startTransition] = useTransition();
 
   const act = (fn: () => Promise<{ ok?: boolean; error?: string; violations?: string[] }>, done: string) =>
@@ -81,7 +82,13 @@ export function ReviewClient({
       const res = await fetch("/api/social/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId: post.id, ...(premium ? { premium } : {}) }),
+        // layout only applies to a single-post free render (premium uses the AI
+        // backdrop; carousels auto-compose) — send it only when it's honoured.
+        body: JSON.stringify({
+          postId: post.id,
+          ...(premium ? { premium } : {}),
+          ...(!premium && post.format !== "carousel" ? { layout } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -151,7 +158,13 @@ export function ReviewClient({
                 {post.format === "carousel" ? "6-slide carousel" : "Post image"} not rendered yet
               </p>
               <div className="w-full px-8">
-                <RenderChoices format={post.format} rendering={rendering} onRender={render} />
+                <RenderChoices
+                  format={post.format}
+                  rendering={rendering}
+                  onRender={render}
+                  layout={layout}
+                  onLayout={setLayout}
+                />
               </div>
             </div>
           )}
@@ -176,6 +189,8 @@ export function ReviewClient({
                 rendering={rendering}
                 onRender={render}
                 compact
+                layout={layout}
+                onLayout={setLayout}
               />
             </div>
           ) : null}

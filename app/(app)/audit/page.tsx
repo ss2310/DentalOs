@@ -37,7 +37,7 @@ export default async function AuditIndexPage() {
       .select("id, status, created_at, completed_at, stage_detail")
       .order("created_at", { ascending: false })
       .limit(12),
-    supabase.from("clinics").select("deep_audit_credits").single(),
+    supabase.from("clinics").select("deep_audit_credits, subscription_status").single(),
     supabase
       .from("credit_packs")
       .select("id")
@@ -48,6 +48,7 @@ export default async function AuditIndexPage() {
   const runs = (data ?? []) as RunRow[];
   const latestComplete = runs.find((r) => r.status === "complete");
   const auditBalance = clinic?.deep_audit_credits ?? 0;
+  const onTrial = clinic?.subscription_status === "trial";
   const extraAuditPackId = (pack?.id as string | undefined) ?? null;
 
   return (
@@ -57,7 +58,11 @@ export default async function AuditIndexPage() {
         subtitle="See exactly what your top local competitors are doing better — and get a 30-day plan to catch up."
         action={
           isAdmin ? (
-            <RunDeepAudit balance={auditBalance} extraAuditPackId={extraAuditPackId} />
+            <RunDeepAudit
+              balance={auditBalance}
+              onTrial={onTrial}
+              extraAuditPackId={extraAuditPackId}
+            />
           ) : undefined
         }
       />
