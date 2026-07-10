@@ -359,6 +359,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       "Choose which AI writes it: Claude (recommended, included), ChatGPT, or Gemini Flash for everyday posts, or the top-tier premium models — Claude Opus (+2 credits) and Gemini 3 Pro (+1) — when you want the best writing. The extra credits are shown on each option before you generate.",
       "Generate covers your website and Google presence: service pages, geo landing pages, blog articles, Q&A pages, WhatsApp broadcasts, review responses, and reel scripts. Instagram and Google Business feed posts now live in Social.",
       "You can also publish AI-generated landing pages for specific areas or treatments (1 content credit to publish).",
+      "For a web page or article, add a matching image: generate an AI photo from the topic (or describe your own) with Photo / Studio / Studio Pro, then download it. People and scenes are fine; the only thing off-limits is a fabricated patient before/after result.",
     ],
     questions: {
       en: [
@@ -384,8 +385,8 @@ export const HELP_SECTIONS: HelpSection[] = [
     details: [
       "Set your Brand Personality once (a 2-minute wizard: who you are, tone, language per platform, facts you're proud of). Every post is written in that voice; a fact without a source is never used.",
       "'Plan my week' asks 3 questions and creates 5 posts across platforms for your approval. 'New post' makes one topic into Instagram, Facebook, and Google Business versions in one go. Each post costs 1 content credit.",
-      "Post images and 6-slide carousels are composed from your logo and brand colours — the branded look is FREE (no credits), always. For a single post, pick a style — Clean, Colour band, or Bold — to control how much of your brand colour fills the card.",
-      "Optional premium visuals put an AI-generated photo backdrop behind the same branded overlay: Photo backdrop costs 1 content credit for a single image (3 for a carousel), Studio photo costs 2 (5 for a carousel), and Studio Pro — the top-tier photo model — costs 3 (7 for a carousel). AI backdrops never show people, faces, or treatment results — real patient photos come only from Moments with recorded consent.",
+      "Every post — Instagram, Facebook, and Google Business — can carry an image. A clean branded card (your logo + a headline) is FREE, always.",
+      "Add a photo two ways: (1) generate an AI photo from your post, or describe exactly what you want — people and festive scenes are fine; models are Photo (Gemini Flash, 1 credit), Studio (Gemini 3 Pro, 2), Studio Pro (GPT-Image, 3), carousels 3/5/7. Tick 'greeting poster' to stamp your clinic name + the caption's headline neatly over the photo (AI text on its own is unreliable). (2) Upload your OWN photo — a doctor, team, or clinic shot is free; a patient or before/after photo is allowed only after you confirm you have the patient's written consent. AI never fabricates a patient's clinical before/after result.",
       "Every post waits in the approval queue: preview it exactly as the platform shows it, then Approve, Edit (safety checks re-run), or Reject. After approving: copy the caption, download the image, post it yourself in the app, and tap 'Mark as posted'. GrowthOS never posts automatically.",
       "Your plan includes a monthly post quota (30 on Growth). A built-in safety check blocks made-up statistics, prices, or medical promises before anything reaches the queue.",
     ],

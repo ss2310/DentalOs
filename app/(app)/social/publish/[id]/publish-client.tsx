@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/toast";
 import { markPosted } from "../../actions";
-import { PlatformBadge, PLATFORM_LABEL, PremiumChip, RenderChoices, type StyleId } from "../../ui";
+import { PlatformBadge, PLATFORM_LABEL, ImageStudio } from "../../ui";
+import { UploadPhoto } from "../../upload-photo";
 
 type Post = {
   id: string;
@@ -34,7 +35,8 @@ export function PublishClient({
   const [rendering, setRendering] = useState(false);
   const [urls, setUrls] = useState(renderUrls);
   const [premium, setPremium] = useState<string | null>(post.premiumTier);
-  const [layout, setLayout] = useState<StyleId>("hero");
+  const [describe, setDescribe] = useState("");
+  const [overlay, setOverlay] = useState(false);
 
   const fullCaption =
     post.hashtags.length > 0
@@ -61,7 +63,8 @@ export function PublishClient({
         body: JSON.stringify({
           postId: post.id,
           ...(premiumId ? { premium: premiumId } : {}),
-          ...(!premiumId && post.format !== "carousel" ? { layout } : {}),
+          ...(describe.trim() ? { describe: describe.trim() } : {}),
+          ...(overlay ? { overlay: true } : {}),
         }),
       });
       const data = await res.json();
@@ -141,8 +144,6 @@ export function PublishClient({
       }
     });
 
-  const needsImage = post.platform === "instagram";
-
   return (
     <div className="mt-6 space-y-5">
       <div className="flex items-center gap-2">
@@ -166,64 +167,34 @@ export function PublishClient({
         </button>
       </div>
 
-      {/* Step 2 — image(s) */}
-      <div className="rounded-card border border-border bg-white p-4 shadow-card">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold uppercase tracking-[0.08em] text-text-secondary">
-            2 · {post.format === "carousel" ? "Slides" : "Image"}
-          </p>
-          <PremiumChip tier={premium} />
-        </div>
-        {urls.length > 0 ? (
-          <>
-            <div className="mt-3 flex gap-2 overflow-x-auto">
-              {urls.map((u, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={u}
-                  src={u}
-                  alt={`Image ${i + 1}`}
-                  className="h-36 w-36 shrink-0 rounded-md border border-border object-cover"
-                />
-              ))}
-            </div>
-            <button
-              onClick={downloadAll}
-              className="mt-4 flex h-12 w-full items-center justify-center rounded-button border border-border bg-white text-[15px] font-medium"
-            >
-              Download {urls.length > 1 ? `all ${urls.length} slides` : "image"}
-            </button>
-            <div className="mt-3">
-              <p className="mb-2 text-xs text-text-secondary">
-                {premium ? "Premium backdrop applied" : "Want a photo backdrop instead?"}
-              </p>
-              <RenderChoices
-                format={post.format}
-                rendering={rendering}
-                onRender={render}
-                compact
-                layout={layout}
-                onLayout={setLayout}
-              />
-            </div>
-          </>
-        ) : needsImage ? (
-          <div className="mt-3">
-            <RenderChoices
-              format={post.format}
-              rendering={rendering}
-              onRender={render}
-              compact={false}
-              layout={layout}
-              onLayout={setLayout}
-            />
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-text-secondary">
-            Text-only post — no image needed.
-          </p>
-        )}
-      </div>
+      {/* Step 2 — image(s): every platform can carry a post image now */}
+      <ImageStudio
+        format={post.format}
+        urls={urls}
+        rendering={rendering}
+        premium={premium}
+        describe={describe}
+        onDescribe={setDescribe}
+        overlay={overlay}
+        onOverlay={setOverlay}
+        onRender={render}
+        actions={
+          <button
+            onClick={downloadAll}
+            className="flex h-12 w-full items-center justify-center rounded-button border border-border bg-white text-[15px] font-medium"
+          >
+            Download {urls.length > 1 ? `all ${urls.length} slides` : "image"}
+          </button>
+        }
+      >
+        <UploadPhoto
+          postId={post.id}
+          onUploaded={(u) => {
+            setUrls(u);
+            setPremium(null);
+          }}
+        />
+      </ImageStudio>
 
       {/* Step 3 — post + confirm */}
       <div className="rounded-card border border-border bg-white p-4 shadow-card">

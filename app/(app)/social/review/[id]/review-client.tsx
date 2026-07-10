@@ -9,7 +9,8 @@ import {
   submitForApproval,
   updatePostCaption,
 } from "../../actions";
-import { PlatformBadge, StatusBadge, PremiumChip, RenderChoices, type StyleId } from "../../ui";
+import { PlatformBadge, StatusBadge, ImageStudio } from "../../ui";
+import { UploadPhoto } from "../../upload-photo";
 
 type Slide = { title: string; body: string };
 type Post = {
@@ -46,7 +47,8 @@ export function ReviewClient({
   const [rendering, setRendering] = useState(false);
   const [urls, setUrls] = useState(renderUrls);
   const [premium, setPremium] = useState<string | null>(post.premiumTier);
-  const [layout, setLayout] = useState<StyleId>("hero");
+  const [describe, setDescribe] = useState("");
+  const [overlay, setOverlay] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const act = (fn: () => Promise<{ ok?: boolean; error?: string; violations?: string[] }>, done: string) =>
@@ -82,12 +84,11 @@ export function ReviewClient({
       const res = await fetch("/api/social/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // layout only applies to a single-post free render (premium uses the AI
-        // backdrop; carousels auto-compose) — send it only when it's honoured.
         body: JSON.stringify({
           postId: post.id,
           ...(premium ? { premium } : {}),
-          ...(!premium && post.format !== "carousel" ? { layout } : {}),
+          ...(describe.trim() ? { describe: describe.trim() } : {}),
+          ...(overlay ? { overlay: true } : {}),
         }),
       });
       const data = await res.json();
@@ -153,47 +154,12 @@ export function ReviewClient({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={igImage} alt="Post image" className="aspect-square w-full object-cover" />
           ) : (
-            <div className="flex aspect-square w-full flex-col items-center justify-center gap-3 bg-subtle">
+            <div className="flex aspect-square w-full items-center justify-center bg-subtle">
               <p className="text-sm text-text-secondary">
-                {post.format === "carousel" ? "6-slide carousel" : "Post image"} not rendered yet
+                {post.format === "carousel" ? "6-slide carousel" : "Post image"} — add one below
               </p>
-              <div className="w-full px-8">
-                <RenderChoices
-                  format={post.format}
-                  rendering={rendering}
-                  onRender={render}
-                  layout={layout}
-                  onLayout={setLayout}
-                />
-              </div>
             </div>
           )}
-          {urls.length > 1 ? (
-            <div className="flex gap-1.5 overflow-x-auto p-2">
-              {urls.map((u, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={u} src={u} alt={`Slide ${i + 1}`} className="h-20 w-20 shrink-0 rounded-md object-cover" />
-              ))}
-            </div>
-          ) : null}
-          {igImage ? (
-            <div className="flex flex-col gap-2 border-t border-border p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-text-secondary">
-                  {premium ? "Premium backdrop applied" : "Want a photo backdrop instead?"}
-                </p>
-                <PremiumChip tier={premium} />
-              </div>
-              <RenderChoices
-                format={post.format}
-                rendering={rendering}
-                onRender={render}
-                compact
-                layout={layout}
-                onLayout={setLayout}
-              />
-            </div>
-          ) : null}
           <div className="p-3 text-[15px] leading-relaxed">
             <span className="font-semibold">{clinicName.toLowerCase().replace(/[^a-z0-9]+/g, "")}</span>{" "}
             <span className="whitespace-pre-wrap">{caption}</span>
@@ -232,6 +198,27 @@ export function ReviewClient({
           <p className="mt-3 text-sm font-medium text-primary">Learn more</p>
         </div>
       ) : null}
+
+      {/* ---- Image (every platform supports a post image) ---- */}
+      <ImageStudio
+        format={post.format}
+        urls={urls}
+        rendering={rendering}
+        premium={premium}
+        describe={describe}
+        onDescribe={setDescribe}
+        overlay={overlay}
+        onOverlay={setOverlay}
+        onRender={render}
+      >
+        <UploadPhoto
+          postId={post.id}
+          onUploaded={(u) => {
+            setUrls(u);
+            setPremium(null);
+          }}
+        />
+      </ImageStudio>
 
       {/* ---- Edit ---- */}
       {editing ? (

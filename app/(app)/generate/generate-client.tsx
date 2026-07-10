@@ -16,6 +16,7 @@ import {
   contentModel,
   type ContentModelId,
 } from "@/lib/models";
+import { PREMIUM_TIERS, premiumTier, tierCost } from "@/lib/visuals/tiers";
 import { saveContent } from "./actions";
 import { PublishHostedPage } from "./publish-hosted-page";
 
@@ -108,6 +109,12 @@ export function GenerateClient({
   const [savePending, startSave] = useTransition();
   // Client-tracked credits balance (updated from each generation's response).
   const [creditsLeft, setCreditsLeft] = useState(remaining);
+  // Relevant image for Website content (article / landing / service page).
+  const [imageModel, setImageModel] = useState<string>("photo");
+  const [imageDescribe, setImageDescribe] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const selected = useMemo(
     () => postTypes.find((p) => p.id === selectedId) ?? null,
@@ -214,6 +221,11 @@ export function GenerateClient({
   const cost = (selected?.credits_cost ?? 0) + contentModel(modelId).surcharge;
   const canAfford = creditsLeft >= cost;
 
+  // Relevant-image cost (Website types only) = the chosen image tier's price.
+  const imageTier = premiumTier(imageModel) ?? PREMIUM_TIERS[0];
+  const imageCost = tierCost(imageTier, "single");
+  const canAffordImage = creditsLeft >= imageCost;
+
   const missingRequired =
     (topicRequired && !topic.trim()) ||
     inputs.some((i) => i.required && !(extras[i.name] ?? "").trim());
@@ -227,6 +239,9 @@ export function GenerateClient({
     setResult(null);
     setError(null);
     setSaved(false);
+    setImageUrl(null);
+    setImageError(null);
+    setImageDescribe("");
   }
 
   async function generate() {
@@ -274,10 +289,39 @@ export function GenerateClient({
           : creditsLeft - cost,
       );
       setSaved(false);
+      setImageUrl(null); // a fresh article → drop any prior image
+      setImageError(null);
     } catch {
       setError("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function generateImage() {
+    setImageBusy(true);
+    setImageError(null);
+    try {
+      const res = await fetch("/api/generate/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: topic.trim() || selected?.name || "",
+          describe: imageDescribe.trim() || undefined,
+          model: imageModel,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setImageError(data?.error ?? "Could not generate the image.");
+        return;
+      }
+      setImageUrl(data.url ?? null);
+      if (typeof data.creditsLeft === "number") setCreditsLeft(data.creditsLeft);
+    } catch {
+      setImageError("Network error. Please try again.");
+    } finally {
+      setImageBusy(false);
     }
   }
 
@@ -789,6 +833,102 @@ export function GenerateClient({
               />
             ) : null}
           </div>
+
+          {/* Relevant image — Website types (article / landing / service page) */}
+          {selected?.platform === "Website" ? (
+            <div className="mt-5 rounded-button border border-border p-4">
+              <p className="text-[15px] font-medium text-text-primary">
+                Add a relevant image
+              </p>
+              <p className="mt-0.5 text-sm text-text-secondary">
+                A clean AI photo for your {selected.name.toLowerCase()} — no
+                people or patient photos.
+              </p>
+              <label className={`${labelClass} mt-3`}>
+                Describe the image{" "}
+                <span className="text-text-secondary">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={imageDescribe}
+                onChange={(e) => setImageDescribe(e.target.value)}
+                maxLength={300}
+                placeholder="e.g. a bright modern clinic reception with plants, soft daylight"
+                className={inputClass}
+              />
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {PREMIUM_TIERS.map((t) => {
+                  const active = t.id === imageModel;
+                  const c = tierCost(t, "single");
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setImageModel(t.id)}
+                      aria-pressed={active}
+                      className={`flex min-h-[56px] flex-col items-center justify-center rounded-button border px-2 py-1.5 text-center text-[13px] font-medium ${
+                        active
+                          ? "border-primary ring-2 ring-primary/20"
+                          : "border-border hover:bg-subtle"
+                      }`}
+                    >
+                      <span>{t.label}</span>
+                      <span className="text-[11px] leading-tight text-text-secondary">
+                        {t.vendorLabel}
+                      </span>
+                      <span className="text-xs text-text-secondary">
+                        {c} credit{c === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={generateImage}
+                disabled={imageBusy || !canAffordImage}
+                className={`${btnPrimary} mt-3`}
+              >
+                {imageBusy ? (
+                  <span className="flex items-center gap-2">
+                    <Spinner className="h-4 w-4" />
+                    Generating image…
+                  </span>
+                ) : imageUrl ? (
+                  "Regenerate image"
+                ) : (
+                  `Generate image (${imageCost} credit${imageCost === 1 ? "" : "s"})`
+                )}
+              </button>
+              {!canAffordImage ? (
+                <p className="mt-2 text-sm text-danger">
+                  Not enough credits for this image ({imageCost} needed).
+                </p>
+              ) : null}
+              {imageError ? (
+                <p className="mt-2 text-sm text-danger">{imageError}</p>
+              ) : null}
+              {imageUrl ? (
+                <div className="mt-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageUrl}
+                    alt="Generated image for the article"
+                    className="w-full max-w-sm rounded-card border border-border"
+                  />
+                  <a
+                    href={imageUrl}
+                    download="content-image.png"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${btnOutline} mt-2 inline-flex`}
+                  >
+                    Download image
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

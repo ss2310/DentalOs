@@ -63,64 +63,24 @@ export function PremiumChip({ tier }: { tier: string | null | undefined }) {
   );
 }
 
-// Free-render styles → the render.ts single-post layouts. This is what makes
-// the brand colour actually show: "Clean" (hero) is the near-white card where
-// the colour only tints the logo/footer; "Colour band" (band) puts a brand-
-// colour header band on top; "Bold" (inverse) is a full brand-colour card.
-// Carousels auto-compose their own colour mix, so the picker is single-only.
-export type StyleId = "hero" | "band" | "inverse";
-export const STYLE_OPTIONS: { id: StyleId; label: string }[] = [
-  { id: "hero", label: "Clean" },
-  { id: "band", label: "Colour band" },
-  { id: "inverse", label: "Bold" },
-];
-
 /**
- * The render choice stack: an optional style picker (Clean / Colour band /
- * Bold — how much of the brand colour shows), the free branded render (the
- * default, first, primary), plus the premium backdrop tiers. Copy rule: the
- * free tier is "branded", never "basic" — it must not feel nerfed.
+ * The render choice stack: the free branded render (the default, first,
+ * primary), plus the premium AI-image tiers. Copy rule: the free tier is
+ * "branded", never "basic" — it must not feel nerfed.
  */
 export function RenderChoices({
   format,
   rendering,
   onRender,
   compact,
-  layout,
-  onLayout,
 }: {
   format: string;
   rendering: boolean;
   onRender: (premium?: string) => void;
   compact?: boolean;
-  /** Selected single-post style; enables the picker when paired with onLayout. */
-  layout?: StyleId;
-  onLayout?: (l: StyleId) => void;
 }) {
-  const showStyles = format !== "carousel" && !!onLayout;
   return (
     <div className="flex w-full flex-col gap-2">
-      {showStyles ? (
-        <div className="flex w-full rounded-button border border-border bg-white p-0.5">
-          {STYLE_OPTIONS.map((s) => {
-            const active = (layout ?? "hero") === s.id;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => onLayout?.(s.id)}
-                disabled={rendering}
-                aria-pressed={active}
-                className={`flex min-h-[40px] flex-1 items-center justify-center rounded-[8px] px-2 text-[13px] font-medium transition-colors disabled:opacity-60 ${
-                  active ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"
-                }`}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
       {!compact ? (
         <button
           onClick={() => onRender()}
@@ -138,9 +98,10 @@ export function RenderChoices({
               key={t.id}
               onClick={() => onRender(t.id)}
               disabled={rendering}
-              className="flex min-h-[44px] flex-col items-center justify-center rounded-button border border-primary/30 bg-white px-3 py-1.5 text-[14px] font-medium text-text-primary disabled:opacity-60"
+              className="flex min-h-[56px] flex-col items-center justify-center rounded-button border border-primary/30 bg-white px-3 py-1.5 text-center text-[14px] font-medium text-text-primary disabled:opacity-60"
             >
               <span>✨ {t.label}</span>
+              <span className="text-[11px] leading-tight text-text-secondary">{t.vendorLabel}</span>
               <span className="text-xs text-text-secondary">
                 {cost} credit{cost === 1 ? "" : "s"}
               </span>
@@ -148,6 +109,112 @@ export function RenderChoices({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The one image control surface, shared by review + publish and shown for EVERY
+ * platform (Instagram, Facebook, Google Business all support a post image).
+ * Free branded card, or a clean AI photo from the post — with an optional
+ * description to steer it. Upload-your-own lives here too (see UploadPhoto).
+ */
+export function ImageStudio({
+  format,
+  urls,
+  rendering,
+  premium,
+  describe,
+  onDescribe,
+  overlay,
+  onOverlay,
+  onRender,
+  actions,
+  children,
+}: {
+  format: string;
+  urls: string[];
+  rendering: boolean;
+  premium: string | null;
+  describe: string;
+  onDescribe: (v: string) => void;
+  /** Greeting-poster: stamp the clinic name + headline over the AI photo. */
+  overlay: boolean;
+  onOverlay: (v: boolean) => void;
+  onRender: (premium?: string) => void;
+  /** Extra buttons under the thumbnails (e.g. Download on the publish screen). */
+  actions?: ReactNode;
+  /** Slot for the upload-your-own-photo panel. */
+  children?: ReactNode;
+}) {
+  return (
+    <div className="rounded-card border border-border bg-white p-4 shadow-card">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold uppercase tracking-[0.08em] text-text-secondary">
+          Post image
+        </p>
+        <PremiumChip tier={premium} />
+      </div>
+
+      {urls.length > 0 ? (
+        <>
+          <div className="mt-3 flex gap-2 overflow-x-auto">
+            {urls.map((u, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={u}
+                src={u}
+                alt={`Image ${i + 1}`}
+                className="h-32 w-32 shrink-0 rounded-md border border-border object-cover"
+              />
+            ))}
+          </div>
+          {actions ? <div className="mt-3">{actions}</div> : null}
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-text-secondary">
+          No image yet — make a free branded card, generate an AI photo from your
+          post, or upload your own.
+        </p>
+      )}
+
+      <div className="mt-4">
+        <label className="text-xs font-medium text-text-secondary">
+          Describe the AI photo <span className="font-normal">(optional)</span>
+        </label>
+        <input
+          value={describe}
+          onChange={(e) => onDescribe(e.target.value)}
+          maxLength={300}
+          placeholder="e.g. a calm modern clinic reception, plants, warm morning light"
+          className="mt-1 h-11 w-full rounded-button border border-border px-3 text-[15px] focus:outline-none"
+        />
+        <p className="mt-1 text-xs text-text-secondary">
+          Anything you like — a scene, a festive greeting, people. AI text can be
+          rough; for a crisp name/message use the greeting poster below.
+        </p>
+      </div>
+
+      {format !== "carousel" ? (
+        <label className="mt-3 flex items-start gap-2 text-sm text-text-primary">
+          <input
+            type="checkbox"
+            checked={overlay}
+            onChange={(e) => onOverlay(e.target.checked)}
+            className="mt-1 h-4 w-4 accent-primary"
+          />
+          <span>
+            Greeting poster — stamp my clinic name &amp; the caption&apos;s first
+            line neatly over the AI photo.
+          </span>
+        </label>
+      ) : null}
+
+      <div className="mt-3">
+        <RenderChoices format={format} rendering={rendering} onRender={onRender} />
+      </div>
+
+      {children}
     </div>
   );
 }

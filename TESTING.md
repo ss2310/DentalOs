@@ -2826,19 +2826,53 @@ Prereq: migration 048 applied; deep-audit-runner cron live (Vercel Pro + CRON_SE
 - [ ] Run panel copy says the tab can be closed; MAX_STEPS overrun toasts the
       "keeps running in the background" message instead of a dead end.
 
-## Brand-colour Style picker (single-post renders)
+## Social images v2 — colour removed, real images, all platforms
 
-- [ ] On /social review & publish, a single (non-carousel) Instagram post shows
-      a Clean / Colour band / Bold segmented control above the render buttons.
-- [ ] Set a distinctive brand colour in /social/brand (e.g. hot pink). "Bold"
-      renders a full brand-colour card; "Colour band" a colour header band;
-      "Clean" the white card (colour only on logo chip + footer). Colour visibly
-      changes between the three.
-- [ ] The style control is HIDDEN for carousels (they auto-compose their own
-      colour mix) — verify a 6-slide post shows no picker but still uses colour.
-- [ ] Premium (Photo/Studio/Studio Pro) renders ignore the style (AI backdrop
-      layout) — the picker doesn't break the paid path; nothing is charged for a
-      style change alone (only the free render re-runs).
+Colour feature removed:
+- [ ] The Clean/Colour band/Bold Style picker is GONE from /social review &
+      publish. The free "Render branded image" produces a clean white card (logo
+      + headline), never a full brand-colour fill. Carousels are clean white
+      cards too (no colour slides).
+
+Images on every platform + describe:
+- [ ] On /social review AND publish, a "Post image" card appears for Instagram,
+      Facebook, AND Google Business (previously IG only).
+- [ ] The premium tiers show model names: Photo · Gemini Flash Image (1 credit),
+      Studio · Gemini 3 Pro Image (2), Studio Pro · GPT-Image (3). Carousel costs
+      are 3/5/7.
+- [ ] A premium SINGLE render (IMAGE_PROVIDER=openrouter) returns a CLEAN AI
+      photo — no logo/text baked on. A premium CAROUSEL keeps the branded overlay
+      per slide.
+- [ ] Ticking "Greeting poster" (single only) stamps the clinic name + the
+      caption's first line neatly OVER the AI photo (overlay), instead of a clean
+      image — good for festive/promo greetings where AI text would be unreliable.
+- [ ] Typing in "Describe the AI photo" steers the image. Wording is NEVER
+      rejected (no more false-positive blocks on words like "smile"/"patients");
+      a prompt asking for people/text simply yields a clean scene with neither —
+      the SAFETY_BLOCK in the prompt shapes the output, it doesn't reject input.
+- [ ] Credit spend is atomic; a provider failure refunds fully (nothing charged).
+- [ ] With IMAGE_PROVIDER=mock (dev) all tiers return the gradient, keyless.
+
+Upload your own photo + consent:
+- [ ] "Or upload your own photo" appears in the Post image card. A doctor/team/
+      clinic photo (patient box unticked) uploads and composes into a branded
+      post — FREE (0 credits).
+- [ ] Ticking "shows a patient / before-after" reveals a required written-consent
+      checkbox; Add photo stays disabled until it's ticked. The server ALSO
+      rejects a patient upload without consent (422) — the checkbox isn't the
+      only gate.
+- [ ] Only PNG/JPG under 8 MB are accepted.
+
+## Content Studio — relevant image on Website types
+
+- [ ] After generating a Website type (blog article, geo landing, service page),
+      an "Add a relevant image" panel appears (NOT for WhatsApp / review / reel
+      types).
+- [ ] The panel offers Photo / Studio / Studio Pro (with model names + credit
+      cost), an optional describe box, and Generate → shows a clean image +
+      Download. Credits decrement by the tier cost; a failure refunds.
+- [ ] Wording is never rejected; the output stays free of people/text via the
+      prompt's SAFETY_BLOCK regardless of what's typed.
 
 ## Premium models across content surfaces
 

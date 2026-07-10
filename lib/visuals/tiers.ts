@@ -8,8 +8,10 @@ export type PremiumTierId = "photo" | "studio" | "studio-pro";
 
 export type PremiumTier = {
   id: PremiumTierId;
-  /** UI label — describes the outcome, not the vendor. */
+  /** UI label — describes the outcome. */
   label: string;
+  /** The model behind it — shown in the picker as the selling point. */
+  vendorLabel: string;
   /** Credits for a single-image post. */
   singleCredits: number;
   /** Credits for a 6-slide carousel (ONE background reused across slides). */
@@ -17,12 +19,12 @@ export type PremiumTier = {
 };
 
 export const PREMIUM_TIERS: PremiumTier[] = [
-  { id: "photo", label: "Photo backdrop", singleCredits: 1, carouselCredits: 3 },
-  { id: "studio", label: "Studio photo", singleCredits: 2, carouselCredits: 5 },
+  { id: "photo", label: "Photo", vendorLabel: "Gemini Flash Image", singleCredits: 1, carouselCredits: 3 },
+  { id: "studio", label: "Studio", vendorLabel: "Gemini 3 Pro Image", singleCredits: 2, carouselCredits: 5 },
   // Top tier — GPT-Image via OpenRouter (approved 10 Jul 2026). Best quality,
   // higher COGS (~₹5–8). Latency ~52s runs tight under the 120s render budget,
   // so it stays on the fast GPT-image slug; the slower variant is NOT defaulted.
-  { id: "studio-pro", label: "Studio Pro", singleCredits: 3, carouselCredits: 7 },
+  { id: "studio-pro", label: "Studio Pro", vendorLabel: "GPT-Image", singleCredits: 3, carouselCredits: 7 },
 ];
 
 /** Resolves an untrusted tier id (null for anything unknown — free render). */

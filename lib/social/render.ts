@@ -129,9 +129,18 @@ function footer(kit: BrandKit, clinic: ClinicLite, cta: string, inverse = false)
   );
 }
 
-// --- the layouts (3 clean compositions + a CTA closer) ----------------------
-// hero: white card, big ink headline (the spike layout).
-function layoutHero(kit: BrandKit, clinic: ClinicLite, logo: string | null, title: string, body?: string): El {
+// --- the layouts -------------------------------------------------------------
+// hero: clean white card, big ink headline — the ONE branded template (the
+// brand-colour fill layouts were removed; colour is only a subtle accent on the
+// logo chip + footer). An optional slideNo prints "n/6" for carousel pages.
+function layoutHero(
+  kit: BrandKit,
+  clinic: ClinicLite,
+  logo: string | null,
+  title: string,
+  body?: string,
+  slideNo?: string,
+): El {
   return h(
     "div",
     {
@@ -140,7 +149,12 @@ function layoutHero(kit: BrandKit, clinic: ClinicLite, logo: string | null, titl
       backgroundColor: "#FFFFFF", fontFamily: "Brand",
     },
     [
-      logoChip(kit, clinic, logo),
+      h("div", { display: "flex", justifyContent: "space-between", alignItems: "center" }, [
+        logoChip(kit, clinic, logo),
+        ...(slideNo
+          ? [h("div", { fontSize: 30, color: "#9CA0A6", fontWeight: 700 }, slideNo)]
+          : []),
+      ]),
       h("div", { display: "flex", flexDirection: "column", gap: 30 }, [
         h("div", {
           fontSize: title.length > 70 ? 58 : 72, fontWeight: 700,
@@ -151,77 +165,6 @@ function layoutHero(kit: BrandKit, clinic: ClinicLite, logo: string | null, titl
           : []),
       ]),
       footer(kit, clinic, "Aaj hi baat kariye"),
-    ],
-  );
-}
-
-// band: primary-color band at the top, content below — offer/announcement feel.
-function layoutBand(kit: BrandKit, clinic: ClinicLite, logo: string | null, title: string, body?: string, badge?: string): El {
-  return h(
-    "div",
-    {
-      width: SIZE, height: SIZE, display: "flex", flexDirection: "column",
-      backgroundColor: "#FFFFFF", fontFamily: "Brand",
-    },
-    [
-      h("div", {
-        display: "flex", flexDirection: "column", gap: 24,
-        backgroundColor: kit.primary_color, padding: "70px 80px 56px 80px",
-      }, [
-        ...(badge
-          ? [h("div", {
-              alignSelf: "flex-start", fontSize: 26, fontWeight: 700, color: kit.primary_color,
-              backgroundColor: "#FFFFFF", borderRadius: 999, padding: "10px 28px",
-              letterSpacing: "0.06em",
-            }, badge.toUpperCase())]
-          : []),
-        h("div", {
-          fontSize: title.length > 70 ? 54 : 66, fontWeight: 700, color: "#FFFFFF",
-          lineHeight: 1.15, letterSpacing: "-0.02em",
-        }, title),
-      ]),
-      h("div", {
-        display: "flex", flexDirection: "column", justifyContent: "space-between",
-        flexGrow: 1, padding: "56px 80px 80px 80px",
-      }, [
-        body
-          ? h("div", { fontSize: 38, color: kit.secondary_color, lineHeight: 1.5 }, body)
-          : h("div", {}),
-        h("div", { display: "flex", flexDirection: "column", gap: 36 }, [
-          logoChip(kit, clinic, logo),
-          footer(kit, clinic, "WhatsApp par message kariye"),
-        ]),
-      ]),
-    ],
-  );
-}
-
-// inverse: full primary-color card, white type — the hook/CTA slides.
-function layoutInverse(kit: BrandKit, clinic: ClinicLite, logo: string | null, title: string, body?: string, slideNo?: string): El {
-  return h(
-    "div",
-    {
-      width: SIZE, height: SIZE, display: "flex", flexDirection: "column",
-      justifyContent: "space-between", padding: 80,
-      backgroundColor: kit.primary_color, fontFamily: "Brand",
-    },
-    [
-      h("div", { display: "flex", justifyContent: "space-between", alignItems: "center" }, [
-        logoChip(kit, clinic, logo, true),
-        ...(slideNo
-          ? [h("div", { fontSize: 30, color: "#FFFFFFB3", fontWeight: 700 }, slideNo)]
-          : []),
-      ]),
-      h("div", { display: "flex", flexDirection: "column", gap: 30 }, [
-        h("div", {
-          fontSize: title.length > 70 ? 58 : 74, fontWeight: 700, color: "#FFFFFF",
-          lineHeight: 1.12, letterSpacing: "-0.02em",
-        }, title),
-        ...(body
-          ? [h("div", { fontSize: 36, color: "#FFFFFFD9", lineHeight: 1.45 }, body)]
-          : []),
-      ]),
-      footer(kit, clinic, "Abhi WhatsApp kariye", true),
     ],
   );
 }
@@ -286,9 +229,6 @@ function layoutAiHero(
   );
 }
 
-export const SINGLE_LAYOUTS = ["hero", "band", "inverse"] as const;
-export type SingleLayout = (typeof SINGLE_LAYOUTS)[number];
-
 // --- rendering ----------------------------------------------------------------
 /** Render one element tree to PNG at the given dimensions (font = brand kit's). */
 export async function renderElementToPng(
@@ -327,8 +267,6 @@ export type RenderInput = {
   format: "single" | "carousel";
   caption: string;
   slides: CarouselSlide[] | null;
-  campaignType?: string | null;
-  layout?: SingleLayout;
   // Premium hybrid: an AI-generated backdrop as a data URI. When set, every
   // page uses the aiHero layout over this ONE background (a carousel reuses
   // it across all slides — one generation per run, by design).
@@ -338,8 +276,8 @@ export type RenderInput = {
 /**
  * Render a post's image(s), upload to the clinic-scoped social-renders bucket
  * (service-role client — the bucket has no client write policy) and return the
- * storage paths. Single → 1 PNG; carousel → 6 (hook=inverse, 2–5=hero/band
- * alternating, 6=CTA inverse). Zero credits.
+ * storage paths. Single → 1 PNG; carousel → 6 clean white cards (or the aiHero
+ * backdrop when premiumBg is set). Zero credits.
  */
 export async function renderPostImages(
   admin: SupabaseClient,
@@ -374,20 +312,12 @@ export async function renderPostImages(
       const no = `${i + 1}/${slides.length}`;
       if (input.premiumBg)
         pages.push(layoutAiHero(brand, clinic, logoDataUri, input.premiumBg, title, body, no));
-      else if (i === 0) pages.push(layoutInverse(brand, clinic, logoDataUri, title, body, no));
-      else if (i === slides.length - 1)
-        pages.push(layoutInverse(brand, clinic, logoDataUri, title, body, no));
-      else if (i % 2 === 1) pages.push(layoutHero(brand, clinic, logoDataUri, title, body));
-      else pages.push(layoutBand(brand, clinic, logoDataUri, title, body));
+      else pages.push(layoutHero(brand, clinic, logoDataUri, title, body, no));
     });
   } else {
     const title = headlineFromCaption(input.caption);
-    const layout = input.layout ?? "hero";
-    const badge = input.campaignType ? stripEmoji(input.campaignType).slice(0, 24) : undefined;
     if (input.premiumBg)
       pages.push(layoutAiHero(brand, clinic, logoDataUri, input.premiumBg, title));
-    else if (layout === "band") pages.push(layoutBand(brand, clinic, logoDataUri, title, undefined, badge));
-    else if (layout === "inverse") pages.push(layoutInverse(brand, clinic, logoDataUri, title));
     else pages.push(layoutHero(brand, clinic, logoDataUri, title));
   }
 
