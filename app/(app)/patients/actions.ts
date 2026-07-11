@@ -80,10 +80,12 @@ export async function addPatient(
   // Graceful pre-053 fallback: referral_source doesn't exist until the
   // migration runs — never let a mid-rollout deploy block adding patients.
   if (error && /referral_source/i.test(error.message ?? "")) {
-    const { referral_source: _drop, ...legacy } = parsed;
-    ({ error } = await supabase
-      .from("patients")
-      .insert({ ...legacy, clinic_id: profile.home_clinic_id }));
+    const legacy: Record<string, unknown> = {
+      ...parsed,
+      clinic_id: profile.home_clinic_id,
+    };
+    delete legacy.referral_source;
+    ({ error } = await supabase.from("patients").insert(legacy));
   }
 
   if (error) return { error: "Could not add patient. Please try again." };
@@ -108,7 +110,8 @@ export async function updatePatient(
 
   // Same pre-053 fallback as addPatient.
   if (error && /referral_source/i.test(error.message ?? "")) {
-    const { referral_source: _drop, ...legacy } = parsed;
+    const legacy: Record<string, unknown> = { ...parsed };
+    delete legacy.referral_source;
     ({ error } = await supabase.from("patients").update(legacy).eq("id", id));
   }
 
