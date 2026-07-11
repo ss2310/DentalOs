@@ -215,7 +215,11 @@ export default async function PipelinePage() {
       {cases.length === 0 ? (
         <>
           <SectionHeader>Treatment Cases</SectionHeader>
-          <EmptyState>No treatment cases yet. Add your first case.</EmptyState>
+          <EmptyState>
+            No treatment plans being discussed. When a patient is thinking
+            over a treatment, add it here (or via Add Case on their profile)
+            so the follow-up never slips.
+          </EmptyState>
         </>
       ) : (
         <PipelineTabs

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PlusIcon } from "@/components/icons";
 import type { PatientOption, RateCardOption } from "@/lib/types";
 import { BookAppointment } from "./book-appointment";
@@ -27,7 +27,13 @@ export function AppointmentsToolbar({
   doctorName: string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [bookOpen, setBookOpen] = useState(false);
+
+  // Global "+ New → Book Appointment" lands here with ?book=1 — open the modal.
+  useEffect(() => {
+    if (searchParams.get("book") === "1") setBookOpen(true);
+  }, [searchParams]);
 
   const isCustom = selected !== today && selected !== tomorrow;
 

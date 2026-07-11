@@ -94,9 +94,18 @@ type ScheduleRow = {
   id: string;
   appointment_time: string;
   status: AppointmentStatus;
+  patient_id: string | null;
   patient: { full_name: string } | null;
   treatment: { treatment_name: string } | null;
 };
+
+// Statuses where the visit hasn't been logged yet → one-tap "Log Visit".
+const LOGGABLE_STATUSES: ReadonlySet<string> = new Set([
+  "scheduled",
+  "confirmed",
+  "arrived",
+  "in_chair",
+]);
 
 type ActivityRow = {
   id: string;
@@ -213,16 +222,17 @@ export default async function DashboardPage() {
       .select("plan_value")
       .eq("stage", "thinking")
       .lte("follow_up_date", today),
-    // Mini schedule: today's appointments (active), earliest first
+    // Today's schedule — the lead section of the task-first dashboard, so it
+    // shows the whole day (not a 5-row teaser) with patient links.
     supabase
       .from("appointments")
       .select(
-        "id, appointment_time, status, patient:patient_id(full_name), treatment:treatment_type_id(treatment_name)",
+        "id, appointment_time, status, patient_id, patient:patient_id(full_name), treatment:treatment_type_id(treatment_name)",
       )
       .eq("appointment_date", today)
       .not("status", "in", "(cancelled_patient,rescheduled)")
       .order("appointment_time", { ascending: true })
-      .limit(5),
+      .limit(20),
     // Recent activity: last 5 interactions
     supabase
       .from("interactions")
@@ -481,7 +491,139 @@ export default async function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Stat cards — the day's headline metric leads in solid brand teal */}
+      {/* TASK-FIRST: the day's work leads, numbers follow. A receptionist
+          opens the app and it tells her what to do next. */}
+
+      {/* 1. Today's schedule — every row has its one next action. */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
+            Today&apos;s Schedule
+          </h2>
+          <Link
+            href="/appointments"
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            View all →
+          </Link>
+        </div>
+        <div className="mt-3 rounded-card border border-border bg-white">
+          {schedule.length === 0 ? (
+            <p className="p-6 text-center text-sm text-text-secondary">
+              No appointments today. Tap Book Appointment to add one — the
+              24-hour WhatsApp reminder is prepared for you automatically.
+            </p>
+          ) : (
+            schedule.map((a, i) => {
+              const badge = APPT_STATUS[a.status];
+              return (
+                <div
+                  key={a.id}
+                  className={`flex items-center gap-3 px-4 py-3 ${
+                    i > 0 ? "border-t border-border" : ""
+                  }`}
+                >
+                  <span className="w-16 shrink-0 text-sm font-medium text-text-primary">
+                    {formatTime(a.appointment_time)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {a.patient_id ? (
+                      <Link
+                        href={`/patients/${a.patient_id}`}
+                        className="block truncate text-[15px] font-medium text-text-primary hover:text-primary"
+                      >
+                        {a.patient?.full_name ?? "Unknown"}
+                      </Link>
+                    ) : (
+                      <p className="truncate text-[15px] text-text-primary">
+                        {a.patient?.full_name ?? "Unknown"}
+                      </p>
+                    )}
+                    <p className="truncate text-sm text-text-secondary">
+                      {a.treatment?.treatment_name ?? "No treatment yet"}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-pill px-2.5 py-1 text-xs font-medium ${badge.badge}`}
+                  >
+                    {badge.label}
+                  </span>
+                  {LOGGABLE_STATUSES.has(a.status) ? (
+                    <Link
+                      href={`/visit-log/${a.id}`}
+                      className="flex h-11 shrink-0 items-center rounded-button bg-primary px-3 text-sm font-medium text-white hover:bg-primary/90"
+                    >
+                      Log Visit
+                    </Link>
+                  ) : a.status === "completed" ? (
+                    <span className="shrink-0 text-sm font-medium text-success">
+                      ✓
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* 2. Actions needed */}
+      <h2 className="mt-8 text-sm font-medium uppercase tracking-wide text-text-secondary">
+        Actions Needed
+      </h2>
+      <div className="mt-3">
+        <ActionsNeeded rows={actions} />
+      </div>
+
+      {/* Follow-ups due — materialized from confirmed voice notes. Only shown
+          when there's something to act on, so non-voice clinics see nothing. */}
+      {followupsDue > 0 ? (
+        <div id="followups" className="mt-8 scroll-mt-20">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
+              Follow-ups Due
+            </h2>
+            <Link
+              href="/notes"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              All notes →
+            </Link>
+          </div>
+          <div className="mt-3 rounded-card border border-border bg-white">
+            {followupTasks.slice(0, 6).map((f, i) => {
+              const overdue = Boolean(f.due_date && f.due_date < today);
+              return (
+                <Link
+                  key={f.id}
+                  href={f.patient_id ? `/patients/${f.patient_id}` : "/notes"}
+                  className={`flex items-center gap-3 px-4 py-3 hover:bg-subtle ${
+                    i > 0 ? "border-t border-border" : ""
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] text-text-primary">
+                      {f.description}
+                    </p>
+                    <p className="truncate text-sm text-text-secondary">
+                      {f.patient?.full_name ?? "General note"}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 text-sm ${
+                      overdue ? "font-medium text-danger" : "text-text-secondary"
+                    }`}
+                  >
+                    {f.due_date ? formatDate(f.due_date) : "No date"}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {/* 3. The numbers — below the work, where the owner scrolls to. */}
       <StatGrid cols={4}>
         <StatCard label="Appointments Today" value={String(apptToday)} hero />
         {showBusiness ? (
@@ -553,111 +695,7 @@ export default async function DashboardPage() {
         </Link>
       ) : null}
 
-      {/* Actions needed */}
-      <h2 className="mt-8 text-sm font-medium uppercase tracking-wide text-text-secondary">
-        Actions Needed
-      </h2>
-      <div className="mt-3">
-        <ActionsNeeded rows={actions} />
-      </div>
-
-      {/* Follow-ups due — materialized from confirmed voice notes. Only shown
-          when there's something to act on, so non-voice clinics see nothing. */}
-      {followupsDue > 0 ? (
-        <div id="followups" className="mt-8 scroll-mt-20">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
-              Follow-ups Due
-            </h2>
-            <Link
-              href="/notes"
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              All notes →
-            </Link>
-          </div>
-          <div className="mt-3 rounded-card border border-border bg-white">
-            {followupTasks.slice(0, 6).map((f, i) => {
-              const overdue = Boolean(f.due_date && f.due_date < today);
-              return (
-                <Link
-                  key={f.id}
-                  href={f.patient_id ? `/patients/${f.patient_id}` : "/notes"}
-                  className={`flex items-center gap-3 px-4 py-3 hover:bg-subtle ${
-                    i > 0 ? "border-t border-border" : ""
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] text-text-primary">
-                      {f.description}
-                    </p>
-                    <p className="truncate text-sm text-text-secondary">
-                      {f.patient?.full_name ?? "General note"}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 text-sm ${
-                      overdue ? "font-medium text-danger" : "text-text-secondary"
-                    }`}
-                  >
-                    {f.due_date ? formatDate(f.due_date) : "No date"}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Mini schedule */}
-        <div>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
-              Today&apos;s Schedule
-            </h2>
-            <Link href="/appointments" className="text-sm font-medium text-primary hover:underline">
-              View all →
-            </Link>
-          </div>
-          <div className="mt-3 rounded-card border border-border bg-white">
-            {schedule.length === 0 ? (
-              <p className="p-6 text-center text-sm text-text-secondary">
-                No appointments today.
-              </p>
-            ) : (
-              schedule.map((a, i) => {
-                const badge = APPT_STATUS[a.status];
-                return (
-                  <div
-                    key={a.id}
-                    className={`flex items-center gap-3 px-4 py-3 ${
-                      i > 0 ? "border-t border-border" : ""
-                    }`}
-                  >
-                    <span className="w-16 shrink-0 text-sm font-medium text-text-primary">
-                      {formatTime(a.appointment_time)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] text-text-primary">
-                        {a.patient?.full_name ?? "Unknown"}
-                      </p>
-                      <p className="truncate text-sm text-text-secondary">
-                        {a.treatment?.treatment_name ?? "No treatment yet"}
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-pill px-2.5 py-1 text-xs font-medium ${badge.badge}`}
-                    >
-                      {badge.label}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
+      <div className="mt-8">
         {/* Recent activity */}
         <div>
           <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">

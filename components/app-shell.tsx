@@ -34,6 +34,7 @@ import {
   MicIcon,
 } from "@/components/icons";
 import { Toaster } from "@/components/toast";
+import { QuickAdd } from "@/components/quick-add";
 import { HowItWorks } from "@/components/how-it-works";
 import { HelpChat } from "@/components/help-chat";
 import { VoiceNoteButton } from "@/components/voice-note-button";
@@ -60,13 +61,8 @@ type NavEntry = NavLeaf | NavGroup;
 // Billing→Payments, Recalls→Check-up Reminders, Recovery→Revenue Recovered).
 const NAV: NavEntry[] = [
   { label: "Dashboard", href: "/dashboard", Icon: HomeIcon },
-  {
-    label: "Get Patients In",
-    items: [
-      { label: "Enquiries", href: "/leads", Icon: LeadsIcon },
-      { label: "Treatment Plans", href: "/pipeline", Icon: PipelineIcon },
-    ],
-  },
+  // "Run the Clinic" leads: it's the receptionist's daily loop (appointments,
+  // patients), so the first thing every role sees is their own work.
   {
     label: "Run the Clinic",
     items: [
@@ -84,6 +80,13 @@ const NAV: NavEntry[] = [
       { label: "Reviews", href: "/reviews", Icon: ReviewsIcon },
       { label: "Campaigns", href: "/campaigns", Icon: CampaignsIcon },
       { label: "Revenue Recovered", href: "/recovery", Icon: RecoveryIcon, adminOnly: true },
+    ],
+  },
+  {
+    label: "Get Patients In",
+    items: [
+      { label: "Enquiries", href: "/leads", Icon: LeadsIcon },
+      { label: "Treatment Plans", href: "/pipeline", Icon: PipelineIcon },
     ],
   },
   {
@@ -319,6 +322,7 @@ export function AppShell({
           </div>
 
           <div className="flex items-center gap-1">
+            <QuickAdd />
             {voiceNotes ? (
               <VoiceNoteButton patientId={null} variant="icon" reviewInline />
             ) : null}

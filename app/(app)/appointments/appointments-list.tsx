@@ -37,7 +37,8 @@ export function AppointmentsList({
     return (
       <div className="rounded-card border border-border bg-white p-10 text-center">
         <p className="text-[15px] text-text-secondary">
-          No appointments for {dateLabel}.
+          No appointments for {dateLabel}. Tap Book to add one — the 24-hour
+          WhatsApp reminder is prepared for you automatically.
         </p>
       </div>
     );

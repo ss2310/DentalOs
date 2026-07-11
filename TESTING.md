@@ -2960,3 +2960,24 @@ treatment_plans.updated_at), then `notify pgrst, 'reload schema'`.
       "(₹X saved)"; blank → items total; ₹0/negative blocked.
 - [ ] Editing a plan with an override prefills the override; clearing it
       reverts the total to the items sum.
+
+## Simpler UI — Phase 1+2 (global + New, Today-first dashboard)
+
+- [ ] Header shows a teal "+ New" button (all roles, mobile + desktop): menu
+      offers New Patient / Book Appointment / Log Walk-in Visit / Record
+      Payment; closes on outside click and Escape.
+- [ ] "+ New → New Patient" lands on /patients with the Add Patient modal
+      already open; "+ New → Book Appointment" lands on /appointments with the
+      booking modal open.
+- [ ] Sidebar group order is Run the Clinic → Get Paid & Keep Them → Get
+      Patients In → Marketing (receptionist's daily work first).
+- [ ] Dashboard order is: greeting → setup checklist (only while incomplete) →
+      Today's Schedule (full-width, up to 20 rows) → Actions Needed →
+      Follow-ups → stat cards → Deep Audit → Recent Activity.
+- [ ] Today's Schedule rows: patient name links to their profile; active
+      appointments (scheduled/confirmed/arrived/in chair) show a one-tap
+      "Log Visit" button → /visit-log/[id]; completed rows show ✓.
+- [ ] Empty states on Payments / Check-up Reminders / Treatment Plans /
+      Appointments explain what the page does and where items come from.
+- [ ] Receptionist view: dashboard leads with schedule + actions; money stat
+      cards (Plan Value / Recovered) stay hidden for receptionists.

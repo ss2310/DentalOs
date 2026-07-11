@@ -207,7 +207,10 @@ export default async function BillingPage() {
       {view.length === 0 ? (
         <>
           <SectionHeader>Outstanding Balances</SectionHeader>
-          <EmptyState>No outstanding balances. 🎉</EmptyState>
+          <EmptyState>
+            All payments collected 🎉 When a visit is saved with money still
+            due, it shows up here so you can collect or remind later.
+          </EmptyState>
         </>
       ) : (
         grouped.map((g) => {

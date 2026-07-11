@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { SearchIcon, PlusIcon } from "@/components/icons";
 import { formatDate, formatINR } from "@/lib/format";
 import type { Patient } from "@/lib/types";
@@ -137,9 +138,15 @@ export function PatientsClient({
   treatmentsByPatient: Record<string, string[]>;
   treatmentOptions: string[];
 }) {
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [treatment, setTreatment] = useState("");
+
+  // Global "+ New → New Patient" lands here with ?add=1 — open the modal.
+  useEffect(() => {
+    if (searchParams.get("add") === "1") setAddOpen(true);
+  }, [searchParams]);
   const [onlyDue, setOnlyDue] = useState(false);
   const [lastVisit, setLastVisit] = useState<LastVisitFilter>("");
   const [grouped, setGrouped] = useState(false);

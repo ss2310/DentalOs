@@ -111,7 +111,11 @@ export default async function RecallsPage({
 
       <div>
         {recalls.length === 0 ? (
-          <EmptyState>No recalls in this view.</EmptyState>
+          <EmptyState>
+            No check-ups due here. When a logged treatment needs a follow-up
+            (like cleaning every 6 months), the reminder appears automatically
+            — you just tap Remind.
+          </EmptyState>
         ) : (
           <div className="space-y-3">
             {recalls.map((r) => {
