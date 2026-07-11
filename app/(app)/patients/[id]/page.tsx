@@ -15,9 +15,12 @@ import {
 import type { Patient, VisitLog, Recall, ClinicNote } from "@/lib/types";
 import { voiceNotesEnabledForClinic } from "@/lib/voice-notes-access";
 import { VoiceNotesPanel } from "@/components/voice-notes-panel";
+import { waLink } from "@/lib/whatsapp";
+import { RecallActions } from "@/app/(app)/recalls/recall-actions";
 import { EditPatientButton } from "./edit-patient-button";
 import { AddVisitButton } from "./add-visit-modal";
 import { RecordPaymentButton } from "./record-payment-button";
+import { ProfileActions } from "./profile-actions";
 import { TreatmentPlans, type SavedPlan } from "./treatment-plans";
 
 type OpenBalance = {
@@ -256,6 +259,10 @@ export default async function PatientDetailPage({
   const age = calcAge(patient.date_of_birth);
   const whatsapp = patient.whatsapp_number ?? patient.phone;
   const outstanding = Number(patient.total_outstanding) || 0;
+  // IST "today" for the booking modal's default date (en-CA → YYYY-MM-DD).
+  const todayIST = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
 
   // "Plan value on the table": open pipeline cases + plans not yet sent.
   const planValue =
@@ -342,6 +349,17 @@ export default async function PatientDetailPage({
           </div>
           <div className="flex flex-wrap gap-2">
             {addVisitButton}
+            <ProfileActions
+              patient={{
+                id: patient.id,
+                full_name: patient.full_name,
+                whatsapp_number: patient.whatsapp_number,
+                phone: patient.phone,
+              }}
+              rateCards={rateCards}
+              defaultDoctor={clinicRow?.doctor_name ?? ""}
+              today={todayIST}
+            />
             <EditPatientButton patient={patient} />
           </div>
         </div>
@@ -435,30 +453,85 @@ export default async function PatientDetailPage({
               <div className="space-y-3">
                 {recalls.map((r) => {
                   const badge = RECALL_STATUS[r.status as RecallStatus];
+                  // Same Hinglish reminder as the Recalls page (wa.me, rule 3).
+                  const remindUrl = whatsapp
+                    ? waLink(
+                        whatsapp,
+                        `Hi ${patient.full_name} ji, aapka ${humanizeRecallType(r.recall_type)} checkup due hai. Is week appointment book karein? 🦷`,
+                      )
+                    : null;
                   return (
                     <div
                       key={r.id}
-                      className="flex items-center justify-between rounded-card border border-border bg-white p-4"
+                      className="rounded-card border border-border bg-white p-4"
                     >
-                      <div>
-                        <p className="font-medium text-text-primary">
-                          {humanizeRecallType(r.recall_type)}
-                        </p>
-                        <p className="mt-0.5 text-sm text-text-secondary">
-                          Due: {formatDate(r.due_date)}
-                        </p>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-text-primary">
+                            {humanizeRecallType(r.recall_type)}
+                          </p>
+                          <p className="mt-0.5 text-sm text-text-secondary">
+                            Due: {formatDate(r.due_date)}
+                          </p>
+                        </div>
+                        <span
+                          className={`rounded-pill px-2.5 py-1 text-xs font-medium ${badge.badge}`}
+                        >
+                          {badge.label}
+                        </span>
                       </div>
-                      <span
-                        className={`rounded-pill px-2.5 py-1 text-xs font-medium ${badge.badge}`}
-                      >
-                        {badge.label}
-                      </span>
+                      <div className="mt-3 border-t border-border pt-3">
+                        <RecallActions
+                          view={{
+                            id: r.id,
+                            patientId: patient.id,
+                            patientName: patient.full_name,
+                            patientWhatsapp: whatsapp,
+                            status: r.status as RecallStatus,
+                            remindUrl,
+                          }}
+                          patients={[]}
+                          rateCards={rateCards}
+                          doctorName={clinicRow?.doctor_name ?? ""}
+                          today={todayIST}
+                        />
+                      </div>
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
+
+          {/* Typed quick notes for clinics WITHOUT voice notes (voice clinics
+              see them inside VoiceNotesPanel above). */}
+          {!voiceEnabled ? (
+            <div className="mt-8">
+              <SectionHeader>Notes</SectionHeader>
+              {notes.filter((n) => n.status === "confirmed" && n.note_text)
+                .length === 0 ? (
+                <EmptyCard text="No notes yet. Use Quick Note to add one." />
+              ) : (
+                <div className="space-y-3">
+                  {notes
+                    .filter((n) => n.status === "confirmed" && n.note_text)
+                    .map((n) => (
+                      <div
+                        key={n.id}
+                        className="rounded-card border border-border bg-white p-4"
+                      >
+                        <p className="whitespace-pre-wrap text-[15px] text-text-primary">
+                          {n.note_text}
+                        </p>
+                        <p className="mt-2 text-sm text-text-secondary">
+                          {formatDate(n.created_at)}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          ) : null}
         </>
       ) : null}
 

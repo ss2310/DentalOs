@@ -2940,3 +2940,23 @@ treatment_plans.updated_at), then `notify pgrst, 'reload schema'`.
       with none land in "No treatments yet".
 - [ ] Mobile (375px): filter bar wraps, all controls ≥44px, tables collapse to
       cards.
+
+## Patient Profile Powerhouse round 2 + per-patient plan pricing
+
+- [ ] Header shows Book Appointment / Add Case / Quick Note alongside
+      + Add Treatment and Edit; all open modals with the patient locked
+      (no patient picker inside).
+- [ ] Book Appointment from profile creates a scheduled appointment for the
+      chosen date (defaults to today IST) — visible on /appointments.
+- [ ] Add Case from profile creates a pipeline case (stage: identified) with
+      the plan lines; visible on /pipeline and in Treatments & Plans tab.
+- [ ] Quick Note saves a typed note; voice-enabled clinics see it in the
+      Voice Notes panel, non-voice clinics see a "Notes" section (Overview).
+- [ ] Recalls on Overview have Remind (wa.me opens + status → Reminded),
+      Book (locks patient, marks recall scheduled), Complete, Dismiss —
+      matching the /recalls page behaviour.
+- [ ] Plan modal shows "Items total" + "Plan total for this patient" override:
+      set lower → green "₹X discount for this patient", WhatsApp message shows
+      "(₹X saved)"; blank → items total; ₹0/negative blocked.
+- [ ] Editing a plan with an override prefills the override; clearing it
+      reverts the total to the items sum.

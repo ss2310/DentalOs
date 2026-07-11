@@ -108,27 +108,31 @@ export function AddCaseModal({
   onClose,
   patients,
   rateCards,
+  initialPatient,
 }: {
   open: boolean;
   onClose: () => void;
   patients: PatientOption[];
   rateCards: RateCard[];
+  // When set, the patient is preselected and locked (used from the patient
+  // profile) — mirrors BookAppointment's initialPatient.
+  initialPatient?: PatientOption;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [patientId, setPatientId] = useState("");
+  const [patientId, setPatientId] = useState(initialPatient?.id ?? "");
   const [lines, setLines] = useState<PlanLine[]>([EMPTY_LINE]);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setPatientId("");
+      setPatientId(initialPatient?.id ?? "");
       setLines([EMPTY_LINE]);
       setNotes("");
       setError(null);
     }
-  }, [open]);
+  }, [open, initialPatient?.id]);
 
   function setLine(i: number, patch: Partial<PlanLine>) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -191,7 +195,13 @@ export function AddCaseModal({
           <label className={labelClass}>
             Patient <span className="text-danger">*</span>
           </label>
-          <PatientCombobox patients={patients} onSelect={setPatientId} />
+          {initialPatient ? (
+            <div className="flex h-11 items-center rounded-button border border-border bg-subtle px-3 text-[15px] text-text-primary">
+              {initialPatient.full_name}
+            </div>
+          ) : (
+            <PatientCombobox patients={patients} onSelect={setPatientId} />
+          )}
         </div>
 
         <div>

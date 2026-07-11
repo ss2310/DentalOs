@@ -7,10 +7,21 @@ export type PlanActionState = { ok?: boolean; error?: string };
 
 export type PlanItem = { name: string; cost: number };
 
+/** Final plan value: the per-patient override when given (package price /
+ *  discount), else the items sum. */
+function resolveTotal(items: PlanItem[], override?: number): number {
+  const sum = items.reduce((s, i) => s + i.cost, 0);
+  if (override === undefined || override === null) return sum;
+  const n = Number(override);
+  return Number.isFinite(n) && n > 0 ? n : sum;
+}
+
 export async function createTreatmentPlan(input: {
   patientId: string;
   planName: string;
   items: PlanItem[];
+  /** Optional per-patient total override (e.g. package discount). */
+  total?: number;
 }): Promise<PlanActionState> {
   const planName = input.planName.trim();
   if (!planName) return { error: "Give the plan a name." };
@@ -20,7 +31,7 @@ export async function createTreatmentPlan(input: {
     .filter((i) => i.name);
   if (items.length === 0) return { error: "Add at least one treatment." };
 
-  const total = items.reduce((s, i) => s + i.cost, 0);
+  const total = resolveTotal(items, input.total);
 
   const supabase = createClient();
   const {
@@ -59,6 +70,8 @@ export async function updateTreatmentPlan(input: {
   patientId: string;
   planName: string;
   items: PlanItem[];
+  /** Optional per-patient total override (e.g. package discount). */
+  total?: number;
 }): Promise<PlanActionState> {
   const planName = input.planName.trim();
   if (!planName) return { error: "Give the plan a name." };
@@ -68,7 +81,7 @@ export async function updateTreatmentPlan(input: {
     .filter((i) => i.name);
   if (items.length === 0) return { error: "Add at least one treatment." };
 
-  const total = items.reduce((s, i) => s + i.cost, 0);
+  const total = resolveTotal(items, input.total);
 
   const supabase = createClient();
   const { error } = await supabase

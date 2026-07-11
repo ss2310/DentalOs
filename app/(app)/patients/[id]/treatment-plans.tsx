@@ -69,6 +69,10 @@ export function TreatmentPlans({
   // null = creating a new plan; a plan id = editing that plan in the modal.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [planName, setPlanName] = useState("");
+  // Per-patient total override ("" = charge the items total). This is how a
+  // package price / discount is set for THIS patient without touching the
+  // rate card.
+  const [overrideTotal, setOverrideTotal] = useState("");
   // Editable advance amount per plan (defaults to the plan total).
   const [advance, setAdvance] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<ItemRow[]>([
@@ -80,18 +84,25 @@ export function TreatmentPlans({
     return rateCards.find((c) => c.id === id)?.treatment_name ?? "";
   }
 
-  const total = rows.reduce(
+  const itemsTotal = rows.reduce(
     (s, r) => (r.treatmentId || r.name ? s + (Number(r.cost) || 0) : s),
     0,
   );
+  const overrideNum = overrideTotal.trim() === "" ? null : Number(overrideTotal);
+  const overrideInvalid =
+    overrideNum !== null && (!Number.isFinite(overrideNum) || overrideNum <= 0);
+  const total = overrideNum !== null && !overrideInvalid ? overrideNum : itemsTotal;
+  const discount = itemsTotal - total;
   const validRows = rows.filter((r) => r.treatmentId || r.name);
-  const canSave = planName.trim() !== "" && validRows.length > 0;
+  const canSave =
+    planName.trim() !== "" && validRows.length > 0 && !overrideInvalid;
 
   function reset() {
     setPlanName("");
     setRows([{ key: 1, treatmentId: "", cost: "" }]);
     nextKey.current = 2;
     setEditingId(null);
+    setOverrideTotal("");
   }
 
   function openCreate() {
@@ -117,6 +128,14 @@ export function TreatmentPlans({
     });
     setRows(prefill.length ? prefill : [{ key: 1, treatmentId: "", cost: "" }]);
     nextKey.current = prefill.length + 1;
+    // Saved total differing from the items sum means an override was set.
+    const savedItemsTotal = plan.items.reduce((s, i) => s + (Number(i.cost) || 0), 0);
+    const savedTotal = Number(plan.total_cost) || 0;
+    setOverrideTotal(
+      Math.round(savedTotal) !== Math.round(savedItemsTotal)
+        ? String(Math.round(savedTotal))
+        : "",
+    );
     setOpen(true);
   }
 
@@ -149,8 +168,14 @@ export function TreatmentPlans({
         cost: Number(r.cost) || 0,
       }));
       const res = editingId
-        ? await updateTreatmentPlan({ planId: editingId, patientId, planName, items })
-        : await createTreatmentPlan({ patientId, planName, items });
+        ? await updateTreatmentPlan({
+            planId: editingId,
+            patientId,
+            planName,
+            items,
+            total,
+          })
+        : await createTreatmentPlan({ patientId, planName, items, total });
       if (res?.error) {
         toast(res.error);
         return;
@@ -167,12 +192,19 @@ export function TreatmentPlans({
     const lines = plan.items
       .map((i) => `${i.name} - ₹${inr(i.cost)}`)
       .join("\n");
+    // When a per-patient discount was set, show the saving — it converts.
+    const itemsSum = plan.items.reduce((s, i) => s + (Number(i.cost) || 0), 0);
+    const saved = itemsSum - (Number(plan.total_cost) || 0);
+    const totalLine =
+      saved > 0
+        ? `*Total: ₹${inr(plan.total_cost)}* (₹${inr(saved)} saved)`
+        : `*Total: ₹${inr(plan.total_cost)}*`;
     return (
       `🦷 *Treatment Plan*\n` +
       `Patient: ${patientName}\n` +
       `Doctor: Dr. ${doctor}\n\n` +
       `${lines}\n\n` +
-      `*Total: ₹${inr(plan.total_cost)}*\n\n` +
+      `${totalLine}\n\n` +
       `${clinicName} | ${clinicPhone}`
     );
   }
@@ -396,11 +428,54 @@ export function TreatmentPlans({
             </button>
           </div>
 
-          <div className="flex items-center justify-between border-t border-border pt-3">
-            <span className="text-sm text-text-secondary">Total</span>
-            <span className="text-lg font-semibold text-text-primary">
-              ₹{inr(total)}
-            </span>
+          <div className="space-y-3 border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary">Items total</span>
+              <span className="text-sm font-medium text-text-primary">
+                ₹{inr(itemsTotal)}
+              </span>
+            </div>
+            {/* Per-patient price: override the final total (package/discount)
+                without touching the rate card. */}
+            <div>
+              <label className={labelClass} htmlFor="plan-total-override">
+                Plan total for this patient (₹)
+              </label>
+              <input
+                id="plan-total-override"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                className={`${inputClass} ${overrideInvalid ? "border-danger" : ""}`}
+                value={overrideTotal}
+                onChange={(e) => setOverrideTotal(e.target.value)}
+                placeholder={`${inr(itemsTotal)} (items total)`}
+              />
+              {overrideInvalid ? (
+                <p className="mt-1 text-sm text-danger">
+                  Enter an amount above ₹0, or leave blank to charge the items
+                  total.
+                </p>
+              ) : discount > 0 ? (
+                <p className="mt-1 text-sm font-medium text-success">
+                  ₹{inr(discount)} discount for this patient
+                </p>
+              ) : discount < 0 ? (
+                <p className="mt-1 text-sm text-text-secondary">
+                  ₹{inr(-discount)} above the items total.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-text-secondary">
+                  Leave blank to charge the items total.
+                </p>
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary">Total</span>
+              <span className="text-lg font-semibold text-text-primary">
+                ₹{inr(total)}
+              </span>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-1">
