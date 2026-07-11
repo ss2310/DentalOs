@@ -11,10 +11,13 @@ const tabBase =
 const tabActive = `${tabBase} bg-primary/10 text-primary`;
 const tabIdle = `${tabBase} text-text-secondary hover:bg-subtle`;
 
+export type ScheduleView = "list" | "day" | "week";
+
 export function AppointmentsToolbar({
   today,
   tomorrow,
   selected,
+  view,
   patients,
   rateCards,
   doctorName,
@@ -22,6 +25,7 @@ export function AppointmentsToolbar({
   today: string;
   tomorrow: string;
   selected: string;
+  view: ScheduleView;
   patients: PatientOption[];
   rateCards: RateCardOption[];
   doctorName: string;
@@ -38,7 +42,11 @@ export function AppointmentsToolbar({
   const isCustom = selected !== today && selected !== tomorrow;
 
   function go(date: string) {
-    router.push(`/appointments?date=${date}`);
+    router.push(`/appointments?date=${date}&view=${view}`);
+  }
+
+  function goView(v: ScheduleView) {
+    router.push(`/appointments?date=${selected}&view=${v}`);
   }
 
   return (
@@ -84,6 +92,31 @@ export function AppointmentsToolbar({
               : "border-border text-text-primary"
           }`}
         />
+
+        {/* View toggle: list (default) | day grid | week grid */}
+        <div className="ml-auto flex h-11 overflow-hidden rounded-button border border-border">
+          {(
+            [
+              { id: "list", label: "List" },
+              { id: "day", label: "Day" },
+              { id: "week", label: "Week" },
+            ] as const
+          ).map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => goView(v.id)}
+              aria-pressed={view === v.id}
+              className={`flex h-full items-center px-3.5 text-sm font-medium ${
+                view === v.id
+                  ? "bg-primary/10 text-primary"
+                  : "text-text-secondary hover:bg-subtle"
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <BookAppointment

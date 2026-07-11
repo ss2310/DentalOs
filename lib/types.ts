@@ -15,6 +15,10 @@ export type Patient = {
   total_outstanding: string;
   last_visit_date: string | null;
   created_at: string;
+  // 053 — optional so pre-migration selects keep compiling.
+  patient_code?: string | null;
+  referral_source?: string | null;
+  photo_path?: string | null;
 };
 
 export type VisitLog = {

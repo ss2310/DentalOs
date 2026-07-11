@@ -276,6 +276,7 @@ export function BookAppointment({
   patients,
   rateCards,
   defaultDate,
+  defaultTime,
   defaultDoctor,
   initialPatient,
   onBooked,
@@ -285,6 +286,8 @@ export function BookAppointment({
   patients: PatientOption[];
   rateCards: RateCardOption[];
   defaultDate: string;
+  /** Optional HH:MM prefill — set when booking from a calendar slot. */
+  defaultTime?: string;
   defaultDoctor: string;
   // When set, the patient is preselected and locked (used from the pipeline
   // "Book" flow). onBooked runs after a successful booking (e.g. to advance
@@ -359,6 +362,7 @@ export function BookAppointment({
               name="appointment_time"
               type="time"
               required
+              defaultValue={defaultTime}
               className={inputClass}
             />
           </div>

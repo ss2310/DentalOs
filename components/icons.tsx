@@ -32,6 +32,15 @@ export function HomeIcon(p: IconProps) {
   );
 }
 
+/** Daysheet: a day register — page with ruled entry lines. */
+export function DaysheetIcon(p: IconProps) {
+  return (
+    <Base {...p}>
+      <path d="M6 3.75h12A1.5 1.5 0 0119.5 5.25v13.5A1.5 1.5 0 0118 20.25H6a1.5 1.5 0 01-1.5-1.5V5.25A1.5 1.5 0 016 3.75zM8.25 8.25h7.5M8.25 12h7.5M8.25 15.75h4.5" />
+    </Base>
+  );
+}
+
 export function CalendarIcon(p: IconProps) {
   return (
     <Base {...p}>

@@ -63,6 +63,11 @@ function PatientList({ patients }: { patients: Patient[] }) {
                     >
                       {p.full_name}
                     </Link>
+                    {p.patient_code ? (
+                      <span className="ml-1.5 text-xs text-text-secondary">
+                        #{p.patient_code}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-text-secondary">
                     {p.whatsapp_number ?? p.phone ?? "—"}
@@ -102,6 +107,11 @@ function PatientList({ patients }: { patients: Patient[] }) {
               <div className="flex items-start justify-between gap-3">
                 <span className="font-medium text-text-primary">
                   {p.full_name}
+                  {p.patient_code ? (
+                    <span className="ml-1.5 text-xs font-normal text-text-secondary">
+                      #{p.patient_code}
+                    </span>
+                  ) : null}
                 </span>
                 <span
                   className={`text-sm ${
@@ -149,9 +159,17 @@ export function PatientsClient({
   }, [searchParams]);
   const [onlyDue, setOnlyDue] = useState(false);
   const [lastVisit, setLastVisit] = useState<LastVisitFilter>("");
+  const [source, setSource] = useState("");
   const [grouped, setGrouped] = useState(false);
 
-  const hasFilters = treatment !== "" || onlyDue || lastVisit !== "";
+  const hasFilters =
+    treatment !== "" || onlyDue || lastVisit !== "" || source !== "";
+
+  const sources = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of patients) if (p.referral_source) set.add(p.referral_source);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [patients]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -167,6 +185,7 @@ export function PatientsClient({
       if (treatment && !(treatmentsByPatient[p.id] ?? []).includes(treatment)) {
         return false;
       }
+      if (source && p.referral_source !== source) return false;
       if (onlyDue && (Number(p.total_outstanding) || 0) <= 0) return false;
       if (lastVisit) {
         const d = daysSince(p.last_visit_date);
@@ -177,7 +196,7 @@ export function PatientsClient({
       }
       return true;
     });
-  }, [patients, query, treatment, onlyDue, lastVisit, treatmentsByPatient]);
+  }, [patients, query, treatment, source, onlyDue, lastVisit, treatmentsByPatient]);
 
   // "By treatment" folders: a patient appears under every treatment they have;
   // patients with none land in a trailing "No treatments yet" group.
@@ -207,6 +226,7 @@ export function PatientsClient({
     setTreatment("");
     setOnlyDue(false);
     setLastVisit("");
+    setSource("");
   }
 
   return (
@@ -265,6 +285,22 @@ export function PatientsClient({
             </option>
           ))}
         </select>
+
+        {sources.length > 0 ? (
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            aria-label="Filter by referral source"
+            className={selectClass}
+          >
+            <option value="">All sources</option>
+            {sources.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        ) : null}
 
         <button
           type="button"

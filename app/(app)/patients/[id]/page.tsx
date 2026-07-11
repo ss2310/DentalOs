@@ -16,8 +16,10 @@ import type { Patient, VisitLog, Recall, ClinicNote } from "@/lib/types";
 import { voiceNotesEnabledForClinic } from "@/lib/voice-notes-access";
 import { VoiceNotesPanel } from "@/components/voice-notes-panel";
 import { waLink } from "@/lib/whatsapp";
+import { ReceiptActions } from "@/components/receipt-actions";
 import { RecallActions } from "@/app/(app)/recalls/recall-actions";
 import { EditPatientButton } from "./edit-patient-button";
+import { PatientPhoto } from "./photo-upload";
 import { AddVisitButton } from "./add-visit-modal";
 import { RecordPaymentButton } from "./record-payment-button";
 import { ProfileActions } from "./profile-actions";
@@ -44,6 +46,7 @@ type PaymentRow = {
   amount: string;
   payment_mode: string;
   payment_date: string;
+  receipt_no: string | null;
   visit: { treatment_name_text: string | null } | null;
 };
 
@@ -227,7 +230,7 @@ export default async function PatientDetailPage({
     supabase
       .from("payments")
       .select(
-        "id, amount, payment_mode, payment_date, visit:visit_log_id(treatment_name_text)",
+        "id, amount, payment_mode, payment_date, receipt_no, visit:visit_log_id(treatment_name_text)",
       )
       .eq("patient_id", params.id)
       .order("payment_date", { ascending: false })
@@ -263,6 +266,15 @@ export default async function PatientDetailPage({
   const todayIST = new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Kolkata",
   });
+
+  // Patient photo (053): private bucket → short-lived signed URL.
+  let photoUrl: string | null = null;
+  if (patient.photo_path) {
+    const { data: signed } = await supabase.storage
+      .from("patient-photos")
+      .createSignedUrl(patient.photo_path, 3600);
+    photoUrl = signed?.signedUrl ?? null;
+  }
 
   // "Plan value on the table": open pipeline cases + plans not yet sent.
   const planValue =
@@ -309,14 +321,28 @@ export default async function PatientDetailPage({
       {/* (a) Header card — identity + the two primary actions. */}
       <div className="mt-3 rounded-card border border-border bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="flex items-start gap-4">
+            <PatientPhoto
+              patientId={patient.id}
+              patientName={patient.full_name}
+              photoUrl={photoUrl}
+            />
+            <div>
             <h1 className="text-2xl font-semibold text-text-primary">
               {patient.full_name}
+              {patient.patient_code ? (
+                <span className="ml-2 align-middle text-sm font-medium text-text-secondary">
+                  #{patient.patient_code}
+                </span>
+              ) : null}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-secondary">
               {age !== null ? <span>{age} yrs</span> : null}
               {patient.gender ? <span>{patient.gender}</span> : null}
               {patient.area ? <span>{patient.area}</span> : null}
+              {patient.referral_source ? (
+                <span>via {patient.referral_source}</span>
+              ) : null}
             </div>
             {visits.length > 0 ? (
               <p className="mt-2 text-sm text-text-secondary">
@@ -346,6 +372,7 @@ export default async function PatientDetailPage({
                 {whatsapp}
               </a>
             ) : null}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {addVisitButton}
@@ -648,22 +675,36 @@ export default async function PatientDetailPage({
                 {payments.map((p) => (
                   <div
                     key={p.id}
-                    className="flex items-center justify-between gap-3 rounded-card border border-border bg-white p-4"
+                    className="rounded-card border border-border bg-white p-4"
                   >
-                    <div>
-                      <p className="font-medium text-text-primary">
-                        {p.visit?.treatment_name_text ?? "Payment"}
-                      </p>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-secondary">
-                        <span>{formatDate(p.payment_date)}</span>
-                        <span className="rounded-pill bg-subtle px-2 py-0.5 text-xs font-medium text-text-secondary">
-                          {MODE_LABEL[p.payment_mode] ?? p.payment_mode}
-                        </span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-text-primary">
+                          {p.visit?.treatment_name_text ?? "Payment"}
+                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-secondary">
+                          <span>{formatDate(p.payment_date)}</span>
+                          {p.receipt_no ? <span>{p.receipt_no}</span> : null}
+                          <span className="rounded-pill bg-subtle px-2 py-0.5 text-xs font-medium text-text-secondary">
+                            {MODE_LABEL[p.payment_mode] ?? p.payment_mode}
+                          </span>
+                        </div>
                       </div>
+                      <span className="font-semibold text-success">
+                        {formatINR(p.amount)}
+                      </span>
                     </div>
-                    <span className="font-semibold text-success">
-                      {formatINR(p.amount)}
-                    </span>
+                    <div className="mt-3 border-t border-border pt-3">
+                      <ReceiptActions
+                        paymentId={p.id}
+                        receiptNo={p.receipt_no}
+                        amount={Number(p.amount) || 0}
+                        paymentDate={p.payment_date}
+                        patientName={patient.full_name}
+                        patientWhatsapp={whatsapp}
+                        clinicName={clinicRow?.business_name ?? ""}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

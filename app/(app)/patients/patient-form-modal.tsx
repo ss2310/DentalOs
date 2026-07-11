@@ -179,6 +179,26 @@ export function PatientFormModal({
         </div>
 
         <div>
+          <label htmlFor="referral_source" className={labelClass}>
+            How did they hear about you?
+          </label>
+          <select
+            id="referral_source"
+            name="referral_source"
+            defaultValue={patient?.referral_source ?? ""}
+            className={inputClass}
+          >
+            <option value="">Select…</option>
+            <option value="Google">Google</option>
+            <option value="Instagram / Facebook">Instagram / Facebook</option>
+            <option value="Friend or Family">Friend or Family</option>
+            <option value="Doctor referral">Doctor referral</option>
+            <option value="Walk-in">Walk-in</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div>
           <label htmlFor="notes" className={labelClass}>
             Notes
           </label>

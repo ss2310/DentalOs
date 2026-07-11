@@ -12,11 +12,11 @@ export default async function PatientsPage() {
     { data: caseTreatments },
     { data: rateCards },
   ] = await Promise.all([
+    // "*" so the page keeps working between a deploy and migration 053 —
+    // naming patient_code/referral_source explicitly would error pre-053.
     supabase
       .from("patients")
-      .select(
-        "id, full_name, whatsapp_number, phone, date_of_birth, gender, area, notes, total_visits, lifetime_revenue, total_outstanding, last_visit_date, created_at",
-      )
+      .select("*")
       .order("created_at", { ascending: false }),
     // Patient → treatment map for the treatment filter + "By treatment" view:
     // what they've HAD (visit history) and what's PROPOSED (pipeline cases).

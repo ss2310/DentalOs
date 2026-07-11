@@ -28,6 +28,7 @@ import {
   ToothIcon,
   SendIcon,
   CameraIcon,
+  DaysheetIcon,
   AiVisibilityIcon,
   UpgradeIcon,
   ShieldIcon,
@@ -68,6 +69,7 @@ const NAV: NavEntry[] = [
     items: [
       { label: "Appointments", href: "/appointments", Icon: CalendarIcon },
       { label: "Patients", href: "/patients", Icon: PatientsIcon },
+      { label: "Daysheet", href: "/daysheet", Icon: DaysheetIcon },
       { label: "Moments", href: "/capture", Icon: CameraIcon },
       { label: "Notes", href: "/notes", Icon: MicIcon, flag: "voiceNotes" },
     ],

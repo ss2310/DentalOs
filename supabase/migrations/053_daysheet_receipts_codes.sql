@@ -1,0 +1,399 @@
+-- ============================================================
+-- GrowthOS — migration 053: receipts, patient codes, referral & photo
+--
+-- PMS Tier 1 groundwork (feature parity the doctor asked for):
+-- 1. RECEIPT NUMBERS — every payments-ledger row gets a per-clinic,
+--    per-year sequential receipt_no (RCP-YYYY-NNNN), stamped inside the
+--    same transaction by the RPCs (record_payment / log_visit; walk-ins
+--    inherit via log_visit). Same atomic counter idiom as create_invoice
+--    (033), but keyed per clinic.
+-- 2. PATIENT CODES — short per-clinic codes ('00001'…) auto-assigned by a
+--    BEFORE INSERT trigger, so every insert path (form, import, lead
+--    conversion) gets one. Existing patients backfilled by created_at.
+-- 3. patients.referral_source + patients.photo_path, plus the private
+--    patient-photos bucket (per-clinic folder RLS, signed-URL reads —
+--    same posture as capture-photos in 043).
+--
+-- Additive + idempotent. Requires 052 (payments ledger + walk-in RPC).
+-- Run in the Supabase SQL editor, then: notify pgrst, 'reload schema';
+-- ============================================================
+
+-- ---------------------------------------------------------------------------
+-- 1a. Receipt counter — per clinic per year. Client-inaccessible.
+-- ---------------------------------------------------------------------------
+create table if not exists receipt_counters (
+  clinic_id uuid not null references clinics (id) on delete cascade,
+  year      int  not null,
+  seq       int  not null default 0,
+  primary key (clinic_id, year)
+);
+alter table receipt_counters enable row level security;
+alter table receipt_counters force row level security;
+-- No policies at all → clients denied entirely; definer functions bypass.
+
+alter table payments add column if not exists receipt_no text;
+
+create or replace function next_receipt_no(p_clinic uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_year int;
+  v_seq  int;
+begin
+  v_year := extract(year from (now() at time zone 'Asia/Kolkata'))::int;
+
+  -- Upsert locks the counter row → concurrent receipts serialize, no gaps.
+  insert into receipt_counters (clinic_id, year, seq) values (p_clinic, v_year, 1)
+  on conflict (clinic_id, year) do update set seq = receipt_counters.seq + 1
+  returning seq into v_seq;
+
+  return 'RCP-' || v_year || '-' || lpad(v_seq::text, 4, '0');
+end;
+$$;
+
+revoke execute on function next_receipt_no(uuid) from public, anon, authenticated;
+
+-- Backfill receipt numbers for any ledger rows written between 052 and 053.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select id, clinic_id from payments
+    where receipt_no is null
+    order by created_at asc
+  loop
+    update payments set receipt_no = next_receipt_no(r.clinic_id) where id = r.id;
+  end loop;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 1b. record_payment() — 052 behavior + receipt_no on the ledger row.
+-- ---------------------------------------------------------------------------
+create or replace function record_payment(
+  p_outstanding_id uuid,
+  p_amount         numeric,
+  p_payment_mode   text
+)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_clinic   uuid;
+  v_o        outstandings%rowtype;
+  v_new_paid numeric(10,2);
+  v_new_due  numeric(10,2);
+  v_today    date := timezone('Asia/Kolkata', now())::date;
+begin
+  v_clinic := current_clinic_id();
+  if v_clinic is null then
+    raise exception 'no clinic for current user';
+  end if;
+
+  select * into v_o from outstandings where id = p_outstanding_id;
+  if v_o.id is null then
+    raise exception 'outstanding not found';
+  end if;
+  if v_o.clinic_id <> v_clinic then
+    raise exception 'outstanding belongs to another clinic';
+  end if;
+
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'invalid amount';
+  end if;
+  if p_amount > v_o.nett_due then
+    raise exception 'amount exceeds balance due';
+  end if;
+
+  v_new_paid := v_o.amount_paid + p_amount;
+  v_new_due  := greatest(v_o.nett_due - p_amount, 0);
+
+  -- 1. Outstanding.
+  update outstandings
+     set amount_paid = v_new_paid,
+         nett_due    = v_new_due
+   where id = p_outstanding_id;
+
+  -- 2. Patient rollups.
+  update patients
+     set total_outstanding = greatest(total_outstanding - p_amount, 0),
+         lifetime_revenue  = lifetime_revenue + p_amount
+   where id = v_o.patient_id;
+
+  -- 3. If cleared, close out the linked recovery_event.
+  if v_new_due = 0 then
+    update recovery_events
+       set outcome           = 'paid',
+           outcome_date      = v_today,
+           revenue_recovered = v_new_paid
+     where original_outstanding_id = p_outstanding_id;
+  end if;
+
+  -- 4. Ledger row (052) — now with a sequential receipt number (053).
+  insert into payments (
+    clinic_id, patient_id, visit_log_id, outstanding_id,
+    amount, payment_mode, payment_date, created_by, receipt_no
+  ) values (
+    v_clinic, v_o.patient_id, v_o.visit_log_id, p_outstanding_id,
+    p_amount, p_payment_mode::payment_mode, v_today, auth.uid(),
+    next_receipt_no(v_clinic)
+  );
+
+  return v_new_due;
+end;
+$$;
+
+revoke execute on function
+  record_payment(uuid, numeric, text) from public, anon;
+grant execute on function
+  record_payment(uuid, numeric, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 1c. log_visit() — 052 behavior + receipt_no on the visit-time ledger row.
+--     (log_walk_in_visit delegates here, so walk-ins inherit receipts.)
+-- ---------------------------------------------------------------------------
+create or replace function log_visit(
+  p_appointment_id uuid,
+  p_treatment_id   uuid,
+  p_doctor         text,
+  p_cost           numeric,
+  p_amount_paid    numeric,
+  p_payment_mode   text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_clinic         uuid;
+  v_patient        uuid;
+  v_appt_clinic    uuid;
+  v_rate           rate_cards%rowtype;
+  v_today          date := timezone('Asia/Kolkata', now())::date;
+  v_outstanding    numeric(10,2);
+  v_status         payment_status;
+  v_visit_id       uuid;
+  v_outstanding_id uuid;
+  v_patient_name   text;
+begin
+  v_clinic := current_clinic_id();
+  if v_clinic is null then
+    raise exception 'no clinic for current user';
+  end if;
+
+  -- Appointment must exist and belong to this clinic.
+  select patient_id, clinic_id into v_patient, v_appt_clinic
+  from appointments where id = p_appointment_id;
+  if v_patient is null then
+    raise exception 'appointment not found';
+  end if;
+  if v_appt_clinic <> v_clinic then
+    raise exception 'appointment belongs to another clinic';
+  end if;
+
+  -- One visit_log per appointment (prevents double-counting revenue).
+  if exists (select 1 from visit_logs where appointment_id = p_appointment_id) then
+    raise exception 'visit already logged for this appointment';
+  end if;
+
+  -- Rate card must exist and belong to this clinic.
+  select * into v_rate from rate_cards where id = p_treatment_id;
+  if v_rate.id is null then
+    raise exception 'treatment not found';
+  end if;
+  if v_rate.clinic_id <> v_clinic then
+    raise exception 'treatment belongs to another clinic';
+  end if;
+
+  -- Money validation (mirrors the client, enforced server-side).
+  if p_cost is null or p_cost < 0 then
+    raise exception 'invalid cost';
+  end if;
+  if p_amount_paid is null or p_amount_paid < 0 then
+    raise exception 'invalid amount paid';
+  end if;
+  if p_amount_paid > p_cost then
+    raise exception 'amount paid cannot exceed cost';
+  end if;
+
+  v_outstanding := p_cost - p_amount_paid;
+  v_status := case
+    when p_amount_paid >= p_cost then 'paid'
+    when p_amount_paid > 0        then 'partial'
+    else 'pending'
+  end;
+
+  -- Step 1: visit_log (treatment name/category snapshotted from the card).
+  insert into visit_logs (
+    clinic_id, patient_id, appointment_id, visit_date, treatment_id,
+    treatment_name_text, treatment_category, doctor, cost, amount_paid,
+    outstanding_amount, payment_mode, payment_status, created_by
+  ) values (
+    v_clinic, v_patient, p_appointment_id, v_today, p_treatment_id,
+    v_rate.treatment_name, v_rate.category, p_doctor, p_cost, p_amount_paid,
+    v_outstanding, p_payment_mode::payment_mode, v_status, auth.uid()
+  )
+  returning id into v_visit_id;
+
+  -- Steps 2 & 3: only when money is still due.
+  if v_outstanding > 0 then
+    insert into outstandings (
+      clinic_id, patient_id, visit_log_id, total_amount, amount_paid,
+      nett_due, age_bucket
+    ) values (
+      v_clinic, v_patient, v_visit_id, p_cost, p_amount_paid,
+      v_outstanding, 'current'
+    )
+    returning id into v_outstanding_id;
+
+    insert into recovery_events (
+      clinic_id, patient_id, recovery_type, original_outstanding_id, trigger_date
+    ) values (
+      v_clinic, v_patient, 'outstanding_payment', v_outstanding_id, v_today
+    );
+  end if;
+
+  -- Step 4: patient rollups.
+  update patients set
+    total_visits      = total_visits + 1,
+    lifetime_revenue  = lifetime_revenue + p_amount_paid,
+    total_outstanding = total_outstanding + v_outstanding,
+    last_visit_date   = v_today
+  where id = v_patient
+  returning full_name into v_patient_name;
+
+  -- Step 5: recall, only if the treatment defines a recall interval.
+  if v_rate.recall_interval_days is not null and v_rate.recall_interval_days > 0 then
+    insert into recalls (
+      clinic_id, patient_id, source_visit_id, source_treatment_id,
+      recall_type, due_date, status
+    ) values (
+      v_clinic, v_patient, v_visit_id, p_treatment_id,
+      'general_checkup', v_today + v_rate.recall_interval_days, 'pending'
+    );
+  end if;
+
+  -- Step 6: ledger row for money collected at the chair (052), with a
+  -- sequential receipt number (053).
+  if p_amount_paid > 0 then
+    insert into payments (
+      clinic_id, patient_id, visit_log_id, outstanding_id,
+      amount, payment_mode, payment_date, created_by, receipt_no
+    ) values (
+      v_clinic, v_patient, v_visit_id, v_outstanding_id,
+      p_amount_paid, p_payment_mode::payment_mode, v_today, auth.uid(),
+      next_receipt_no(v_clinic)
+    );
+  end if;
+
+  return v_patient;
+end;
+$$;
+
+revoke execute on function
+  log_visit(uuid, uuid, text, numeric, numeric, text) from public, anon;
+grant execute on function
+  log_visit(uuid, uuid, text, numeric, numeric, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 2. Patient codes — per-clinic '00001' style, assigned by trigger so EVERY
+--    insert path gets one (form, migration import, lead conversion).
+-- ---------------------------------------------------------------------------
+create table if not exists patient_counters (
+  clinic_id uuid primary key references clinics (id) on delete cascade,
+  seq       int not null default 0
+);
+alter table patient_counters enable row level security;
+alter table patient_counters force row level security;
+-- No policies → definer/trigger only.
+
+alter table patients add column if not exists patient_code text;
+alter table patients add column if not exists referral_source text;
+alter table patients add column if not exists photo_path text;
+
+create unique index if not exists patients_clinic_code_idx
+  on patients (clinic_id, patient_code) where patient_code is not null;
+
+create or replace function assign_patient_code()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_seq int;
+begin
+  if new.patient_code is not null then
+    return new;
+  end if;
+  insert into patient_counters (clinic_id, seq) values (new.clinic_id, 1)
+  on conflict (clinic_id) do update set seq = patient_counters.seq + 1
+  returning seq into v_seq;
+  new.patient_code := lpad(v_seq::text, 5, '0');
+  return new;
+end;
+$$;
+
+drop trigger if exists patients_assign_code on patients;
+create trigger patients_assign_code
+  before insert on patients
+  for each row execute function assign_patient_code();
+
+-- Backfill codes for existing patients, oldest first, per clinic.
+do $$
+declare
+  r record;
+  v_seq int;
+begin
+  for r in
+    select id, clinic_id from patients
+    where patient_code is null
+    order by clinic_id, created_at asc, id asc
+  loop
+    insert into patient_counters (clinic_id, seq) values (r.clinic_id, 1)
+    on conflict (clinic_id) do update set seq = patient_counters.seq + 1
+    returning seq into v_seq;
+    update patients set patient_code = lpad(v_seq::text, 5, '0') where id = r.id;
+  end loop;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 3. Private patient-photos bucket (PII → signed URLs only). 5 MB cap.
+--    Path convention: <clinic_id>/<patient_id>.<ext>
+-- ---------------------------------------------------------------------------
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('patient-photos', 'patient-photos', false, 5242880,
+        array['image/jpeg','image/png','image/webp'])
+on conflict (id) do nothing;
+
+drop policy if exists patient_photos_select on storage.objects;
+create policy patient_photos_select on storage.objects for select to authenticated
+  using (bucket_id = 'patient-photos'
+         and (storage.foldername(name))[1] = current_clinic_id()::text);
+drop policy if exists patient_photos_insert on storage.objects;
+create policy patient_photos_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'patient-photos'
+              and (storage.foldername(name))[1] = current_clinic_id()::text);
+drop policy if exists patient_photos_update on storage.objects;
+create policy patient_photos_update on storage.objects for update to authenticated
+  using (bucket_id = 'patient-photos'
+         and (storage.foldername(name))[1] = current_clinic_id()::text);
+drop policy if exists patient_photos_delete on storage.objects;
+create policy patient_photos_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'patient-photos'
+         and (storage.foldername(name))[1] = current_clinic_id()::text);
+
+-- ---------------------------------------------------------------------------
+-- 4. Register this migration.
+-- ---------------------------------------------------------------------------
+insert into applied_migrations (version, name) values
+  ('053','daysheet_receipts_codes')
+on conflict (version) do nothing;

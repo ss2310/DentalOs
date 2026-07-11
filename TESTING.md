@@ -2981,3 +2981,32 @@ treatment_plans.updated_at), then `notify pgrst, 'reload schema'`.
       Appointments explain what the page does and where items come from.
 - [ ] Receptionist view: dashboard leads with schedule + actions; money stat
       cards (Plan Value / Recovered) stay hidden for receptionists.
+
+## PMS Tier 1 (migration 053): calendar, Daysheet, receipts, patient extras
+
+Prereq: migrations 052 AND 053 applied, `notify pgrst, 'reload schema'`.
+
+- [ ] /appointments has List | Day | Week toggle; Week shows Mon–Sun of the
+      selected date, 9 AM–9 PM slots; today's column header is teal. ✓ dev
+- [ ] Clicking an empty slot opens Book Appointment with that date AND time
+      prefilled; booked appointments appear as status-colored chips linking to
+      the patient. ✓ dev (slot-click prefill verified)
+- [ ] /daysheet (nav: Run the Clinic → Daysheet): date picker + doctor filter;
+      stats Visits / Production / Collection (hero) / Outstanding added.
+      Production = today's visit fees; Collection = today's ledger payments
+      INCLUDING old-due recoveries (the two differ by design). ✓ dev (empty state)
+- [ ] Daysheet payments rows show receipt no + mode breakdown in the section
+      hint + Print / WhatsApp per row.
+- [ ] Recording any payment (visit, profile, billing) stamps RCP-YYYY-NNNN;
+      /receipt/[paymentId] renders a clean sheet (no sidebar) and prints via
+      the button; WhatsApp button opens wa.me with the receipt text.
+- [ ] New patients get an auto patient code (#00001…); existing patients
+      backfilled oldest-first; code shows on the profile header + list.
+- [ ] Add/Edit Patient has "How did they hear about you?"; saved source shows
+      on the profile ("via Google") and as a Source filter on the list. ✓ dev
+      (saved via pre-053 fallback — retest post-053 that the value persists)
+- [ ] Patient photo: camera chip on the profile avatar uploads JPG/PNG/WebP
+      (≤5 MB, magic-byte checked) to the private patient-photos bucket; photo
+      renders via signed URL; replacing removes the old object.
+- [ ] Pre-migration resilience: with 053 NOT applied, /patients list, add/edit
+      patient (fallback), /daysheet, and the profile all still work. ✓ dev

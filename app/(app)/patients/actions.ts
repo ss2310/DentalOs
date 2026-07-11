@@ -14,6 +14,7 @@ type ParsedPatient = {
   gender: string | null;
   area: string | null;
   notes: string | null;
+  referral_source: string | null;
 };
 
 function parse(formData: FormData): ParsedPatient | { error: string } {
@@ -24,6 +25,7 @@ function parse(formData: FormData): ParsedPatient | { error: string } {
   const gender = String(formData.get("gender") ?? "").trim();
   const area = String(formData.get("area") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
+  const referral = String(formData.get("referral_source") ?? "").trim();
 
   if (!full_name) return { error: "Name is required." };
 
@@ -46,6 +48,7 @@ function parse(formData: FormData): ParsedPatient | { error: string } {
     gender: gender || null,
     area: area || null,
     notes: notes || null,
+    referral_source: referral.slice(0, 100) || null,
   };
 }
 
@@ -70,9 +73,18 @@ export async function addPatient(
     .single();
   if (!profile?.home_clinic_id) return { error: "No clinic found for user." };
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from("patients")
     .insert({ ...parsed, clinic_id: profile.home_clinic_id });
+
+  // Graceful pre-053 fallback: referral_source doesn't exist until the
+  // migration runs — never let a mid-rollout deploy block adding patients.
+  if (error && /referral_source/i.test(error.message ?? "")) {
+    const { referral_source: _drop, ...legacy } = parsed;
+    ({ error } = await supabase
+      .from("patients")
+      .insert({ ...legacy, clinic_id: profile.home_clinic_id }));
+  }
 
   if (error) return { error: "Could not add patient. Please try again." };
 
@@ -92,7 +104,13 @@ export async function updatePatient(
 
   const supabase = createClient();
   // RLS scopes this update to the caller's clinic; no clinic_id needed.
-  const { error } = await supabase.from("patients").update(parsed).eq("id", id);
+  let { error } = await supabase.from("patients").update(parsed).eq("id", id);
+
+  // Same pre-053 fallback as addPatient.
+  if (error && /referral_source/i.test(error.message ?? "")) {
+    const { referral_source: _drop, ...legacy } = parsed;
+    ({ error } = await supabase.from("patients").update(legacy).eq("id", id));
+  }
 
   if (error) return { error: "Could not update patient. Please try again." };
 
