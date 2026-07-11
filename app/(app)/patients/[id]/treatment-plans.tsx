@@ -8,7 +8,11 @@ import { WhatsAppIcon } from "@/components/icons";
 import { formatDate } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
 import { upiMessage } from "@/lib/upi";
-import { createTreatmentPlan, markPlanSent } from "./treatment-plan-actions";
+import {
+  createTreatmentPlan,
+  updateTreatmentPlan,
+  markPlanSent,
+} from "./treatment-plan-actions";
 
 type PlanRateCard = { id: string; treatment_name: string; base_price: string };
 
@@ -21,7 +25,9 @@ export type SavedPlan = {
   created_at: string;
 };
 
-type ItemRow = { key: number; treatmentId: string; cost: string };
+// `name` is the fallback label for edit mode: a saved item whose rate card was
+// since renamed/deactivated keeps its snapshotted name until re-selected.
+type ItemRow = { key: number; treatmentId: string; cost: string; name?: string };
 
 const inputClass =
   "h-11 w-full rounded-button border border-border px-3 text-[15px] text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
@@ -60,6 +66,8 @@ export function TreatmentPlans({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
+  // null = creating a new plan; a plan id = editing that plan in the modal.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [planName, setPlanName] = useState("");
   // Editable advance amount per plan (defaults to the plan total).
   const [advance, setAdvance] = useState<Record<string, string>>({});
@@ -73,16 +81,43 @@ export function TreatmentPlans({
   }
 
   const total = rows.reduce(
-    (s, r) => (r.treatmentId ? s + (Number(r.cost) || 0) : s),
+    (s, r) => (r.treatmentId || r.name ? s + (Number(r.cost) || 0) : s),
     0,
   );
-  const validRows = rows.filter((r) => r.treatmentId);
+  const validRows = rows.filter((r) => r.treatmentId || r.name);
   const canSave = planName.trim() !== "" && validRows.length > 0;
 
   function reset() {
     setPlanName("");
     setRows([{ key: 1, treatmentId: "", cost: "" }]);
     nextKey.current = 2;
+    setEditingId(null);
+  }
+
+  function openCreate() {
+    reset();
+    setOpen(true);
+  }
+
+  /** Prefill the modal from a saved plan; items match back to rate cards by
+   *  name, unmatched ones keep their snapshotted name via `row.name`. */
+  function openEdit(plan: SavedPlan) {
+    setEditingId(plan.id);
+    setPlanName(plan.plan_name);
+    const prefill = plan.items.map((it, idx) => {
+      const card = rateCards.find(
+        (c) => c.treatment_name.toLowerCase() === it.name.toLowerCase(),
+      );
+      return {
+        key: idx + 1,
+        treatmentId: card?.id ?? "",
+        cost: String(it.cost),
+        name: card ? undefined : it.name,
+      };
+    });
+    setRows(prefill.length ? prefill : [{ key: 1, treatmentId: "", cost: "" }]);
+    nextKey.current = prefill.length + 1;
+    setOpen(true);
   }
 
   function addRow() {
@@ -95,7 +130,12 @@ export function TreatmentPlans({
 
   function selectTreatment(key: number, treatmentId: string) {
     const price = rateCards.find((c) => c.id === treatmentId)?.base_price ?? "";
-    updateRow(key, { treatmentId, cost: treatmentId ? String(price) : "" });
+    // Re-selecting clears any legacy snapshot name — the card is the truth now.
+    updateRow(key, {
+      treatmentId,
+      cost: treatmentId ? String(price) : "",
+      name: undefined,
+    });
   }
 
   function removeRow(key: number) {
@@ -105,15 +145,17 @@ export function TreatmentPlans({
   function save() {
     startTransition(async () => {
       const items = validRows.map((r) => ({
-        name: cardName(r.treatmentId),
+        name: r.treatmentId ? cardName(r.treatmentId) : r.name ?? "",
         cost: Number(r.cost) || 0,
       }));
-      const res = await createTreatmentPlan({ patientId, planName, items });
+      const res = editingId
+        ? await updateTreatmentPlan({ planId: editingId, patientId, planName, items })
+        : await createTreatmentPlan({ patientId, planName, items });
       if (res?.error) {
         toast(res.error);
         return;
       }
-      toast("Treatment plan saved ✓");
+      toast(editingId ? "Treatment plan updated ✓" : "Treatment plan saved ✓");
       setOpen(false);
       reset();
       router.refresh();
@@ -184,7 +226,7 @@ export function TreatmentPlans({
         <h2 className="text-sm font-medium uppercase tracking-wide text-text-secondary">
           Treatment Plan
         </h2>
-        <button type="button" className={btnPrimary} onClick={() => setOpen(true)}>
+        <button type="button" className={btnPrimary} onClick={openCreate}>
           + Create Plan
         </button>
       </div>
@@ -223,6 +265,14 @@ export function TreatmentPlans({
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={btnOutline}
+                  disabled={pending}
+                  onClick={() => openEdit(plan)}
+                >
+                  Edit
+                </button>
                 {plan.sent_to_patient ? (
                   <span className="inline-flex h-11 items-center text-sm font-medium text-success">
                     ✓ Sent
@@ -275,8 +325,12 @@ export function TreatmentPlans({
         </div>
       )}
 
-      {/* Create plan modal */}
-      <Modal open={open} onClose={() => setOpen(false)} title="Create Treatment Plan">
+      {/* Create / edit plan modal */}
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={editingId ? "Edit Treatment Plan" : "Create Treatment Plan"}
+      >
         <div className="space-y-4">
           <div>
             <label className={labelClass}>
@@ -300,7 +354,11 @@ export function TreatmentPlans({
                     value={r.treatmentId}
                     onChange={(e) => selectTreatment(r.key, e.target.value)}
                   >
-                    <option value="">Select treatment…</option>
+                    {/* When a legacy item's card no longer exists, the ""
+                        option shows its snapshotted name instead. */}
+                    <option value="">
+                      {r.name ? `${r.name} (saved item)` : "Select treatment…"}
+                    </option>
                     {rateCards.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.treatment_name}
@@ -359,7 +417,7 @@ export function TreatmentPlans({
               disabled={pending || !canSave}
               className={`${btnPrimary} flex-1`}
             >
-              {pending ? "Saving…" : "Save plan"}
+              {pending ? "Saving…" : editingId ? "Update plan" : "Save plan"}
             </button>
           </div>
         </div>

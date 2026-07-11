@@ -33,6 +33,9 @@ export async function recordPayment(
   }
 
   revalidatePath("/billing");
+  // Payments are now recordable from the patient profile too (052) — refresh
+  // every patient detail page so balances/ledger never render stale.
+  revalidatePath("/patients/[id]", "page");
   return { ok: true };
 }
 

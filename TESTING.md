@@ -2910,3 +2910,33 @@ Prereq: migration 050 applied (column default → 0); signup sets deep_audit_cre
 - [ ] Upgrading to Growth grants 1 audit (apply_plan_purchase) and the run works;
       buying the ₹599 Deep Audit Top-up also grants 1 and the run works.
 - [ ] Existing paid/active clinics are unaffected (still 1 included per period).
+
+## Patient Profile Cockpit (migration 052)
+
+Prereq: migration 052 applied (payments ledger + log_walk_in_visit RPC +
+treatment_plans.updated_at), then `notify pgrst, 'reload schema'`.
+
+- [ ] Patient profile shows 4 tabs (Overview | Treatments & Plans | Visits |
+      Payments); ?tab= survives refresh; tabs scroll horizontally at 375px.
+- [ ] Stats row shows 4 cards incl. "Plan value" (open pipeline cases + unsent
+      plans); Outstanding turns red only when > 0.
+- [ ] "+ Add Treatment" (header or Visits tab) logs a walk-in: appears in Visit
+      History, creates the outstanding + recall (per rate card), bumps patient
+      rollups, and writes a payments-ledger row for the amount paid.
+- [ ] Walk-in creates a completed same-day appointment (visible on /appointments)
+      and appointment-based visit logging via /visit-log still works unchanged.
+- [ ] Record Payment on an Outstanding Balance row (Overview or Payments tab):
+      due drops, a ledger row appears with the right mode, /billing stays in sync
+      (recording there also shows up on the profile).
+- [ ] Payments tab lists ledger rows (date, mode pill, amount, treatment name);
+      pre-052 payments won't appear (expected — no backfill).
+- [ ] Edit on a treatment plan opens the modal prefilled; changing items/prices
+      updates the total; an edited SENT plan resets to unsent ("Send to Patient"
+      reappears).
+- [ ] Patients list: treatment filter, "Outstanding due" toggle, and last-visit
+      filter all compose with search; "Clear filters" resets them.
+- [ ] "By treatment" view groups patients under each treatment (visits +
+      pipeline); a patient with 2 treatments appears in both groups; patients
+      with none land in "No treatments yet".
+- [ ] Mobile (375px): filter bar wraps, all controls ≥44px, tables collapse to
+      cards.
