@@ -25,10 +25,20 @@ export default async function UpgradePage() {
     .single();
 
   const [{ data: plans }, { data: packs }] = await Promise.all([
+    // The customer-facing catalog is PURCHASABLE plans only. The seeded
+    // "Free Trial" row (migration 019: price_inr 0, billing_period 'trial') is
+    // an entitlement a clinic is given at signup, not something to sell — and
+    // rendering it here gave it a working Upgrade button that filed a ₹0 order.
+    // Both filters are deliberate: billing_period excludes the trial row by
+    // KIND, price_inr excludes any future mis-seeded ₹0 plan by AMOUNT. The
+    // real enforcement is in the database (migration 054); this keeps the
+    // impossible thing off the screen.
     supabase
       .from("plans")
       .select("id, name, price_inr, content_credits, map_credits, billing_period")
       .eq("is_active", true)
+      .neq("billing_period", "trial")
+      .gt("price_inr", 0)
       .order("sort_order", { ascending: true }),
     supabase
       .from("credit_packs")
