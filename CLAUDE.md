@@ -194,3 +194,32 @@ Concretely:
 - **Dental content stays stored as `NULL`** (the shared pool), not tagged
   `'dental'` — so it keeps serving every vertical as the fallback and dental
   behavior never changes.
+
+## Signup anti-bot (Jul 2026 — migration 055)
+
+Bots were mass-minting trial clinics with dotted-Gmail addresses (Gmail
+ignores dots — one inbox, unlimited "unique" emails). Defenses, in order:
+
+- **Emailed 6-digit verification code, BEFORE any row exists.** Two-phase
+  signup form → `sendSignupCodeAction` (mints + emails, HMAC-hashed in
+  `email_verifications`, 15-min TTL, 45s resend cooldown, 8 attempts via the
+  atomic `bump_verification_attempts`) → `signUpAction` verifies + CONSUMES
+  the code. `email_confirm: true` on createUser is now earned, not assumed.
+  Engine in `lib/signup-verification.ts`. ZERO-BRICK: while 055 is unpasted,
+  every helper reports "unavailable" and the flow degrades to codeless.
+- **Canonical-email dedupe** (`canonicalEmail` in `lib/validation.ts` —
+  lowercase; Gmail dots/+tags stripped): used for the pre-create duplicate
+  check (paged `listUsers` compare), rate-limit keys, and verification rows.
+- **Cloudflare Turnstile** (`lib/turnstile.ts`), enforced on the SEND-CODE
+  action only (the code then gates the rest — one token, no double-verify).
+  Key-gated: inert until `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (build-inlined —
+  redeploy without cache) + `TURNSTILE_SECRET_KEY` are set. Fail-open on
+  Cloudflare transport errors.
+- **Disposable-domain blocklist** (`lib/disposable-email.ts`) at both actions.
+- **Durable rate limits** (`signup_rate_limits` + `check_signup_rate`, 055):
+  fixed-window counters that survive deploys, alongside the in-memory
+  limiter. Fail-open pre-migration.
+
+The five fake clinics (4 gibberish + "Verify Test Clinic") were hard-deleted
+2026-07-30 (profiles → auth users → RESTRICT dependents → clinic row).
+"Mayur dental" was left deactivated (plausibly a real person).

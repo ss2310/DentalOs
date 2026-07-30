@@ -4,13 +4,122 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { isValidEmail, normalizeIndianPhone } from "@/lib/validation";
+import {
+  canonicalEmail,
+  isValidEmail,
+  normalizeIndianPhone,
+} from "@/lib/validation";
 import { sendWelcomeEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
 import { multiVerticalEnabled } from "@/lib/multi-vertical-access";
 import { resolveStarterRateCards } from "@/lib/starter-rate-cards";
+import { isDisposableEmail } from "@/lib/disposable-email";
+import { verifyTurnstileToken } from "@/lib/turnstile";
+import {
+  durableRateLimit,
+  findUserByCanonicalEmail,
+  requestSignupCode,
+  verifyAndConsumeSignupCode,
+} from "@/lib/signup-verification";
 
 export type SignupState = { error?: string };
+
+function clientIp(): string {
+  const hdrs = headers();
+  return (
+    (hdrs.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
+    hdrs.get("x-real-ip") ||
+    "unknown"
+  );
+}
+
+export type SendCodeResult =
+  | { status: "sent" }
+  | { status: "skip" } // migration 055 not applied — form submits without a code
+  | { status: "error"; error: string };
+
+/**
+ * Phase 1 of signup: email a 6-digit verification code (SEC: anti-bot).
+ * Turnstile is enforced HERE — a code can only be minted by something that
+ * passed the human check, and the final signUpAction requires a valid code,
+ * so the whole flow is gated without needing two captcha tokens.
+ */
+export async function sendSignupCodeAction(input: {
+  email: string;
+  turnstileToken: string | null;
+}): Promise<SendCodeResult> {
+  const email = String(input?.email ?? "").trim().toLowerCase();
+  if (!isValidEmail(email)) {
+    return { status: "error", error: "Enter a valid email address." };
+  }
+  if (isDisposableEmail(email)) {
+    return {
+      status: "error",
+      error:
+        "Temporary email addresses aren't supported. Please use your regular email.",
+    };
+  }
+
+  const ip = clientIp();
+  const HOUR = 60 * 60 * 1000;
+  const canonical = canonicalEmail(email);
+  // In-memory speed bump + durable cross-instance cap (migration 055).
+  const memOk =
+    rateLimit(`code:ip:${ip}`, 10, HOUR).ok &&
+    rateLimit(`code:email:${canonical}`, 5, HOUR).ok;
+  const dbOk =
+    (await durableRateLimit(`code:ip:${ip}`, 10, 3600)) &&
+    (await durableRateLimit(`code:email:${canonical}`, 5, 3600));
+  if (!memOk || !dbOk) {
+    return {
+      status: "error",
+      error: "Too many attempts. Please wait a while and try again.",
+    };
+  }
+
+  const turnstile = await verifyTurnstileToken(input?.turnstileToken ?? null, ip);
+  if (!turnstile.ok) {
+    return {
+      status: "error",
+      error:
+        turnstile.reason === "missing"
+          ? "Please complete the human check below, then try again."
+          : "Human check failed — refresh the page and try again.",
+    };
+  }
+
+  // Canonical dedupe up front: dotted-Gmail variants of an existing account
+  // are the same inbox and must not mint a second clinic.
+  const existing = await findUserByCanonicalEmail(canonical, canonicalEmail);
+  if (existing) {
+    return {
+      status: "error",
+      error: "An account with this email already exists. Sign in instead.",
+    };
+  }
+
+  const result = await requestSignupCode(canonical, email);
+  switch (result.status) {
+    case "sent":
+      return { status: "sent" };
+    case "unavailable":
+      // Migration 055 not pasted yet — degrade to the pre-055 flow.
+      console.warn(
+        "email_verifications missing (migration 055 not applied) — signup code gate is OFF.",
+      );
+      return { status: "skip" };
+    case "cooldown":
+      return {
+        status: "error",
+        error: `A code was just sent — wait ${result.retryAfterSecs}s before resending.`,
+      };
+    default:
+      return {
+        status: "error",
+        error: "Couldn't send the code. Check the address and try again.",
+      };
+  }
+}
 
 export async function signUpAction(
   _prev: SignupState,
@@ -31,26 +140,72 @@ export async function signUpAction(
   if (!isValidEmail(email)) {
     return { error: "Enter a valid email address." };
   }
+  if (isDisposableEmail(email)) {
+    return {
+      error:
+        "Temporary email addresses aren't supported. Please use your regular email.",
+    };
+  }
   if (password.length < 8) {
     return { error: "Password must be at least 8 characters." };
   }
 
-  // SEC-H3: throttle signup so a script can't mass-mint clinics. Keyed on both
-  // client IP and email (best-effort in-memory; see lib/rate-limit.ts). This is
-  // the only path that creates a credited clinic (service-role onboarding), so
-  // it's the one to protect.
-  const hdrs = headers();
-  const ip =
-    (hdrs.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
-    hdrs.get("x-real-ip") ||
-    "unknown";
+  // SEC-H3: throttle signup so a script can't mass-mint clinics. In-memory
+  // speed bump + durable cross-instance counters (migration 055; fail-open
+  // pre-paste). Keyed on both client IP and CANONICAL email so Gmail dot
+  // variants share one budget. This is the only path that creates a credited
+  // clinic (service-role onboarding), so it's the one to protect.
+  const ip = clientIp();
   const HOUR = 60 * 60 * 1000;
+  const canonical = canonicalEmail(email);
   const ipOk = rateLimit(`signup:ip:${ip}`, 5, HOUR).ok;
-  const emailOk = rateLimit(`signup:email:${email.toLowerCase()}`, 3, HOUR).ok;
-  if (!ipOk || !emailOk) {
+  const emailOk = rateLimit(`signup:email:${canonical}`, 3, HOUR).ok;
+  const dbOk =
+    (await durableRateLimit(`signup:ip:${ip}`, 5, 3600)) &&
+    (await durableRateLimit(`signup:email:${canonical}`, 3, 3600));
+  if (!ipOk || !emailOk || !dbOk) {
     return {
       error: "Too many signup attempts. Please wait a while and try again.",
     };
+  }
+
+  // SEC: the emailed verification code is the hard anti-bot gate — no clinic
+  // or auth user exists until the inbox proved itself. Consumed on success
+  // (one account per code). Degrades to the pre-055 flow only while the
+  // migration is unpasted.
+  const code = String(formData.get("code") ?? "").trim();
+  const verification = await verifyAndConsumeSignupCode(canonical, code);
+  switch (verification.status) {
+    case "ok":
+      break;
+    case "unavailable":
+      console.warn(
+        "email_verifications missing (migration 055 not applied) — accepting signup without a code.",
+      );
+      break;
+    case "expired":
+      return {
+        error: "That code has expired. Request a new one and try again.",
+      };
+    case "too_many":
+      return {
+        error:
+          "Too many incorrect codes. Request a new code and try again.",
+      };
+    default:
+      return {
+        error: code
+          ? "That code isn't right. Check the email we sent you."
+          : "Enter the verification code we emailed you.",
+      };
+  }
+
+  // Canonical dedupe: a dotted-Gmail variant of an existing account is the
+  // same inbox — reject before any row is created. (createUser below still
+  // catches EXACT duplicates as the backstop.)
+  const dupUser = await findUserByCanonicalEmail(canonical, canonicalEmail);
+  if (dupUser) {
+    return { error: "An account with this email already exists." };
   }
 
   // Store the normalized 10-digit number (see CLAUDE.md locale rules).
@@ -151,13 +306,12 @@ export async function signUpAction(
   // 2. Create the auth user. The handle_new_user trigger reads this metadata
   //    to create the profiles row (role clinic_owner, linked to the clinic).
   //
-  //    LAUNCH NOTE: `email_confirm: true` marks the email pre-confirmed so
-  //    test clinics are instant during the build. Because users are created
-  //    via the admin API, this flag — not the dashboard "Confirm email"
-  //    toggle — controls confirmation here. To require confirmation before
-  //    launch, remove this flag (and switch to a client signUp flow that
-  //    sends the verification email); flipping the dashboard toggle alone is
-  //    not enough for admin-created users.
+  //    `email_confirm: true` is now EARNED, not assumed: the emailed 6-digit
+  //    code above (migration 055) already proved this inbox before any row
+  //    was created, so marking the email confirmed here is correct — no
+  //    second confirmation mail needed. (Because users are created via the
+  //    admin API, this flag — not the dashboard "Confirm email" toggle — is
+  //    what controls confirmation.)
   //    SECURITY: role + clinic linkage go in app_metadata (raw_app_meta_data),
   //    which only the service-role admin API can set — the public GoTrue signup
   //    endpoint cannot. handle_new_user() (migration 014) trusts authz ONLY from
